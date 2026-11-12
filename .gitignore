@@ -1,0 +1,9 @@
+node_modules
+node_modules.nosync
+out/
+dist/
+release/
+.DS_Store
+*.log
+src/renderer/public/pdfjs/
+tmp/

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ParaRead</title>
+    <!-- Word 里的任务窗格。界面语言由清单里的网址带过来（?lang=），要在模块加载前定好 -->
+    <script>
+      window.__uiLang = new URLSearchParams(location.search).get('lang') || 'zh'
+    </script>
+    <!-- Office.js 按微软的要求从它的 CDN 加载 -->
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/word/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,52 @@
+/* 设置窗：900 × 660，左分区（毛玻璃）右内容，「左标签、右控件」，组之间分隔线 */
+.set-win { display: flex; height: 100%; }
+.set-nav { width: 220px; flex: none; display: flex; flex-direction: column; gap: 1px; padding: 0 10px 10px; background: color-mix(in srgb, var(--bg-sidebar) var(--side-opacity), transparent); border-right: 1px solid var(--stroke); }
+.set-nav-top { height: var(--titlebar-h); flex: none; }
+.set-nav .nav-item { height: 32px; }
+.ib { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--r-sm); flex: none; color: #fff; }
+.ib svg { color: #fff; }
+.nav-item .ib svg, .nav-item.on .ib svg { color: #fff; }
+.set-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+.set-hd { height: var(--titlebar-h); display: flex; align-items: center; padding: 0 28px; border-bottom: 1px solid var(--stroke); font-size: var(--fs-lg); font-weight: 600; flex: none; }
+.set-bd { flex: 1; min-height: 0; overflow: auto; padding: 6px 28px 24px; }
+.fsec { padding: 18px 0; border-bottom: 1px solid var(--stroke); display: flex; flex-direction: column; }
+.fsec:last-child { border-bottom: 0; }
+.fsec h3 { margin: 0; font-size: var(--fs); font-weight: 600; }
+.fsec .fd { font-size: var(--fs-sm); color: var(--text-2); margin-top: 2px; }
+.frow { display: flex; gap: 16px; margin-top: 12px; align-items: flex-start; }
+.frow .fl { width: 150px; flex: none; text-align: right; color: var(--text-2); padding-top: 5px; }
+.frow .fc { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.line { display: flex; align-items: center; gap: 8px; min-height: 28px; min-width: 0; }
+.ok-t { color: var(--green); font-size: var(--fs-sm); display: inline-flex; align-items: center; gap: 4px; }
+.err-t { color: var(--red); font-size: var(--fs-sm); }
+.prov { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.prov .p { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-lg); box-shadow: inset 0 0 0 1px var(--stroke); background: var(--bg); text-align: left; min-width: 0; }
+.prov .p:hover { background: var(--fill-1); }
+.prov .p.on { box-shadow: inset 0 0 0 1.5px var(--accent); background: var(--accent-soft); }
+.prov .pn { font-weight: 500; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prov .pd { font-size: var(--fs-sm); color: var(--text-2); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.logo { width: 24px; height: 24px; border-radius: var(--r-sm); display: flex; align-items: center; justify-content: center; flex: none; background: #fff; box-shadow: 0 0 0 .5px var(--stroke-strong); overflow: hidden; color: var(--text-2); }
+.logo img { width: 18px; height: 18px; object-fit: contain; }
+[data-theme="dark"] .logo.mono img { filter: invert(1); }
+[data-theme="dark"] .logo.mono { background: #2a2a2d; }
+.choice { display: flex; gap: 12px; padding: 14px; border-radius: var(--r-lg); box-shadow: inset 0 0 0 1px var(--stroke); align-items: flex-start; margin-top: 10px; text-align: left; width: 100%; }
+.choice > svg { color: var(--text-2); margin-top: 1px; flex: none; }
+.choice.on { box-shadow: inset 0 0 0 1.5px var(--accent); background: var(--accent-soft); }
+.choice.off { opacity: .6; }
+.choice .radio { margin-top: 2px; }
+.ct2 { font-weight: 500; }
+.cd2 { font-size: var(--fs-sm); color: var(--text-2); margin-top: 2px; }
+.about { display: flex; gap: 14px; align-items: center; }
+.buy { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.buy-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.buy-row .choice { margin-top: 0; }
+
+/* Word 插件：顶上的说明卡，左边一条示意的 Word 功能区 */
+.word-hero { display: flex; align-items: center; gap: 20px; padding: 16px; margin: 12px 0 20px; border-radius: var(--r-lg); background: var(--fill-1); box-shadow: inset 0 0 0 1px var(--stroke-soft); }
+.word-hero p { margin: 0; flex: 1; min-width: 0; line-height: 1.6; }
+.word-ribbon { flex: none; width: 280px; border-radius: var(--r-md); overflow: hidden; background: var(--btn-bg); box-shadow: var(--shadow-control), inset 0 0 0 1px var(--stroke-soft); font-size: var(--fs-sm); }
+.wr-tabs { display: flex; gap: 12px; align-items: center; padding: 5px 8px; background: #2b579a; color: #fff; white-space: nowrap; overflow: hidden; }
+.wr-tabs .on { background: #fff; color: #2b579a; font-weight: 600; padding: 1px 6px; border-radius: 3px; }
+.wr-btns { display: flex; gap: 6px; padding: 8px; }
+.wr-btns span { padding: 3px 6px; border-radius: 4px; background: var(--fill-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.wr-btns .on { background: var(--fill-3); font-weight: 500; }

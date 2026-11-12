@@ -1,0 +1,61 @@
+{
+  "name": "pararead",
+  "productName": "ParaRead",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mac 上读英文论文：重排成好读的版面、逐段对照翻译、划词解释、AI 问答",
+  "main": "./out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "ELECTRON_RUN_AS_NODE=1 electron node_modules/vitest/vitest.mjs run",
+    "rebuild": "electron-builder install-app-deps",
+    "dist": "electron-vite build && electron-builder --mac --arm64 --publish never -c.forceCodeSigning=true",
+    "dist:dir": "electron-vite build && electron-builder --mac --arm64 --dir --publish never",
+    "icon": "node scripts/icon.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "electron-updater": "^6.8.11",
+    "fflate": "^0.8.3",
+    "node-html-parser": "^9.0.5",
+    "pdfjs-dist": "^6.4.299"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "katex": "^0.19.0",
+    "lucide-react": "^1.57.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.7",
+    "vitest": "^5.0.4"
+  },
+  "overrides": {
+    "katex": "$katex"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.3": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true,
+    "electron-winstaller": false
+  },
+  "author": "Jia Zonghan",
+  "license": "GPL-3.0-only",
+  "homepage": "https://pararead.us-cloud.uk"
+}

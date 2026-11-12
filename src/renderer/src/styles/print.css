@@ -1,0 +1,27 @@
+/* 导出 PDF 的排版页（A4 打印，浅色） */
+html:has(.print-page), html:has(.print-page) body, html:has(.print-page) #root { height: auto; overflow: visible; background: var(--bg); }
+.print-page { position: relative; padding: 0 4px; font-size: 11pt; color: var(--text); }
+.print-page.with-notes .print-article { width: 72%; }
+.print-title { font: 600 18pt/1.3 var(--font-sans); margin: 0 0 6pt; }
+.print-meta { font-size: 9pt; color: var(--text-2); margin-bottom: 14pt; }
+.pblk { break-inside: avoid-page; margin-top: 8pt; }
+.pblk .src { font-family: var(--font-src); line-height: 1.55; }
+.pblk .tr { font-family: var(--font-tr); color: var(--text-tr); line-height: 1.7; margin-top: 3pt; font-size: .95em; }
+.pblk.heading .src { font: 600 1.1em/1.4 var(--font-sans); margin: 14pt 0 0; }
+.pblk.heading .tr { font-weight: 500; color: var(--text-2); }
+.pblk.image img { max-width: 100%; max-height: 60vh; display: block; margin: 0 auto; }
+.pblk.caption { font-size: .9em; color: var(--text-2); }
+.pblk table { border-collapse: collapse; font-size: 9pt; margin: 0 auto; }
+.pblk td, .pblk th { padding: 2pt 6pt; border-top: .5pt solid var(--stroke-strong); }
+.pblk.equation { text-align: center; overflow: hidden; }
+mark.pm-hl { color: inherit; border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+mark.pm-hl.none { background: none; }
+mark.pm-hl.yellow { background: var(--hl-yellow); }
+mark.pm-hl.green { background: var(--hl-green); }
+mark.pm-hl.blue { background: var(--hl-blue); }
+mark.pm-hl.red { background: var(--hl-red); }
+.pm-ref { font: 600 7pt var(--font-sans); color: var(--text-2); margin-left: 1px; }
+.print-notes { position: absolute; top: 0; right: 0; width: 25%; }
+.pnote { position: absolute; left: 0; right: 0; font: 8pt/1.45 var(--font-sans); color: var(--text); border-left: 2px solid var(--stroke-strong); padding-left: 5pt; }
+.pnote b { color: var(--text-2); }
+.pnote.yellow { border-color: var(--hl-yellow-dot); } .pnote.green { border-color: var(--hl-green-dot); } .pnote.blue { border-color: var(--hl-blue-dot); } .pnote.red { border-color: var(--hl-red-dot); }

@@ -1,0 +1,98 @@
+/*
+ * 界面 token：和会议字幕 src/renderer/shared/tokens.css 同名同值，强调色换成墨黑（2026-11-08 用户定）。
+ * 每个颜色用 light-dark(浅色值, 深色值) 写一次，html[data-theme] 决定 color-scheme。
+ * 组件只用这些变量，不写 hex；阅读区另有 --read-* / --text-tr / --hl-*。
+ */
+:root {
+  color-scheme: light;
+
+  /* 字 */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI Variable Text", "Microsoft YaHei UI", system-ui, sans-serif;
+  --font-serif: Charter, "Iowan Old Style", Georgia, "PingFang SC", serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --font-src: var(--font-serif); --font-tr: var(--font-sans);
+  --fs-xs: 11px; --fs-sm: 12px; --fs: 13px; --fs-md: 14px; --fs-lg: 15px; --fs-xl: 17px; --fs-2xl: 22px;
+
+  /* 面：窗口、侧栏、内陷区、弹窗、菜单弹层、遮罩、原文模式 PDF 背后、PDF 纸面 */
+  --bg: light-dark(#ffffff, #1b1b1d);
+  --bg-sidebar: light-dark(#f3f3f5, #202023);
+  --bg-inset: light-dark(#f6f6f8, #161618);
+  --bg-elevated: light-dark(#ffffff, #252528);
+  --bg-popover: light-dark(rgba(252, 252, 253, .92), rgba(37, 37, 40, .92));
+  --bg-backdrop: light-dark(rgba(20, 20, 30, .16), rgba(0, 0, 0, .42));
+  --bg-canvas: light-dark(#ececee, #141416);
+  --paper: #ffffff;
+  --side-opacity: 86%;
+
+  /* 叠加的表面：由弱到强；选中行用 --fill-3 */
+  --fill-1: light-dark(rgba(0, 0, 0, .028), rgba(255, 255, 255, .04));
+  --fill-2: light-dark(rgba(0, 0, 0, .048), rgba(255, 255, 255, .07));
+  --fill-3: light-dark(rgba(0, 0, 0, .07), rgba(255, 255, 255, .10));
+  --fill-4: light-dark(rgba(0, 0, 0, .10), rgba(255, 255, 255, .14));
+
+  /* 描边 */
+  --stroke-soft: light-dark(rgba(0, 0, 0, .05), rgba(255, 255, 255, .05));
+  --stroke: light-dark(rgba(0, 0, 0, .09), rgba(255, 255, 255, .08));
+  --stroke-strong: light-dark(rgba(0, 0, 0, .15), rgba(255, 255, 255, .14));
+
+  /* 字色；--text-tr 是译文 */
+  --text: light-dark(#1d1d1f, #ececec);
+  --text-2: light-dark(#6c6c72, #9a9aa0);
+  --text-3: light-dark(#9c9ca2, #6b6b70);
+  --text-tr: light-dark(#46464b, #c4c4ca);
+
+  /* 按钮和输入框 */
+  --btn-bg: light-dark(#ffffff, rgba(255, 255, 255, .07));
+  --btn-bg-hover: light-dark(#f6f6f8, rgba(255, 255, 255, .10));
+  --btn-stroke: light-dark(rgba(0, 0, 0, .12), rgba(255, 255, 255, .08));
+  --field-bg: light-dark(#ffffff, rgba(255, 255, 255, .045));
+  --field-stroke: light-dark(rgba(0, 0, 0, .13), rgba(255, 255, 255, .09));
+
+  /* 强调色：墨黑，只给主按钮、开关、选中的单选和勾、焦点 */
+  --accent: var(--text);
+  --accent-bg: light-dark(#1d1d1f, #ececec);
+  --accent-text: var(--text);
+  --accent-soft: var(--fill-2);
+  --accent-ring: light-dark(rgba(0, 0, 0, .25), rgba(255, 255, 255, .3));
+  --on-accent: light-dark(#ffffff, #1b1b1d);
+  --selection: rgba(120, 120, 128, .28);
+
+  /* 状态：只进小圆点和小字 */
+  --green: light-dark(#1d9a54, #3fcf7f);
+  --yellow: light-dark(#b87400, #f5b83d);
+  --red: light-dark(#dc3545, #ff6369);
+  --blue: light-dark(#2272e8, #5aa9ff);
+  --green-soft: light-dark(rgba(29, 154, 84, .1), rgba(63, 207, 127, .14));
+  --yellow-soft: light-dark(rgba(214, 140, 0, .12), rgba(245, 184, 61, .14));
+  --red-soft: light-dark(rgba(220, 53, 69, .1), rgba(255, 99, 105, .14));
+
+  /* 高亮：Scholaread --srd-r-hl-c-3 到 6，深浅两色通用；AI 重点下面那条底 */
+  --hl-yellow: rgba(254, 170, 2, .30); --hl-green: rgba(117, 187, 63, .30);
+  --hl-blue: rgba(0, 161, 216, .30);   --hl-red: rgba(255, 64, 21, .30);
+  --hl-yellow-dot: #feaa02; --hl-green-dot: #75bb3f; --hl-blue-dot: #00a1d8; --hl-red-dot: #ff4015;
+  --ai-mark: light-dark(rgba(0, 0, 0, .08), rgba(255, 255, 255, .12));
+
+  /* 设置窗分区的图标方块（只在设置窗用） */
+  --c-gray: #8e8e96; --c-red: #f2555a; --c-orange: #f5883a; --c-yellow: #e9a820; --c-green: #34b86c;
+  --c-teal: #22b3a6; --c-blue: #3a8ef6; --c-indigo: #6166f5; --c-purple: #a168f2; --c-pink: #ec5b9e;
+
+  /* 圆角：标签和键帽 / 按钮和输入框 / 列表行和分段轨道 / 状态卡 / 弹层和弹窗 */
+  --r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 10px; --r-xl: 12px;
+
+  --shadow-sm: 0 1px 2px light-dark(rgba(0, 0, 0, .06), rgba(0, 0, 0, .3));
+  --shadow-control: 0 1px 1px light-dark(rgba(0, 0, 0, .04), rgba(0, 0, 0, .25)), inset 0 1px 0 light-dark(rgba(255, 255, 255, .6), rgba(255, 255, 255, .04));
+  --shadow-pop: 0 0 0 .5px light-dark(rgba(0, 0, 0, .06), rgba(0, 0, 0, .6)), 0 10px 30px -4px light-dark(rgba(20, 20, 40, .16), rgba(0, 0, 0, .5)), 0 2px 6px light-dark(rgba(20, 20, 40, .06), rgba(0, 0, 0, .25));
+  --shadow-modal: 0 0 0 .5px light-dark(rgba(0, 0, 0, .08), rgba(0, 0, 0, .7)), 0 24px 64px -8px light-dark(rgba(20, 20, 40, .24), rgba(0, 0, 0, .6));
+  --shadow-page: 0 0 0 1px light-dark(rgba(0, 0, 0, .05), rgba(255, 255, 255, .04)), 0 2px 8px light-dark(rgba(0, 0, 0, .06), rgba(0, 0, 0, .3));
+  --blur-pop: saturate(1.6) blur(24px);
+
+  /* 间距、动效、尺寸 */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
+  --dur-1: 120ms; --dur-2: 200ms; --ease: cubic-bezier(.2, 0, 0, 1);
+  --read-size: 18px; --chat-size: 14px; --measure: 34em;
+  --titlebar-h: 52px; --sidebar-w: 232px; --left-w: 260px; --right-w: 380px;
+}
+html[data-theme="dark"] { color-scheme: dark; }
+html { font: var(--fs)/1.5 var(--font-sans); color: var(--text);
+  -webkit-font-smoothing: antialiased; font-kerning: normal; letter-spacing: 0; text-autospace: normal; }
+::selection { background: var(--selection); }

@@ -1,0 +1,62 @@
+appId: com.jiazonghan.pararead
+productName: ParaRead
+artifactName: ParaRead-${version}-${os}-${arch}.${ext}
+copyright: Copyright © 2026 Jia Zonghan
+# 自动更新（src/main/updater.ts）查这个仓库的 Release：dmg 之外，latest-mac.yml、zip 和 blockmap 也要传上去（scripts/release.mjs）。
+# 开发用的仓库是私有的，没登录的 electron-updater 读不到它的 Release，所以安装包放在公开仓库（那里也放开源的代码快照和官网）。
+publish:
+  provider: github
+  owner: SchaeferAnjon
+  repo: pararead
+  releaseType: release
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+  - "!**/*.map"
+  # pdf.js：主进程抽文字只用 legacy/build 里的 pdf.mjs 和 pdf.worker.mjs；界面用的那份已经打进 out/renderer
+  - "!node_modules/pdfjs-dist/{build,web,types,image_decoders}/**"
+  - "!node_modules/pdfjs-dist/legacy/{web,image_decoders}/**"
+  - "!node_modules/pdfjs-dist/legacy/build/{pdf.sandbox*,*.min.mjs}"
+  # better-sqlite3 只要编好的 .node，SQLite 源码和编译中间文件不带
+  - "!node_modules/better-sqlite3/{deps,src}/**"
+  - "!node_modules/better-sqlite3/build/{deps,Release/obj,Release/obj.target,Release/.deps}/**"
+asarUnpack:
+  - "**/*.node"
+npmRebuild: true
+# 界面 9 种语言；其余语言的 Chromium 语言包不带
+electronLanguages: [en, zh_CN, zh_TW, ja, ko, de, fr, es, it]
+# Finder 的「打开方式」里出现（rank Alternate：不抢系统默认的 PDF 阅读器）
+fileAssociations:
+  - ext: pdf
+    name: PDF Document
+    role: Viewer
+    rank: Alternate
+  - ext: epub
+    name: EPUB Book
+    role: Viewer
+    rank: Alternate
+# 浏览器小书签：pararead://add?url=…
+protocols:
+  - name: ParaRead
+    schemes: [pararead]
+mac:
+  category: public.app-category.education
+  icon: build/icon.icns
+  # zip 给自动更新用（Squirrel.Mac 只认 zip），dmg 给第一次下载安装。只出 Apple 芯片的包：精细重排的 MinerU 在 Intel Mac 上装不了
+  target:
+    - dmg
+    - zip
+  # 钥匙串里的 Developer ID Application 证书；自动更新要求新旧版本同一张证书
+  identity: "zonghan jia (3H5S5NXPXS)"
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: false
+  extendInfo:
+    CFBundleDisplayName: ParaRead
+dmg:
+  title: ParaRead ${version}
