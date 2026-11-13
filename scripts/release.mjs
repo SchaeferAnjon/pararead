@@ -79,10 +79,14 @@ files.push('ParaRead-mac-arm64.dmg')
 
 // Windows：公开仓库里同步到这个提交的那次 windows 工作流，要跑成功；取它打的 nsis 安装包、blockmap 和 latest.yml
 console.log('取 Windows 包（公开仓库的 GitHub Actions）…')
-const short = head.slice(0, 7)
+// 只改了不公开的 docs/、design/、DESIGN.md（或者这个脚本自己、发布说明）的提交不会再同步、不会再跑一遍：认最近一次同步的那个提交，只要别的文件和现在一样
 const runs = JSON.parse(run('gh', ['run', 'list', '--repo', REPO, '--workflow', 'windows.yml', '--limit', '20', '--json', 'databaseId,displayTitle,conclusion,status']))
-const ci = runs.find((r) => r.displayTitle.includes(`同步到 ${short}`))
-if (!ci) fail(`公开仓库里没有同步到 ${short} 的 windows 工作流：先 sh scripts/public-sync.sh --push`)
+const same = (c) => spawnSync('git', ['diff', '--quiet', c, head, '--', '.', ':!docs', ':!design', ':!DESIGN.md', ':!tests/fixtures/simpler-*.md', ':!scripts/release.mjs', ':!release'] , { cwd: ROOT }).status === 0
+const ci = runs.find((r) => {
+  const c = /同步到 ([0-9a-f]{7,})/.exec(r.displayTitle)?.[1]
+  return c && spawnSync('git', ['cat-file', '-e', c], { cwd: ROOT }).status === 0 && same(c)
+})
+if (!ci) fail(`公开仓库里没有和 ${head.slice(0, 7)} 内容一样的 windows 工作流：先 sh scripts/public-sync.sh --push`)
 if (ci.status !== 'completed' || ci.conclusion !== 'success') fail(`windows 工作流 ${ci.databaseId} 还没成功（${ci.status} ${ci.conclusion ?? ''}）`)
 const winDir = path.join(out, 'win')
 run('gh', ['run', 'download', String(ci.databaseId), '--repo', REPO, '-n', 'windows-installer', '-D', winDir])
