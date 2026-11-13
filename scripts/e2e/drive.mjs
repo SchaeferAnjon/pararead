@@ -4,12 +4,14 @@
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // playwright 用全局装的那份（npm i -g playwright）
 const require = createRequire(process.env.PLAYWRIGHT_ROOT ?? '/opt/homebrew/lib/node_modules/')
 const { _electron } = require('playwright')
 
-export const ROOT = new URL('../..', import.meta.url).pathname.replace(/\/$/, '')
+// fileURLToPath：Windows 上 URL 的 pathname 是 /D:/…，当不了工作目录
+export const ROOT = fileURLToPath(new URL('../..', import.meta.url)).replace(/[\\/]$/, '')
 export const SHOTS = process.env.E2E_SHOTS ?? `${ROOT}/tmp/shots`
 // 测试论文：E2E_PAPER=<一篇双栏英文论文的 PDF>。smoke、onboarding、packaged 这几个脚本要它
 export const PAPER = process.env.E2E_PAPER ?? ''
