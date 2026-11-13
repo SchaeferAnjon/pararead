@@ -37,8 +37,9 @@ const noteRow = (o: Partial<SrNoteRow>): SrNoteRow => ({
 
 describe('mapPaper', () => {
   it('file_path 不存在时找 files/pdf/<cache_path>', () => {
-    const m = mapPaper(paperRow({}), '/SR', (p) => p === '/SR/files/pdf/8799852b95af9e20cf4e6f80e874d791.pdf')
-    expect(m.file).toBe('/SR/files/pdf/8799852b95af9e20cf4e6f80e874d791.pdf')
+    const want = join('/SR', 'files/pdf', '8799852b95af9e20cf4e6f80e874d791.pdf')
+    const m = mapPaper(paperRow({}), '/SR', (p) => p === want)
+    expect(m.file).toBe(want)
     expect(m.authors).toEqual(['Fabian Seiler', 'Gulafshan'])
     expect(m.readMode).toBe('reflow')
     expect(m.createdAt).toBe(Date.parse('2026-07-01T21:37:02Z'))

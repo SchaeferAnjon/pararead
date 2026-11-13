@@ -16,7 +16,8 @@ describe('进度解析', () => {
   })
 })
 
-describe('MineruQueue', () => {
+// 假的 mineru-kit 是 sh 脚本：Windows 上不跑
+describe.skipIf(process.platform === 'win32')('MineruQueue', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sr-mineru-'))
   afterAll(() => rmSync(dir, { recursive: true, force: true }))
 

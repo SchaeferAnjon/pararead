@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// 发一个新版本（照会议字幕的 scripts/release.mjs，只有 Mac）。安装包放在公开的发布仓库 SchaeferAnjon/pararead，
-// 装着的正式版从那里查更新（src/main/updater.ts）。
-//   1. 改 package.json 的 version，提交。
+// 发一个新版本（照会议字幕的 scripts/release.mjs）。安装包放在公开的发布仓库 SchaeferAnjon/pararead，
+// 装着的正式版从那里查更新（src/main/updater.ts）。Mac 包在这台电脑上打；Windows 包由公开仓库的
+// GitHub Actions（.github/workflows/windows.yml）在 windows-latest 上打、真打开走一遍，这里取它的产物。
+//   1. 改 package.json 的 version，提交，sh scripts/public-sync.sh --push，等公开仓库的 windows 工作流跑完（成功）。
 //   2. node scripts/release.mjs：用钥匙串里的 Developer ID 打 dmg + zip（自动更新要求新旧版本同一张证书），
 //      核对签名和更新要的文件，放在 release/<版本>/。
 //   3. 发布说明写在 release/<版本>/notes.md，看过没问题：node scripts/release.mjs --publish，
@@ -75,6 +76,26 @@ const yml = fs.readFileSync(path.join(out, 'latest-mac.yml'), 'utf8')
 if (!yml.includes(`version: ${version}`) || !yml.includes(`ParaRead-${version}-mac-arm64.zip`)) fail('latest-mac.yml 和这一版对不上')
 fs.copyFileSync(path.join(out, dmg), path.join(out, 'ParaRead-mac-arm64.dmg'))
 files.push('ParaRead-mac-arm64.dmg')
+
+// Windows：公开仓库里同步到这个提交的那次 windows 工作流，要跑成功；取它打的 nsis 安装包、blockmap 和 latest.yml
+console.log('取 Windows 包（公开仓库的 GitHub Actions）…')
+const short = head.slice(0, 7)
+const runs = JSON.parse(run('gh', ['run', 'list', '--repo', REPO, '--workflow', 'windows.yml', '--limit', '20', '--json', 'databaseId,displayTitle,conclusion,status']))
+const ci = runs.find((r) => r.displayTitle.includes(`同步到 ${short}`))
+if (!ci) fail(`公开仓库里没有同步到 ${short} 的 windows 工作流：先 sh scripts/public-sync.sh --push`)
+if (ci.status !== 'completed' || ci.conclusion !== 'success') fail(`windows 工作流 ${ci.databaseId} 还没成功（${ci.status} ${ci.conclusion ?? ''}）`)
+const winDir = path.join(out, 'win')
+run('gh', ['run', 'download', String(ci.databaseId), '--repo', REPO, '-n', 'windows-installer', '-D', winDir])
+for (const f of fs.readdirSync(winDir)) fs.renameSync(path.join(winDir, f), path.join(out, f))
+fs.rmSync(winDir, { recursive: true, force: true })
+const [exe] = need(new RegExp(`^ParaRead-${version}-win-x64\\.exe$`), ' Windows 安装包')
+need(new RegExp(`^ParaRead-${version}-win-x64\\.exe\\.blockmap$`), ' Windows 的 blockmap')
+need(/^latest\.yml$/, ' latest.yml')
+const wyml = fs.readFileSync(path.join(out, 'latest.yml'), 'utf8')
+if (!wyml.includes(`version: ${version}`) || !wyml.includes(exe)) fail('latest.yml 和这一版对不上')
+// 官网链到 releases/latest/download/ParaRead-win-x64.exe
+fs.copyFileSync(path.join(out, exe), path.join(out, 'ParaRead-win-x64.exe'))
+files.push('ParaRead-win-x64.exe')
 fs.writeFileSync(checked, JSON.stringify({ head, files }, null, 1))
 console.log(`\n${tag} 要上传的文件（${out}）：`)
 for (const f of files) console.log(`  ${f}  ${(fs.statSync(path.join(out, f)).size / 1e6).toFixed(1)} MB`)

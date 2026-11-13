@@ -42,6 +42,8 @@ const ann = (o: Partial<Annotation>): Annotation => ({
 
 describe('sqlite 库', () => {
   const db = openDb(join(dir, 'library.sqlite'))
+  // Windows 上开着的库文件删不掉：先关再删临时目录
+  afterAll(() => db.close())
 
   it('译文按键缓存', () => {
     expect(getCachedTranslation(db, 'k')).toBeNull()
@@ -88,7 +90,8 @@ describe('设置文件', () => {
     const s = new SettingsStore(f)
     expect(s.apiKey()).toEqual({ key: 'env-key-1234', source: 'env', env: 'DEEPSEEK_API_KEY' })
     s.set({ readSize: 20 })
-    expect(statSync(f).mode & 0o777).toBe(0o600)
+    // Windows 没有 POSIX 权限位，文件只在用户自己的目录里
+    if (process.platform !== 'win32') expect(statSync(f).mode & 0o777).toBe(0o600)
     s.setKey('file-key-abcd')
     expect(s.apiKey().source).toBe('settings')
     const v = s.view()
@@ -110,7 +113,8 @@ describe('设置文件', () => {
     writeFileSync(f, '{"theme":"dark"}', { mode: 0o644 })
     const s = new SettingsStore(f)
     expect(s.get().theme).toBe('dark')
-    expect(statSync(f).mode & 0o777).toBe(0o600)
+    // Windows 没有 POSIX 权限位，文件只在用户自己的目录里
+    if (process.platform !== 'win32') expect(statSync(f).mode & 0o777).toBe(0o600)
     expect(readFileSync(f, 'utf8')).toContain('dark')
   })
   it('遮挡显示', () => {
