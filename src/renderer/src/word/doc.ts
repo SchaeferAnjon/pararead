@@ -1,6 +1,7 @@
 // Word 文档这一头（Office.js，要求集 WordApi 1.1；1.3 有的话多做两件小事）：
 // 每处引用是一个内容控件，tag = prcite:<文献 id>,…；参考文献表是 tag = prbib 的内容控件；
 // 引到的文献信息、当前格式、参考文献表的顺序存在文档自己的设置里（跟着 .docx 走）。
+import type { Seg } from '@shared/draft'
 import { t } from '@shared/i18n'
 import { BIB_TAG, bibEntries, bibHtml, bibOrder, citeTag, fitsTag, idsOfTag, inText, numbering, type CiteItem, type Items, type WordStyle } from '@shared/wordCite'
 
@@ -130,3 +131,36 @@ export const selectCite = (i: number): Promise<void> =>
     s.ctrls[i]?.select()
     await ctx.sync()
   })
+
+/** 一处引用里放得下的几组：tag 最长 64 个字符，多了拆成挨着的几处 */
+function fitGroups(ids: string[]): string[][] {
+  const out: string[][] = []
+  for (const id of ids) {
+    const last = out[out.length - 1]
+    if (last && fitsTag([...last, id])) last.push(id)
+    else out.push([id])
+  }
+  return out
+}
+
+/** 对比表「送进 Word」的一段：在光标所在段后面插一个新段，文字照写，引用变成插件管的内容控件，再重新编号、更新参考文献表 */
+export async function insertParagraph(para: { segments: Seg[]; items: CiteItem[] }, style: WordStyle): Promise<DocState> {
+  const items = { ...docItems() }
+  for (const it of para.items) items[it.id] = it
+  store().set('pr.items', items)
+  await save()
+  await Word.run(async (ctx: any) => {
+    const p = ctx.document.getSelection().insertParagraph('', 'After')
+    for (const seg of para.segments) {
+      if ('text' in seg) p.insertText(seg.text, 'End')
+      else
+        for (const ids of fitGroups(seg.cite)) {
+          const cc = p.insertText('[…]', 'End').insertContentControl()
+          cc.tag = citeTag(ids)
+          cc.title = t('ParaRead 引用')
+        }
+    }
+    await ctx.sync()
+  })
+  return refresh(style)
+}

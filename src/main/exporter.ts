@@ -1,5 +1,6 @@
 import type { Annotation, Paper } from '../shared/types'
 import { LABEL_NAME } from '../shared/annLabels'
+import { STATUS_NAME, statusOf, summaryOf } from '../shared/explain'
 
 const COLOR_NAME: Record<string, string> = { yellow: '黄', green: '绿', blue: '蓝', red: '红' }
 
@@ -43,6 +44,11 @@ export function exportMarkdown(paper: Paper, anns: Annotation[], sectionOrder: s
       lines.push(...a.text.split('\n').map((l) => `> ${l}`))
       lines.push(`> ${where}`)
       lines.push('')
+      // 标签的状态和一句话讲解跟在摘录后面
+      if (a.label) {
+        const sum = summaryOf(a)
+        lines.push(`状态：${STATUS_NAME[statusOf(a)!]}${sum ? `。讲解：${sum}` : ''}`, '')
+      }
       if (a.note.trim()) {
         lines.push(a.note.trim())
         lines.push('')

@@ -53,14 +53,17 @@ import { registerLibrary } from './ipcLibrary'
 import { registerImport } from './ipcImport'
 import { registerPaper } from './ipcPaper'
 import { registerResearch } from './research'
+import { registerMatrix } from './matrix'
 import { registerAgent } from './agent'
 import { registerExportPdf } from './exportPdf'
 import { registerLayout } from './ipcLayout'
+import { registerExplain } from './explain'
 import { makeStreamer, type Streamer } from './stream'
 import { Member } from './member'
 import { MineruInstaller } from './mineruInstall'
 import { Updater } from './updater'
 import { WordAddin } from './wordAddin'
+import { BibExport } from './bibExport'
 import { setUiLang, t, uiLang } from '../shared/i18n'
 import { Sync } from './sync'
 import { randomUUID } from 'node:crypto'
@@ -109,9 +112,13 @@ let settingsWin: BrowserWindow | null = null
 const progress = new Map<string, MineruProgress>()
 
 let syncRef: Sync | null = null
+let bibRef: BibExport | null = null
 function broadcast(channel: string, payload: unknown): void {
   for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload)
-  if (channel === 'library:changed') syncRef?.touch()
+  if (channel === 'library:changed') {
+    syncRef?.touch()
+    bibRef?.schedule()
+  }
 }
 
 const mineru = new MineruQueue({
@@ -237,21 +244,29 @@ const ctx: Ctx = {
 if (!settings.get().syncDevice) settings.set({ syncDevice: randomUUID() })
 const sync: Sync = new Sync(ctx, settings.get().syncDevice)
 syncRef = sync
+// 自动导出 .bib（src/main/bibExport.ts）：开着的话启动时先写一次
+const bibExport = new BibExport(ctx)
+bibRef = bibExport
+bibExport.write()
 
 const streamer = makeStreamer(ai, db, log)
 const { streamTo, sendCached, aborts } = streamer
 ctx.streamer = streamer
 
 let urlImporter: ReturnType<typeof registerImport> | null = null
+let explainer: ReturnType<typeof registerExplain> | null = null
 let connector: Connector | null = null
 
 function registerIpc(): void {
   registerLibrary(ctx)
   registerPaper(ctx)
   registerResearch(ctx)
+  bibExport.register()
+  registerMatrix(ctx, { word: () => wordAddin, bib: () => bibExport.status() })
   registerAgent(ctx, (input) => urlImporter!.fromInput(input))
   registerExportPdf(ctx, loadRenderer)
   registerLayout(ctx)
+  explainer = registerExplain(ctx, () => sync.touch())
   urlImporter = registerImport(ctx)
   // 浏览器插件：接收口随应用开着；插件的文件放一份到数据目录（应用包里的浏览器读不了），每次启动更新
   connector = new Connector({ version: app.getVersion(), save: urlImporter.capture, log })
@@ -288,6 +303,7 @@ function registerIpc(): void {
   ipcMain.handle('papers:update', (_e, id: string, patch: PaperPatch) => {
     updatePaper(db, id, patch)
     if (patch.tags || patch.title) broadcast('library:changed', null)
+    else bibExport.schedule()
   })
   ipcMain.handle('papers:delete', (_e, ids: string[]) => {
     for (const id of ids) {
@@ -427,6 +443,7 @@ function registerIpc(): void {
     if (a.mode === 'reflow' && a.page === null) a.page = pageOfText(library.pageTexts(a.paperId), a.text)
     saveAnnotation(db, a)
     sync.touch()
+    explainer?.saved(a)
     if (a.color !== settings.get().lastColor) settings.set({ lastColor: a.color })
     return a.page
   })

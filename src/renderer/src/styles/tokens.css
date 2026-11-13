@@ -70,6 +70,8 @@
   --hl-yellow: rgba(254, 170, 2, .30); --hl-green: rgba(117, 187, 63, .30);
   --hl-blue: rgba(0, 161, 216, .30);   --hl-red: rgba(255, 64, 21, .30);
   --hl-yellow-dot: #feaa02; --hl-green-dot: #75bb3f; --hl-blue-dot: #00a1d8; --hl-red-dot: #ff4015;
+  /* 标注标签的线：看不懂蓝、有质疑红（只画线，不铺底）；了结了的用同色 35% */
+  --lb-confused: #2f6fde; --lb-doubt: #e5484d;
   --ai-mark: light-dark(rgba(0, 0, 0, .08), rgba(255, 255, 255, .12));
   /* 意群：原文的一块和译文里对它的那几段同色，四色循环（蓝、琥珀、绿、粉），和会议字幕的 --chunk-1 到 4 同值 */
   --sg-1: light-dark(#1f64c8, #7cbcff); --sg-2: light-dark(#9a5b00, #f5c46b);

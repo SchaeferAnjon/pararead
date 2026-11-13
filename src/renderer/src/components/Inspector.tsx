@@ -1,4 +1,4 @@
-import { BookOpen, Ellipsis, FileText, Info, Languages, MessagesSquare, MousePointerClick, RefreshCw, Sparkles } from 'lucide-react'
+import { BookOpen, Ellipsis, FileText, Info, Languages, MessagesSquare, MousePointerClick, RefreshCw, Sheet, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { translationKey } from '@shared/hash'
 import type { Annotation, Folder, Glance, Paper, ReadMode, SettingsView } from '@shared/types'
@@ -313,6 +313,12 @@ function Multi(props: { papers: Paper[]; onAsk: () => void }) {
           ))}
           {ps.length > 12 && <div className="r hint">{t('还有 {0} 篇', ps.length - 12)}</div>}
         </div>
+        {ps.length > 1 && (
+          <div className="callout">
+            <Sheet size={14} />
+            <span>{t('「做对比表」把这几篇的问题、方法、结果、局限各填一格，每格都能点回原文那一处；你在这几篇里写的批注和「有质疑」会单独成一列。')}</span>
+          </div>
+        )}
         <div className="callout">
           <MessagesSquare size={14} />
           <span>{t('「一起问 AI」会把这 {0} 篇放进同一个对话，比如问它们各自怎么做、结论有什么不同。', ps.length)}</span>

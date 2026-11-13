@@ -1,14 +1,15 @@
 import { ALargeSmall, Check, ChevronDown, ChevronLeft, ChevronUp, Cloud, FileOutput, GripVertical, Highlighter, Info, Languages, Minimize2, PanelLeft, PanelRight, PictureInPicture2, RefreshCw, ScanText, Search, SquarePen, X, Zap, Eraser, Pencil } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type * as PdfJs from 'pdfjs-dist'
-import { sectionsOf } from '@shared/chunk'
+import { sectionsOf, squash } from '@shared/chunk'
 import type { Annotation, HlColor, MajorPoint, Paper, ReadMode, ReadPosition, ReflowDoc, SettingsView, Tier, Term, Ink, AnnLabel } from '@shared/types'
-import { api, errText, type ReflowProgress } from '../api'
+import { api, errText, type OpenAt, type ReflowProgress } from '../api'
 import { showMenu } from '../lib/menu'
 import { loadPdf } from '../lib/pdf'
 import { useTranslations } from '../lib/translations'
 import { Segmented, Switch, useDebounced, useEvent, useToast } from '../lib/ui'
 import { ChatPanel, type Attach } from './ChatPanel'
+import { QBadge, QuestionsPane, type WalkRequest } from './QuestionsPane'
 import { ExportDialog } from './ExportDialog'
 import { GlanceView } from './GlanceView'
 import { LeftPane, type LeftTab } from './LeftPane'
@@ -30,7 +31,7 @@ const MID_MIN = 480
 // 正文列比这个窄，标题栏的文字按钮只留图标
 const COMPACT_BAR = 700
 
-export function Reader(props: { paperId: string; initialMode?: ReadMode; initialAnn?: string; settings: SettingsView; onBack: () => void; onOpenPaper: (id: string) => void }) {
+export function Reader(props: { paperId: string; initialMode?: ReadMode; initialAnn?: string; initialAt?: OpenAt; settings: SettingsView; onBack: () => void; onOpenPaper: (id: string) => void }) {
   const { paperId, settings } = props
   const toast = useToast()
   const [paper, setPaper] = useState<Paper | null>(null)
@@ -80,6 +81,10 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
   const [curBlock, setCurBlock] = useState<string | null>(null)
   const [curPage, setCurPage] = useState(1)
   const [hoverAnn, setHoverAnn] = useState<string | null>(null)
+  // 右栏：AI 问答 / 疑问（打了标签的地方，过一遍时正文跟着走、那一处加深）
+  const [rightTab, setRightTab] = useState<'ai' | 'q'>('ai')
+  const [walkReq, setWalkReq] = useState<WalkRequest | null>(null)
+  const [walkFocus, setWalkFocus] = useState<string | null>(null)
   const [keysOn, setKeysOn] = useState(false)
   const [keys, setKeys] = useState<MajorPoint[] | null>(null)
   const [terms, setTerms] = useState<Term[] | null>(null)
@@ -277,6 +282,37 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     })
   })
 
+  // 讲解、状态在主进程存好了推过来：换掉手里那条
+  useEffect(
+    () =>
+      api.onExplainSaved((a) => {
+        if (a.paperId === paperId) setAnns((l) => l.map((x) => (x.id === a.id ? a : x)))
+      }),
+    [paperId]
+  )
+  const openQuestions = useEvent((req: Omit<WalkRequest, 'nonce'> | null) => {
+    setRightTab('q')
+    if (rightCollapsed) {
+      setRightCollapsed(false)
+      void api.setSettings({ rightCollapsed: false })
+    }
+    if (req) setWalkReq({ ...req, nonce: jumpSeq++ })
+  })
+  // 讲解里「这篇里」「看原文」：按摘的那一小段找到正文里的段落跳过去
+  const goQuote = useEvent((quote: string) => {
+    const n = squash(quote).slice(0, 40)
+    const b = n.length >= 8 ? doc?.blocks.find((x) => x.type !== 'heading' && squash(x.md).includes(n)) : undefined
+    if (b) goBlock(b.id)
+    else toast(t('没在正文里找到这一处'))
+  })
+  // 过一遍时正文换了档位（快速换精细）：重新滚到正在讲的那一处
+  useEffect(() => {
+    const a = walkFocus ? anns.find((x) => x.id === walkFocus) : null
+    if (a) goTo(a)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc])
+  const blockOrder = useMemo(() => new Map((doc?.blocks ?? []).map((b, i) => [b.id, i])), [doc])
+
   const showChat = useEvent(() => {
     setRightCollapsed(false)
     setFocusChat((n) => n + 1)
@@ -305,10 +341,28 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     const a = cameFor.current && paper && mode ? anns.find((x) => x.id === cameFor.current) : undefined
     if (!a) return
     cameFor.current = undefined
+    // 从笔记页点进来的是打了标签的：右栏换到「疑问」，摆好这一条（讲过的直接看，没讲过的点一下再讲）
+    if (a.label) openQuestions({ ids: [a.id], start: a.id, auto: false })
     const t_ = setTimeout(() => goTo(a), 400)
     return () => clearTimeout(t_)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anns, paper, mode])
+  // 从对比表点「打开原文这一处」进来的：对照模式跳到那一段，原文模式（或没找到那一段）跳到那一页
+  const cameAt = useRef(props.initialAt)
+  useEffect(() => {
+    const at = cameAt.current
+    if (!at || !paper || !mode) return
+    cameAt.current = undefined
+    const t_ = setTimeout(() => {
+      if (mode === 'reflow' && at.blockId) setJump({ nonce: jumpSeq++, kind: 'block', blockId: at.blockId })
+      else if (at.page) {
+        if (mode !== 'pdf') switchMode('pdf')
+        setTimeout(() => setJump({ nonce: jumpSeq++, kind: 'page', page: at.page! }), mode === 'pdf' ? 0 : 60)
+      }
+    }, 400)
+    return () => clearTimeout(t_)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paper, mode])
   const goBlock = useEvent((blockId: string) => {
     if (mode !== 'reflow') switchMode('reflow')
     setTimeout(() => setJump({ nonce: jumpSeq++, kind: 'block', blockId }), mode === 'reflow' ? 0 : 60)
@@ -575,6 +629,41 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
       }}
     />
   )
+  const questions = (
+    <QuestionsPane
+      paper={paper}
+      anns={anns}
+      blockOrder={blockOrder}
+      prefetch={settings.explainPrefetch}
+      request={walkReq}
+      onFocusAnn={(a) => {
+        setWalkFocus(a?.id ?? null)
+        if (a) goTo(a)
+      }}
+      onQuote={goQuote}
+      onRemoveLabel={(a) => void updateAnn({ ...a, label: null })}
+    />
+  )
+  const rightTabs = (
+    <Segmented
+      className="r-tabs"
+      value={rightTab}
+      onChange={setRightTab}
+      options={[
+        { value: 'ai', label: t('AI 问答') },
+        {
+          value: 'q',
+          label: (
+            <>
+              <span className="seg-t">{t('疑问')}</span>
+              <QBadge anns={anns} />
+            </>
+          ),
+          title: t('打了「看不懂」「有质疑」的地方，攒着一条条讲')
+        }
+      ]}
+    />
+  )
   const chatTools = (
     <>
       <button className="icon-btn" title={t('新对话（清空，能撤销）')} onClick={() => setClearSignal((n) => n + 1)}>
@@ -804,7 +893,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
                 boxMode={boxMode}
                 shot={shot}
                 jump={jump}
-                hoverAnn={hoverAnn}
+                hoverAnn={hoverAnn ?? walkFocus}
                 initial={posRef.current}
                 onPosition={(page, frac, progress) => {
                   setCurPage(page)
@@ -857,8 +946,9 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
               settings={settings}
               tr={tr}
               jump={jump}
-              hoverAnn={hoverAnn}
+              hoverAnn={hoverAnn ?? walkFocus}
               sections={sections}
+              onWalk={(ids) => openQuestions({ ids, auto: true })}
               marks={keysOn ? keys : null}
               terms={settings.termMarks ? terms : null}
               initial={posRef.current}
@@ -915,9 +1005,9 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
       {showRight && (
         <aside className="col-right">
           <div className="titlebar drag right-bar">
-            <span className="bar-title">{t('AI 问答')}</span>
+            {rightTabs}
             <div className="spacer" />
-            {chatTools}
+            {rightTab === 'ai' && chatTools}
             <button className="icon-btn" title={t('改成悬浮窗')} onClick={() => void api.setSettings({ chatFloat: true })}>
               <PictureInPicture2 size={16} />
             </button>
@@ -925,7 +1015,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
               <PanelRight size={16} />
             </button>
           </div>
-          {chat}
+          {rightTab === 'ai' ? chat : questions}
           <div className="resizer" style={{ left: -4 }} onMouseDown={startResize('right')} onDoubleClick={() => setRightW(380)} />
         </aside>
       )}
@@ -949,9 +1039,9 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
             }}
           >
             <GripVertical size={14} />
-            {t('AI 问答')}
+            {rightTabs}
             <span className="spacer" />
-            {chatTools}
+            {rightTab === 'ai' && chatTools}
             <button className="icon-btn" title={t('放回右栏')} onClick={() => void api.setSettings({ chatFloat: false })}>
               <PanelRight size={16} />
             </button>
@@ -959,7 +1049,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
               <Minimize2 size={16} />
             </button>
           </div>
-          {chat}
+          {rightTab === 'ai' ? chat : questions}
         </div>
       )}
 

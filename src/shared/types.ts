@@ -4,6 +4,38 @@ export const HL_COLORS: HlColor[] = ['yellow', 'green', 'blue', 'red']
 /** 标注上打的标签：这一处看不懂、对这一处有质疑 */
 export type AnnLabel = 'confused' | 'doubt'
 export const ANN_LABELS: AnnLabel[] = ['confused', 'doubt']
+/** 标签的处理状态：看不懂是 还没懂 → 懂了；有质疑是 待判断 → 质疑成立 / 质疑不成立 / 还要查 */
+export type LabelStatus = 'open' | 'understood' | 'pending' | 'upheld' | 'dismissed' | 'checking'
+/** 讲解的一版：focus 是围着讲的「卡在哪」（空是整句），raw 是模型按标签分节的原文；lit 是给模型看过的文献候选 */
+export interface ExplainVersion {
+  focus: string
+  raw: string
+  at: number
+  lit?: LitItem[]
+  chunks?: { en: string; zh: string }[] // 拆开看：这段有意群对齐时用它（原文一块对译文一块），没有时模型在 raw 里自己切
+}
+export interface LitItem {
+  n: number
+  title: string
+  authors: string[]
+  year: number | null
+  venue: string | null
+  url: string | null
+  cited: string | null // 本文自己引用的写编号，如 [16]
+}
+/** 几处一起讲的那一段：挂在这几处的每一条上 */
+export interface GroupExplain {
+  key: string
+  ids: string[]
+  raw: string
+  at: number
+}
+/** 存在标注上的讲解：每次「换个讲法」留一版；misses 是说过几次「还不懂」 */
+export interface ExplainRecord {
+  versions: ExplainVersion[]
+  misses: number
+  group?: GroupExplain | null
+}
 export type Tier = 'flash' | 'basic' | 'simple' | 'edited' // edited：调整区域后重新生成的
 
 export interface Paper {
@@ -94,6 +126,8 @@ export interface Annotation {
   color: HlColor
   style?: 'highlight' | 'underline' // 高亮（底色）还是划线；老数据没有这一项，算高亮
   label?: AnnLabel | null // 看不懂 / 有质疑
+  labelStatus?: LabelStatus | null // 标签的处理状态；空是还没处理（看不懂是还没懂，有质疑是待判断）
+  explain?: ExplainRecord | null // 按标签讲的讲解，存下来再看不再花 AI
   text: string
   note: string
   page: number | null
@@ -190,6 +224,7 @@ export interface Settings {
   chatSize: number // AI 回答字号
   chatFloat: boolean // AI 问答用悬浮窗
   thinking: boolean // AI 问答默认开深度思考
+  explainPrefetch: boolean // 打了「看不懂」「有质疑」以后在后台先备好讲解（默认关：不自动花额度）
   agentDir: string // 研究项目放在哪，空是 文稿/ParaRead 项目
   syncEnabled: boolean // 多设备同步（iCloud 云盘）
   syncDir: string // 空是 iCloud 云盘/ParaRead 同步
@@ -199,6 +234,7 @@ export interface Settings {
   autoUpdate: boolean // 自动检查更新
   wordStyle: 'gbt' | 'apa' | 'mla' | 'ieee' // Word 插件新文档默认用的引用格式
   wordCheck: boolean // Word 插件里显示「格式检查」
+  bibDir: string // 文献库自动导出 .bib 放在哪个文件夹（文件名 ParaRead.bib），空是不导出
 }
 
 // 原生菜单的一项（右键菜单、下拉都走 ui:menu）

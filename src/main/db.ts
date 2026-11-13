@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import type { Annotation, ChatMessage, Folder, Glance, Paper, ReadMode, ReadPosition, ReflowState, Tier, JobStatus, Ink } from '../shared/types'
+import type { Annotation, ExplainRecord, LabelStatus, ChatMessage, Folder, Glance, Paper, ReadMode, ReadPosition, ReflowState, Tier, JobStatus, Ink } from '../shared/types'
 import { t } from '../shared/i18n'
 
 export type DB = Database.Database
@@ -186,6 +186,8 @@ export function openDb(file: string): DB {
   const annCols = new Set((db.prepare('PRAGMA table_info(annotations)').all() as { name: string }[]).map((r) => r.name))
   if (!annCols.has('style')) db.exec("ALTER TABLE annotations ADD COLUMN style TEXT NOT NULL DEFAULT 'highlight'")
   if (!annCols.has('label')) db.exec('ALTER TABLE annotations ADD COLUMN label TEXT')
+  if (!annCols.has('label_status')) db.exec('ALTER TABLE annotations ADD COLUMN label_status TEXT')
+  if (!annCols.has('explain')) db.exec('ALTER TABLE annotations ADD COLUMN explain TEXT')
   if (!chatCols.has('paper_ids')) db.exec('ALTER TABLE chats ADD COLUMN paper_ids TEXT')
   if (!chatCols.has('think_ms')) db.exec('ALTER TABLE chats ADD COLUMN think_ms INTEGER')
   migrateTagsToFolders(db)
@@ -391,6 +393,8 @@ interface AnnRow {
   color: string
   style: string
   label: string | null
+  label_status: string | null
+  explain: string | null
   text: string
   note: string
   page: number | null
@@ -412,6 +416,8 @@ function rowToAnn(r: AnnRow): Annotation {
     color: r.color as Annotation['color'],
     style: r.style === 'underline' ? 'underline' : 'highlight',
     label: r.label === 'confused' || r.label === 'doubt' ? r.label : null,
+    labelStatus: (r.label_status as LabelStatus | null) ?? null,
+    explain: r.explain ? (JSON.parse(r.explain) as ExplainRecord) : null,
     text: r.text,
     note: r.note,
     page: r.page,
@@ -431,13 +437,42 @@ export function listAnnotations(db: DB, paperId: string): Annotation[] {
   return rows.map(rowToAnn)
 }
 
+// 新的一条（含同步来的）带着标签状态和讲解存；改已有的一条时这两样不跟着界面手里那份走（讲解只由 setLabelState 写），
+// 只在标签换了或去掉时清空（换了标签，原来的讲解就不对了）
 export function saveAnnotation(db: DB, a: Annotation, sourceId: string | null = null): void {
   db.prepare(
-    `INSERT INTO annotations (id, paper_id, mode, color, style, label, text, note, page, rects, block_id, block_hash, start, "end", section, source_id, created_at, updated_at)
-     VALUES (@id, @paperId, @mode, @color, @style, @label, @text, @note, @page, @rects, @blockId, @blockHash, @start, @end, @section, @sourceId, @createdAt, @updatedAt)
+    `INSERT INTO annotations (id, paper_id, mode, color, style, label, label_status, explain, text, note, page, rects, block_id, block_hash, start, "end", section, source_id, created_at, updated_at)
+     VALUES (@id, @paperId, @mode, @color, @style, @label, @labelStatus, @explain, @text, @note, @page, @rects, @blockId, @blockHash, @start, @end, @section, @sourceId, @createdAt, @updatedAt)
      ON CONFLICT(id) DO UPDATE SET color = excluded.color, style = excluded.style, label = excluded.label, note = excluded.note, section = excluded.section, page = COALESCE(excluded.page, page),
+       label_status = CASE WHEN excluded.label IS label THEN label_status END, explain = CASE WHEN excluded.label IS label THEN explain END,
        rects = excluded.rects, updated_at = excluded.updated_at`
-  ).run({ ...a, style: a.style ?? 'highlight', label: a.label ?? null, rects: a.rects ? JSON.stringify(a.rects) : null, sourceId })
+  ).run({
+    ...a,
+    style: a.style ?? 'highlight',
+    label: a.label ?? null,
+    labelStatus: a.label ? (a.labelStatus ?? null) : null,
+    explain: a.label && a.explain ? JSON.stringify(a.explain) : null,
+    rects: a.rects ? JSON.stringify(a.rects) : null,
+    sourceId
+  })
+}
+
+export function getAnnotation(db: DB, id: string): Annotation | null {
+  const r = db.prepare('SELECT * FROM annotations WHERE id = ?').get(id) as AnnRow | undefined
+  return r ? rowToAnn(r) : null
+}
+
+/** 改标签的状态或讲解（过一遍、一起讲、后台备讲解），改动时间跟着走，同步按它合并 */
+export function setLabelState(db: DB, id: string, p: { status?: LabelStatus | null; explain?: ExplainRecord | null }, at = Date.now()): Annotation | null {
+  const cur = getAnnotation(db, id)
+  if (!cur?.label) return null
+  db.prepare('UPDATE annotations SET label_status = ?, explain = ?, updated_at = ? WHERE id = ?').run(
+    p.status !== undefined ? p.status : (cur.labelStatus ?? null),
+    p.explain !== undefined ? (p.explain ? JSON.stringify(p.explain) : null) : cur.explain ? JSON.stringify(cur.explain) : null,
+    Math.max(at, cur.updatedAt + 1),
+    id
+  )
+  return getAnnotation(db, id)
 }
 
 /** 全库的标注，连着论文的标题、作者、年份（笔记页用）；删掉的论文不算 */

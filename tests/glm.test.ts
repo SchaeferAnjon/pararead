@@ -116,6 +116,10 @@ describe('chatStream / chatOnce', () => {
 })
 
 describe('parseJsonLoose', () => {
+  it('字符串里没转义的换行、制表符也能解析', () => {
+    expect(parseJsonLoose<{ a: string; b: number }>('{"a": "第一行\n第二行\t末尾", "b": 2}')).toEqual({ a: '第一行\n第二行\t末尾', b: 2 })
+    expect(parseJsonLoose<{ a: string }>('{"a": "引号 \\" 后\n换行"}')).toEqual({ a: '引号 " 后\n换行' })
+  })
   it('能剥掉 ```json 代码块', () => {
     expect(parseJsonLoose<{ a: number }>('好的：\n```json\n{"a": 1}\n```')).toEqual({ a: 1 })
   })

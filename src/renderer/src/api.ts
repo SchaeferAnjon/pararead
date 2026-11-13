@@ -17,7 +17,9 @@ import type {
   LocalCliStatus,
   NoteEntry,
   Term,
-  Ink
+  Ink,
+  LabelStatus,
+  ExplainVersion
 } from '@shared/types'
 import type { SenseSentence } from '@shared/senses'
 
@@ -49,6 +51,13 @@ export type { ResearchKind, ResearchMessage, ResearchMeta, ResearchSession, Sour
 import type { ResearchKind, ResearchMessage, ResearchSession } from '../../main/research'
 export type { AgentSession, AgentStep, Project } from '../../main/agent'
 export type { SyncStatus } from '../../main/sync'
+export type { MatrixView } from '../../main/matrix'
+import type { MatrixView } from '../../main/matrix'
+export type { BibStatus } from '../../main/bibExport'
+import type { BibStatus } from '../../main/bibExport'
+import type { Draft, Org } from '@shared/matrix'
+/** 从对比表打开原文：对照模式跳到那一段，原文模式跳到那一页 */
+export type OpenAt = { page: number | null; blockId: string | null }
 export type { MemberStatus } from '../../main/member'
 export type { MineruInstallState } from '../../main/mineruInstall'
 import type { MineruInstallState } from '../../main/mineruInstall'
@@ -170,6 +179,31 @@ export interface Api {
   researchSend(reqId: string, sessionId: string, text: string): Promise<ResearchMessage>
   onResearchProgress(cb: (p: { sessionId: string; stage: string; detail: string }) => void): Off
   onResearchChanged(cb: () => void): Off
+  /** 综述对比表（src/main/matrix.ts）：建好就开始填格子 */
+  matrixCreate(paperIds: string[]): Promise<string>
+  matrixGet(sessionId: string): Promise<MatrixView>
+  matrixBuild(sessionId: string): Promise<void>
+  matrixRetryRow(sessionId: string, paperId: string): Promise<void>
+  matrixAddCol(sessionId: string, name: string): Promise<MatrixView>
+  matrixDelCol(sessionId: string, colId: string): Promise<MatrixView>
+  matrixSelect(sessionId: string, ids: string[]): Promise<void>
+  matrixRelations(sessionId: string): Promise<void>
+  matrixMetrics(sessionId: string): Promise<void>
+  matrixOutline(sessionId: string, org: Org, lang: 'zh' | 'en'): Promise<Draft>
+  matrixSetDraft(sessionId: string, d: Draft): Promise<void>
+  matrixWrite(sessionId: string): Promise<Draft>
+  matrixCheck(sessionId: string): Promise<Draft>
+  matrixLocate(paperId: string, quote: string, page: number | null): Promise<OpenAt>
+  matrixExport(sessionId: string): Promise<string | null>
+  matrixLatex(sessionId: string): Promise<{ text: string; items: { paperId: string; key: string; title: string }[]; bib: BibStatus }>
+  /** 没开 Word 插件的本机服务时报 word-off */
+  matrixToWord(sessionId: string): Promise<{ paneOpen: boolean; cites: number }>
+  onMatrixChanged(cb: (p: { sessionId: string }) => void): Off
+  bibStatus(): Promise<BibStatus>
+  bibChoose(): Promise<BibStatus>
+  bibWrite(): Promise<BibStatus>
+  bibStop(): Promise<BibStatus>
+  bibReveal(): Promise<void>
   agentProjects(): Promise<Project[]>
   agentCreateProject(name: string): Promise<Project>
   agentRenameProject(id: string, name: string): Promise<void>
@@ -213,6 +247,15 @@ export interface Api {
   annDelete(id: string): Promise<void>
   annExport(paperId: string): Promise<string | null>
   annSections(paperId: string): Promise<Record<string, string>>
+  /** 按标签讲一处：流式走 onStream，讲完存在标注上并推 onExplainSaved；focus 只围着它讲，again 是「还不懂，换个讲法」 */
+  explainStart(reqId: string, annId: string, o?: { focus?: string; again?: boolean }): Promise<Pick<ExplainVersion, 'lit' | 'chunks'>>
+  /** 几处一起讲（先找共同卡点）：讲完挂在每一处上 */
+  explainGroup(reqId: string, annIds: string[]): Promise<void>
+  explainStatus(annIds: string[], status: LabelStatus): Promise<Annotation[]>
+  /** 后台正在备讲解的标注 */
+  explainPending(): Promise<string[]>
+  onExplainSaved(cb: (a: Annotation) => void): Off
+  onExplainPending(cb: (ids: string[]) => void): Off
   srPreview(): Promise<ScholareadPreview>
   srImport(): Promise<ScholareadImportResult>
   getSettings(): Promise<SettingsView>

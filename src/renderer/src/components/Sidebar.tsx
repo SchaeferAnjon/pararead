@@ -1,4 +1,4 @@
-import { BookOpen, BookOpenCheck, ChevronDown, ChevronRight, CircleDashed, FlaskConical, Folder as FolderIcon, FolderPlus, Hash, KeyRound, LibraryBig, MessagesSquare, Network, NotebookPen, PanelLeft, Pencil, Plus, ScrollText, Search, Settings, SquarePen, SquareTerminal, Telescope, Trash2 } from 'lucide-react'
+import { BookOpen, BookOpenCheck, ChevronDown, ChevronRight, CircleDashed, FlaskConical, Folder as FolderIcon, FolderPlus, Hash, KeyRound, LibraryBig, MessagesSquare, Network, NotebookPen, PanelLeft, Pencil, Plus, ScrollText, Search, Settings, Sheet, SquarePen, SquareTerminal, Telescope, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { Folder, Paper, SettingsView } from '@shared/types'
 import { providerOf } from '@shared/providers'
@@ -16,7 +16,7 @@ export const SMART = [
   { id: 'done', label: t('读完'), icon: BookOpenCheck }
 ] as const
 
-export const AI_ICON: Record<ResearchKind, typeof MessagesSquare> = { ask: MessagesSquare, find: Telescope, guide: Network, review: ScrollText }
+export const AI_ICON: Record<ResearchKind, typeof MessagesSquare> = { ask: MessagesSquare, find: Telescope, guide: Network, review: ScrollText, matrix: Sheet }
 
 export function smartCount(id: string, p: Paper): boolean {
   if (id === 'reading') return p.progress > 0 && p.progress < 1
@@ -314,6 +314,7 @@ export function Sidebar(props: {
                 ) : (
                   <span className="l">{x.title}</span>
                 )}
+                {x.kind === 'matrix' && renamingSession !== x.id && <span className="tag sm">{t('对比表')}</span>}
               </button>
             )
           })}

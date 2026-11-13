@@ -1,11 +1,12 @@
 import { ArrowRight, Check, ChevronDown, ChevronRight, Copy, Ellipsis, FileDown, FileText, Folder as FolderIcon, MessagesSquare, Network, PanelLeft, Pencil, Plus, RotateCcw, ScrollText, Telescope, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Folder, Paper, SettingsView } from '@shared/types'
-import { api, errText, streamRequest, type GuideMap, type ResearchKind, type ResearchMessage, type ResearchSession, type SearchHit, type Source } from '../api'
+import { api, errText, streamRequest, type GuideMap, type OpenAt, type ResearchKind, type ResearchMessage, type ResearchSession, type SearchHit, type Source } from '../api'
 import { Composer } from '../lib/Composer'
 import { Markdown } from '../lib/Markdown'
 import { showMenu } from '../lib/menu'
 import { Dots, useToast } from '../lib/ui'
+import { MatrixPage } from './matrix/MatrixPage'
 import { AI_ICON } from './Sidebar'
 import { t } from '@shared/i18n'
 
@@ -27,7 +28,7 @@ export function ResearchPage(props: {
   onShowSide: () => void
   onCreated: (id: string, prompt: string) => void
   onDeleted: () => void
-  onOpenPaper: (id: string) => void
+  onOpenPaper: (id: string, at?: OpenAt, ann?: string) => void
 }) {
   if (!props.id) return <NewSession {...props} />
   return <Session {...props} id={props.id} />
@@ -164,7 +165,7 @@ const stageName = (s: string): string =>
 
 type Live = { stage: string; detail: string; text: string; plan?: { title?: string; outline: { h: string }[] }; stages: string[] }
 
-function Session(props: { id: string; prompt?: string; papers: Paper[]; sideHidden: boolean; onShowSide: () => void; onDeleted: () => void; onOpenPaper: (id: string) => void }) {
+function Session(props: { id: string; prompt?: string; papers: Paper[]; sideHidden: boolean; onShowSide: () => void; onDeleted: () => void; onOpenPaper: (id: string, at?: OpenAt, ann?: string) => void }) {
   const toast = useToast()
   const [s, setS] = useState<ResearchSession | null>(null)
   const [msgs, setMsgs] = useState<ResearchMessage[]>([])
@@ -232,6 +233,8 @@ function Session(props: { id: string; prompt?: string; papers: Paper[]; sideHidd
   }
 
   if (!s) return null
+  // 综述对比表是另一种页面（components/matrix/）
+  if (s.kind === 'matrix') return <MatrixPage session={s} sideHidden={props.sideHidden} onShowSide={props.onShowSide} onDeleted={props.onDeleted} onOpenPaper={props.onOpenPaper} onRenamed={() => void load()} />
   const mode = MODE[s.kind]
   const Icon = AI_ICON[s.kind]
   const busy = pending !== null

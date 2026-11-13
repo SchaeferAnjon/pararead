@@ -9,7 +9,7 @@ import { newId } from './library'
 import { searchWeb, type SearchHit } from './meta'
 import { t } from '../shared/i18n'
 
-export type ResearchKind = 'ask' | 'find' | 'guide' | 'review'
+export type ResearchKind = 'ask' | 'find' | 'guide' | 'review' | 'matrix' // matrix：综述对比表（src/main/matrix.ts）
 
 export interface ResearchSession {
   id: string
@@ -99,7 +99,7 @@ export function registerResearch(c: Ctx): void {
   ipcMain.handle('research:create', (_e, kind: ResearchKind, paperIds: string[] = []) => {
     const id = newId()
     const now = Date.now()
-    const title = { ask: t('问文献库'), find: t('找论文'), guide: t('学习指南'), review: t('综述报告') }[kind]
+    const title = { ask: t('问文献库'), find: t('找论文'), guide: t('学习指南'), review: t('综述报告'), matrix: t('对比表') }[kind]
     db.prepare('INSERT INTO ai_sessions (id, kind, title, paper_ids, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, kind, title, JSON.stringify(paperIds), now, now)
     c.broadcast('research:changed', null)
     return id

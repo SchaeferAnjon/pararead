@@ -11,6 +11,7 @@ export interface StreamOpts {
   useId?: string
   maxTokens?: number
   onFinish?: (full: string, info: { reasoning: string; thinkMs: number | null }) => void
+  onError?: (msg: string) => void // 出错或被停掉
 }
 
 // 流式请求：增量和思考内容按 reqId 发给界面（ai:stream），能中途停；结束后可缓存
@@ -52,6 +53,7 @@ export function makeStreamer(ai: Ai, db: DB, log: (m: string) => void) {
       })
       .catch((e: Error) => {
         log(`AI 请求失败 ${reqId}：${e.message}`)
+        o.onError?.(e.message)
         send({ reqId, error: e.message })
       })
       .finally(() => aborts.delete(reqId))

@@ -26,3 +26,8 @@ html, body { background: var(--bg); }
 .wp .bad { color: var(--red); }
 .wp .warn { color: var(--yellow); }
 .wp .ok { color: var(--green); }
+.wp-got { margin: 0 12px 8px; padding: 10px 12px; border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--stroke); flex: none; }
+.wp-got b { font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.wp-got p { margin: 4px 0 0; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.5; }
+.wp-got-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: var(--fs-sm); }
+.wp-got-row .ellipsis { flex: 1; }

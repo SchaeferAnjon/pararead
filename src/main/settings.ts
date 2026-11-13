@@ -38,6 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
   chatSize: 14,
   chatFloat: false,
   thinking: false,
+  explainPrefetch: false,
   agentDir: '',
   syncEnabled: false,
   syncDir: '',
@@ -46,7 +47,8 @@ export const DEFAULT_SETTINGS: Settings = {
   onboarded: false,
   autoUpdate: true,
   wordStyle: 'gbt',
-  wordCheck: true
+  wordCheck: true,
+  bibDir: ''
 }
 
 // 设置文件明文存放，权限 0600。不用 safeStorage：没正式签名的应用每次读都会弹钥匙串框。

@@ -86,7 +86,12 @@
           // 真 Office.js 里 isNullObject 在 sync 之后就能读，不用单独 load
           const loadTag = parent.load
           parent.load = (w) => (loadTag(w), loadTag('isNullObject'))
-          return { parentContentControlOrNullObject: parent, insertText: (text) => insertNode(text), insertParagraph: (text) => insertNode('\n' + text) }
+          // 新段：段本身是一个文字节点，往段末 insertText 的依次排在它后面
+          const insertParagraph = (text) => {
+            const p = insertNode('\n' + text)
+            return { ...p, insertText: (t, where) => (where === 'End' ? insertNode(t) : (() => { throw new Error('假 Word 的段落只支持 End') })()) }
+          }
+          return { parentContentControlOrNullObject: parent, insertText: (text) => insertNode(text), insertParagraph }
         }
       },
       async sync() {

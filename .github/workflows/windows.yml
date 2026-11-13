@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,10 +38,25 @@ jobs:
           New-Item -ItemType Directory -Force e2e-tmp | Out-Null
           Invoke-WebRequest -Uri https://arxiv.org/pdf/1706.03762v7 -OutFile e2e-tmp\paper.pdf
           $env:PLAYWRIGHT_ROOT = "$pwd\"
-          $env:E2E_APP = "$pwd\release\win-unpacked\ParaRead.exe"
+          # 安装包真装一遍（/S 静默，装到当前用户的 AppData\Local\Programs），走查的是装好的那份
+          $setup = (Get-ChildItem release\ParaRead-*-win-x64.exe | Select-Object -First 1).FullName
+          Start-Process -FilePath $setup -ArgumentList '/S' -Wait
+          $exe = "$env:LOCALAPPDATA\Programs\ParaRead\ParaRead.exe"
+          if (-not (Test-Path $exe)) { throw "安装包没装出 $exe" }
+          $env:E2E_APP = $exe
           $env:E2E_PAPER = "$pwd\e2e-tmp\paper.pdf"
           $env:E2E_SHOTS = "$pwd\e2e-tmp\shots"
           node scripts/e2e/windows.mjs "$pwd\e2e-tmp\data"
+      # 精细重排引擎：在软件里下载装好 MinerU（uv、Python、约 1.3 GB 的包、约 850 MB 的模型），再重排一篇
+      - name: Install MinerU inside the app
+        shell: pwsh
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: |
+          $env:PLAYWRIGHT_ROOT = "$pwd\"
+          $env:E2E_APP = "$env:LOCALAPPDATA\Programs\ParaRead\ParaRead.exe"
+          $env:E2E_PAPER = "$pwd\e2e-tmp\paper.pdf"
+          node scripts/e2e/mineru-install.mjs "$pwd\e2e-tmp\data-mineru"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

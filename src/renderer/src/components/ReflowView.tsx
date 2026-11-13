@@ -5,6 +5,7 @@ import { sensesKey } from '@shared/hash'
 import { CITE_RE, expandCite, findReferences, plain } from '@shared/refs'
 import { termOf, termRegex } from '@shared/terms'
 import { LABEL_NAME } from '@shared/annLabels'
+import { isOpen, isSettled, openCounts, STATUS_NAME, statusOf, summaryOf } from '@shared/explain'
 import { alignOffsets, counterpart, cut, needsMd, senseable, toMd, type SenseSentence, type Span } from '@shared/senses'
 import type { Annotation, Block, MajorPoint, Paper, ReadPosition, ReflowDoc, SettingsView, Term } from '@shared/types'
 import { api, errText, type ReflowProgress, type SearchHit } from '../api'
@@ -41,6 +42,7 @@ export function ReflowView(props: {
   onAskImage: (image: string, context: string, prefill?: string) => void
   onOpenPaper: (id: string) => void
   onBlock: (blockId: string) => void
+  onWalk: (annIds: string[]) => void // 节末「过一遍」：这一节还要处理的几处
   onReadPdf: () => void
   onRetry: () => void
   onSimple: () => Promise<void>
@@ -264,6 +266,12 @@ export function ReflowView(props: {
     if (!n) return
     n.scrollIntoView({ block: 'start' })
     scroller.current.scrollTop -= 24
+    // 跳到某一条标注：把它摆在视口中间（长段落里也看得见）
+    const r = j.annId ? annRanges.current.get(j.annId)?.getBoundingClientRect() : null
+    if (r && r.height) {
+      const box = scroller.current.getBoundingClientRect()
+      scroller.current.scrollTop += r.top - box.top - box.height / 2 + r.height / 2
+    }
     n.classList.remove('landing')
     void n.offsetWidth
     n.classList.add('landing')
@@ -308,7 +316,8 @@ export function ReflowView(props: {
         ;(groups[`${a.style === 'underline' ? 'ul' : 'hl'}-${a.color}`] ??= []).push(r)
         if (a.note) (groups[`hl-note-${a.color}`] ??= []).push(r)
       }
-      if (a.label) (groups[`lb-${a.label}`] ??= []).push(r)
+      // 了结了的（懂了、质疑不成立）波浪线变淡
+      if (a.label) (groups[`lb-${a.label}${isSettled(a) ? '-done' : ''}`] ??= []).push(r)
       if (props.hoverAnn === a.id) (groups['hl-hover'] ??= []).push(r)
     }
     annRanges.current = ranges
@@ -380,7 +389,7 @@ export function ReflowView(props: {
     }
     setTags(tagList)
     if (wantAlign.length) void sn.request(wantAlign)
-    const names = ['yellow', 'green', 'blue', 'red'].flatMap((c) => [`hl-${c}`, `ul-${c}`, `hl-note-${c}`]).concat('hl-hover', 'cite', 'cite-on', 'ai-mark', 'term', 'lb-confused', 'lb-doubt')
+    const names = ['yellow', 'green', 'blue', 'red'].flatMap((c) => [`hl-${c}`, `ul-${c}`, `hl-note-${c}`]).concat('hl-hover', 'cite', 'cite-on', 'ai-mark', 'term', 'lb-confused', 'lb-doubt', 'lb-confused-done', 'lb-doubt-done')
     for (const nm of names) CSS.highlights.set(nm, new Highlight(...(groups[nm] ?? [])))
     return () => names.forEach((nm) => CSS.highlights.delete(nm))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -396,7 +405,7 @@ export function ReflowView(props: {
           if ((a?.note || a?.label) && r.isPointInRange(pos.offsetNode, pos.offset)) {
             const rects = [...r.getClientRects()]
             const rect = rects.find((q) => y >= q.top && y <= q.bottom) ?? r.getBoundingClientRect()
-            return { note: [a.label ? `【${LABEL_NAME[a.label]}】` : '', a.note].filter(Boolean).join('\n'), rect }
+            return { note: [a.label ? `【${LABEL_NAME[a.label]} · ${STATUS_NAME[statusOf(a)!]}】${labelHint(a)}` : '', a.note].filter(Boolean).join('\n'), rect }
           }
         }
         for (const h of termRanges.current)
@@ -523,6 +532,21 @@ export function ReflowView(props: {
       />
     )
 
+  // 节末那一行：一节最后一块的下面，写这一节还有几处看不懂、有质疑没处理，带「过一遍」
+  const secEnds = useMemo(() => {
+    const out = new Map<string, { title: string; ids: string[]; confused: number; doubt: number }>()
+    if (!doc) return out
+    const heads = doc.blocks.map((b, i) => ({ b, i })).filter((x) => x.b.type === 'heading')
+    for (let k = 0; k < heads.length; k++) {
+      const h = heads[k]
+      const list = props.anns.filter((a) => a.label && isOpen(a) && a.section === h.b.md)
+      if (!list.length) continue
+      const last = (heads[k + 1]?.i ?? doc.blocks.length) - 1
+      out.set(doc.blocks[last].id, { title: plain(h.b.md), ids: list.map((a) => a.id), ...openCounts(list) })
+    }
+    return out
+  }, [doc, props.anns])
+
   return (
     <div className="reflow-scroller" ref={scroller} onScroll={onScroll} onMouseUp={onMouseUp} onMouseMove={preview.onMove} onMouseLeave={() => (preview.onLeave(), offHot())} onMouseOver={onOver}>
       {preview.node}
@@ -562,7 +586,10 @@ export function ReflowView(props: {
               onRetry={() => tr.retry(b)}
             />
           )
-        )}
+        ).flatMap((node, i) => {
+          const end = secEnds.get(doc.blocks[i].id)
+          return end ? [node, <SectionEnd key={`end-${doc.blocks[i].id}`} {...end} onWalk={() => props.onWalk(end.ids)} />] : [node]
+        })}
       </article>
       {zoomed && <Lightbox src={zoomed} onClose={() => setZoomed(null)} />}
       {cite && (
@@ -578,6 +605,37 @@ export function ReflowView(props: {
           onBlock={props.onBlock}
         />
       )}
+    </div>
+  )
+}
+
+// 悬停提示里标签后面跟的一句：讲过的给一句话讲解，还没讲的说去哪看
+function labelHint(a: Annotation): string {
+  const sum = summaryOf(a)
+  if (sum) return `\n${sum}`
+  return isOpen(a) ? `\n${t('在右栏「疑问」里一条条讲')}` : ''
+}
+
+function SectionEnd(p: { title: string; confused: number; doubt: number; onWalk: () => void }) {
+  return (
+    <div className="sec-end" data-section={p.title}>
+      <span>{t('读完「{0}」，这一节还有', p.title)}</span>
+      {p.confused > 0 && (
+        <span className="c">
+          <i data-label="confused" />
+          {t('{0} 处看不懂', p.confused)}
+        </span>
+      )}
+      {p.doubt > 0 && (
+        <span className="c">
+          <i data-label="doubt" />
+          {t('{0} 处有质疑', p.doubt)}
+        </span>
+      )}
+      <span className="spacer" />
+      <button className="btn" onClick={p.onWalk}>
+        {t('过一遍')}
+      </button>
     </div>
   )
 }

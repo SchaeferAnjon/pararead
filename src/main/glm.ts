@@ -268,7 +268,32 @@ export function parseJsonLoose<T>(text: string): T {
   const start = body.search(/[[{]/)
   const end = Math.max(body.lastIndexOf('}'), body.lastIndexOf(']'))
   if (start < 0 || end < start) throw new GlmError(t('模型没有返回 JSON：') + text.slice(0, 120))
-  return JSON.parse(body.slice(start, end + 1)) as T
+  const json = body.slice(start, end + 1)
+  try {
+    return JSON.parse(json) as T
+  } catch {
+    // 模型有时在字符串里直接换行、放制表符（JSON 不许），转义后再解析一次
+    return JSON.parse(escapeControls(json)) as T
+  }
+}
+
+/** 把 JSON 字符串值里没转义的控制字符（换行、制表符等）转义掉，字符串外面的不动 */
+export function escapeControls(json: string): string {
+  let out = ''
+  let inStr = false
+  for (let i = 0; i < json.length; i++) {
+    const c = json[i]
+    if (inStr && c === '\\') {
+      out += c + (json[i + 1] ?? '')
+      i++
+      continue
+    }
+    if (c === '"') inStr = !inStr
+    const code = c.charCodeAt(0)
+    if (inStr && code < 0x20) out += c === '\n' ? '\\n' : c === '\r' ? '\\r' : c === '\t' ? '\\t' : `\\u${code.toString(16).padStart(4, '0')}`
+    else out += c
+  }
+  return out
 }
 
 // 限流（HTTP 429，1302 之类）等一会儿重试；1113 是余额或端点问题，重试没用

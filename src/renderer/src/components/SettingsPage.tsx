@@ -5,7 +5,7 @@ import type { LocalCliStatus, SettingsView, WordStatus } from '@shared/types'
 import { WORD_STYLES } from '@shared/wordCite'
 import { t, UI_LANG_NAMES, UI_LANGS, uiLocale } from '@shared/i18n'
 import { thinkMode } from '@shared/thinking'
-import { api, errText, type MemberStatus, type SyncStatus, type UpdateState } from '../api'
+import { api, errText, type BibStatus, type MemberStatus, type SyncStatus, type UpdateState } from '../api'
 import { AppLogo } from '../lib/member'
 import { PHASE_NAME, useMineruInstall } from './Onboarding'
 import { MenuHost, showMenu } from '../lib/menu'
@@ -395,6 +395,9 @@ function Ai({ s, set, setS }: P & { setS: (v: SettingsView) => void }) {
             <Switch on={s.thinking} onChange={(v) => set({ thinking: v })} label={t('深度思考默认开')} />
           </Row>
         )}
+        <Row label={t('标签讲解')} hint={t('打了「看不懂」「有质疑」以后在后台先讲好，点开不用等；每处问一次 AI。关着时点「过一遍」才讲')}>
+          <Switch on={s.explainPrefetch} onChange={(v) => set({ explainPrefetch: v })} label={t('打标签后在后台先备好讲解')} />
+        </Row>
         <Row label={t('回答语言')}>
           <Pick value={s.aiLang || '__same'} options={[{ id: '__same', label: t('跟翻译目标语言一样') }, ...LANGS.map((l) => ({ id: l, label: l }))]} onChange={(v) => set({ aiLang: v === '__same' ? '' : v })} />
         </Row>
@@ -576,7 +579,52 @@ function Storage({ s, set }: P) {
           </button>
         </Row>
       </FSec>
+      <BibRow home={home} />
     </>
+  )
+}
+
+// 自动导出 .bib（src/main/bibExport.ts）：LaTeX 和 Overleaf 都走这个文件
+function BibRow(props: { home: (p: string) => string }) {
+  const [st, setSt] = useState<BibStatus | null>(null)
+  useEffect(() => void api.bibStatus().then(setSt), [])
+  return (
+    <FSec title={t('导出')}>
+      <Row
+        label={t('自动导出 .bib')}
+        hint={
+          st?.error
+            ? t('.bib 没写上：{0}', st.error)
+            : t('文献库整个导出成 ParaRead.bib，以后加论文、改文献信息都自动重写；撞车的 key 加 a、b。Overleaf：把它拖进项目一次，或者放进和 Overleaf 用 Git 同步的文件夹。')
+        }
+      >
+        {st?.dir ? (
+          <>
+            <span className={'dot sm ' + (st.error ? 'err' : 'ok')} />
+            <span className="mono hint ellipsis" style={{ maxWidth: 300 }}>
+              {props.home(st.file)}
+            </span>
+            <button className="btn sm" onClick={() => void api.bibReveal()}>
+              <FolderOpen size={14} />
+              {t('打开')}
+            </button>
+            <button className="btn sm" onClick={() => void api.bibChoose().then(setSt)}>
+              {t('更改…')}
+            </button>
+            <button className="btn sm" onClick={() => void api.bibStop().then(setSt)}>
+              {t('停用')}
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="hint">{t('没开')}</span>
+            <button className="btn sm" onClick={() => void api.bibChoose().then(setSt)}>
+              {t('选文件夹…')}
+            </button>
+          </>
+        )}
+      </Row>
+    </FSec>
   )
 }
 

@@ -120,15 +120,15 @@ body.resizing .reader { transition: none; }
 .hl-layer { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
 .pdf-hl { position: absolute; mix-blend-mode: multiply; border-radius: 2px; }
 .pdf-hl.noted { border-bottom: 2px solid; }
-.pdf-hl.lb-confused { border-bottom: 2px dashed #2f6fde !important; mix-blend-mode: normal; }
-.pdf-hl.lb-doubt { border-bottom: 2px dashed #e5484d !important; mix-blend-mode: normal; }
-.note-mark.lb-confused { text-decoration: underline wavy 1.5px #2f6fde; text-underline-offset: 4px; }
-.note-mark.lb-doubt { text-decoration: underline wavy 1.5px #e5484d; text-underline-offset: 4px; }
+.pdf-hl.lb-confused { border-bottom: 2px dashed var(--lb-confused) !important; mix-blend-mode: normal; }
+.pdf-hl.lb-doubt { border-bottom: 2px dashed var(--lb-doubt) !important; mix-blend-mode: normal; }
+.note-mark.lb-confused { text-decoration: underline wavy 1.5px var(--lb-confused); text-underline-offset: 4px; }
+.note-mark.lb-doubt { text-decoration: underline wavy 1.5px var(--lb-doubt); text-underline-offset: 4px; }
 .lb-mark { width: 14px; height: 6px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; }
-.lb-mark[data-label="confused"], .lb-chip[data-label="confused"] { color: #2f6fde; }
-.lb-mark[data-label="doubt"], .lb-chip[data-label="doubt"] { color: #e5484d; }
+.lb-mark[data-label="confused"], .lb-chip[data-label="confused"] { color: var(--lb-confused); }
+.lb-mark[data-label="doubt"], .lb-chip[data-label="doubt"] { color: var(--lb-doubt); }
 .tb-label.current { background: var(--fill-3); }
-.lb-chip { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; margin: 2px 0 4px; border-radius: var(--r-xs); font-size: 11px; font-weight: 500; background: color-mix(in srgb, currentColor 12%, transparent); width: fit-content; }
+.lb-chip { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; margin: 2px 0 4px; border-radius: var(--r-xs); font-size: var(--fs-sm); font-weight: 500; background: color-mix(in srgb, currentColor 12%, transparent); width: fit-content; white-space: nowrap; }
 /* 划线：不铺底色，只在字下面画一条同色的线 */
 .pdf-hl.ul { background: none !important; mix-blend-mode: normal; border-radius: 0; border-bottom: 2px solid; }
 .pdf-hl.ul[data-color="yellow"] { border-color: var(--hl-yellow-dot); }
@@ -264,8 +264,8 @@ body.resizing .reader { transition: none; }
 ::highlight(ul-blue) { text-decoration: underline 2px var(--hl-blue-dot); text-underline-offset: 3px; }
 ::highlight(ul-red) { text-decoration: underline 2px var(--hl-red-dot); text-underline-offset: 3px; }
 /* 标签：看不懂是蓝色波浪线，有质疑是红色波浪线（和高亮底色叠着） */
-::highlight(lb-confused) { text-decoration: underline wavy 1.5px #2f6fde; text-underline-offset: 4px; }
-::highlight(lb-doubt) { text-decoration: underline wavy 1.5px #e5484d; text-underline-offset: 4px; }
+::highlight(lb-confused) { text-decoration: underline wavy 1.5px var(--lb-confused); text-underline-offset: 4px; }
+::highlight(lb-doubt) { text-decoration: underline wavy 1.5px var(--lb-doubt); text-underline-offset: 4px; }
 ::highlight(hl-hover) { background-color: var(--fill-3); }
 ::highlight(cite) { color: var(--text-2); }
 ::highlight(cite-on) { color: var(--accent-text); text-decoration: underline 1px currentColor; text-underline-offset: 3px; }

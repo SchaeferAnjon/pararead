@@ -5,6 +5,7 @@ import { close, launch, PAPER, sleep } from './drive.mjs'
 
 const { app, win } = await launch(process.argv[2] ?? `${process.cwd()}/tmp/data-mineru`)
 const ev = (fn, ...a) => win.evaluate(fn, ...a)
+const fails = []
 try {
   await sleep(1500)
   await ev(() => window.api.setSettings({ mineruPath: '/nonexistent/mineru-kit', onboarded: true }))
@@ -23,24 +24,33 @@ try {
     last = line
     if (s.phase === 'done' || s.phase === 'failed') {
       console.log('结束:', s.phase, s.error ?? '')
+      if (s.phase !== 'done') fails.push(`安装：${s.error}`)
       break
     }
     if (Date.now() - t0 > 40 * 60_000) {
       console.log('超时')
+      fails.push('安装超时')
       break
     }
   }
   const st = await ev(() => window.api.getSettings())
   console.log('mineruPath:', st.mineruPath, 'installed:', st.mineruInstalled)
-  console.log('testMineru:', JSON.stringify(await ev(() => window.api.testMineru())))
+  const tm = await ev(() => window.api.testMineru())
+  console.log('testMineru:', JSON.stringify(tm))
+  if (!st.mineruInstalled || !tm.ok) fails.push('装好后 mineruPath 不能用')
+  let flash = ''
   for (let i = 0; i < 150; i++) {
     await sleep(2000)
     const p = await ev((x) => window.api.getPaper(x), r.paper.id)
     if (p.reflow.flash === 'done' || p.reflow.flash === 'failed') {
       console.log('装好后的快速重排:', p.reflow.flash, p.reflow.error ?? '', '约', i * 2, '秒')
+      flash = p.reflow.flash
       break
     }
   }
+  if (flash !== 'done') fails.push(`装好后的快速重排：${flash || '5 分钟没做完'}`)
 } finally {
   await close(app)
 }
+console.log(fails.length ? `没过：${fails.join('；')}` : '全过')
+process.exit(fails.length ? 1 : 0)

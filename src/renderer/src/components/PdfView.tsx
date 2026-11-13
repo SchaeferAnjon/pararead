@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { LABEL_NAME } from '@shared/annLabels'
+import { isSettled, STATUS_NAME, statusOf } from '@shared/explain'
 import type * as PdfJs from 'pdfjs-dist'
 import type { Annotation, Paper, ReadPosition, Ink} from '@shared/types'
 import { pdfjs } from '../lib/pdf'
@@ -275,7 +276,7 @@ export function PdfView(props: {
           const r = el.getBoundingClientRect()
           if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
             const a = props.anns.find((n) => n.id === el.dataset.ann)
-            if (a?.note || a?.label) return { note: [a.label ? `【${LABEL_NAME[a.label]}】` : '', a.note].filter(Boolean).join('\n'), rect: r }
+            if (a?.note || a?.label) return { note: [a.label ? `【${LABEL_NAME[a.label]} · ${STATUS_NAME[statusOf(a)!]}】` : '', a.note].filter(Boolean).join('\n'), rect: r }
           }
         }
         return null
@@ -495,7 +496,7 @@ const PageView = memo(function PageView(p: {
           (a.rects?.length ? a.rects : (p.found[a.id] ?? [])).map((r, i) => (
             <div
               key={a.id + i}
-              className={'pdf-hl' + (a.style === 'underline' ? ' ul' : '') + (a.note || a.label ? ' noted' : '') + (a.label ? ` lb-${a.label}` : '') + (p.hoverAnn === a.id ? ' hover' : '') + (p.flashAnn === a.id ? ' flash' : '')}
+              className={'pdf-hl' + (a.style === 'underline' ? ' ul' : '') + (a.note || a.label ? ' noted' : '') + (a.label ? ` lb-${a.label}${isSettled(a) ? ' done' : ''}` : '') + (p.hoverAnn === a.id ? ' hover' : '') + (p.flashAnn === a.id ? ' flash' : '')}
               data-ann={a.id}
               data-color={a.color}
               style={{ left: `${r[0] * 100}%`, top: `${r[1] * 100}%`, width: `${r[2] * 100}%`, height: `${r[3] * 100}%`, background: a.label ? 'none' : HL_BG[a.color] }}

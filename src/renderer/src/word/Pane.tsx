@@ -1,11 +1,19 @@
-import { AlertTriangle, BookMarked, Check, CircleAlert, ListChecks, RefreshCw, Search } from 'lucide-react'
+import { AlertTriangle, BookMarked, Check, CircleAlert, Inbox, ListChecks, RefreshCw, Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
 import { bibEntries, check, numbering, WORD_STYLES, type CiteItem, type Issue, type WordStyle } from '@shared/wordCite'
 import { Segmented } from '../lib/ui'
-import { docStyle, insertBib, insertCitation, readDoc, refresh, selectCite, type DocState } from './doc'
+import type { Seg } from '@shared/draft'
+import { docStyle, insertBib, insertCitation, insertParagraph, readDoc, refresh, selectCite, type DocState } from './doc'
 
 type Tab = 'cite' | 'bib' | 'check'
+interface InboxItem {
+  id: string
+  createdAt: number
+  title: string
+  segments: Seg[]
+  items: CiteItem[]
+}
 const errText = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
 // Word 里的任务窗格：搜文献库插入引用、参考文献表、格式检查。页面和接口都由本机的 ParaRead 给。
@@ -55,6 +63,46 @@ export function Pane() {
     void act(() => refresh(v), t('全文已换成 {0}', WORD_STYLES.find((x) => x.id === v)!.name))
   }
 
+  // 从 ParaRead 对比表「送进 Word」的段落：窗格开着时送来的直接插在光标处；打开窗格前就在排队的，列在上面点一下插入
+  const [inbox, setInbox] = useState<InboxItem[]>([])
+  const [got, setGot] = useState<{ cites: number } | null>(null)
+  const openedAt = useRef(Date.now())
+  const handled = useRef(new Set<string>())
+  const styleRef = useRef(style)
+  styleRef.current = style
+  const insertPara = useCallback(
+    async (it: InboxItem): Promise<void> => {
+      handled.current.add(it.id)
+      const n = it.segments.filter((x) => 'cite' in x).length
+      const ok = await act(() => insertParagraph(it, styleRef.current), t('已插入 1 段，{0} 处引用', n))
+      if (!ok) return void handled.current.delete(it.id)
+      setGot({ cites: n })
+      setInbox((x) => x.filter((y) => y.id !== it.id))
+      await fetch('/api/inbox/done?id=' + encodeURIComponent(it.id), { method: 'POST' }).catch(() => {})
+    },
+    [act]
+  )
+  useEffect(() => {
+    let stop = false
+    const poll = async (): Promise<void> => {
+      try {
+        const r = (await (await fetch('/api/inbox')).json()) as { items: InboxItem[] }
+        if (stop) return
+        const fresh = r.items.filter((x) => !handled.current.has(x.id))
+        setInbox(fresh.filter((x) => x.createdAt < openedAt.current))
+        for (const it of fresh.filter((x) => x.createdAt >= openedAt.current)) await insertPara(it)
+      } catch {
+        // 连不上应用：别的请求会报「连不上 ParaRead」
+      }
+    }
+    void poll()
+    const timer = setInterval(() => void poll(), 2000)
+    return () => {
+      stop = true
+      clearInterval(timer)
+    }
+  }, [insertPara])
+
   const cited = doc ? numbering(doc.cites).size : 0
   return (
     <div className="wp">
@@ -70,6 +118,31 @@ export function Pane() {
         <div className="wp-note bad">
           <CircleAlert size={14} />
           <span>{t('连不上 ParaRead。把它打开，再重新打开这个窗格')}</span>
+        </div>
+      )}
+      {inbox.length > 0 && (
+        <div className="wp-got" data-part="inbox">
+          <b>
+            <Inbox size={14} />
+            {t('从 ParaRead 收到 {0} 段', inbox.length)}
+          </b>
+          {inbox.map((it) => (
+            <div key={it.id} className="wp-got-row">
+              <span className="ellipsis">{it.title}</span>
+              <button className="btn sm" disabled={busy} onClick={() => void insertPara(it)}>
+                {t('插入')}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {got && inbox.length === 0 && (
+        <div className="wp-got" data-part="got">
+          <b>
+            <span className="dot ok sm" />
+            {t('从 ParaRead 收到 1 段')}
+          </b>
+          <p>{t('插在光标处，{0} 处引用已变成插件管的引用（{1}），参考文献表跟着更新。', got.cites, WORD_STYLES.find((x) => x.id === style)!.name)}</p>
         </div>
       )}
       {tab === 'cite' && <CiteTab busy={busy} onInsert={(picked) => act(() => insertCitation(picked, style), t('已插入'))} onOffline={setOffline} />}

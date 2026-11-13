@@ -16,6 +16,7 @@ import { homedir } from 'node:os'
 import { dirname, extname, join, posix } from 'node:path'
 import { t, uiLang } from '../shared/i18n'
 import type { Paper, WordStatus } from '../shared/types'
+import type { Seg } from '../shared/draft'
 import type { CiteItem } from '../shared/wordCite'
 import { IS_WIN } from './platform'
 
@@ -104,10 +105,22 @@ export function manifestXml(lang: string): string {
 `
 }
 
+/** 对比表「送进 Word」的一段：文字和引用交替，引到的论文的文献信息跟着走（写进文档自己的设置） */
+export interface WordInboxItem {
+  id: string
+  createdAt: number
+  title: string
+  segments: Seg[]
+  items: CiteItem[]
+}
+
 const brief = (p: Paper): CiteItem => ({ id: p.id, title: p.title, authors: p.authors, year: p.year, venue: p.venue, volume: p.volume, issue: p.issue, pages: p.pages, doi: p.doi, url: p.url, publisher: p.publisher, arxiv: p.arxiv })
 
 export class WordAddin {
   private servers: Server[] = []
+  // 送进 Word 的段落排在这里，等任务窗格来取（窗格开着时每 2 秒问一次）；只在内存里，应用关了就没了
+  private inbox: WordInboxItem[] = []
+  private lastPoll = 0
   private error = ''
   private keyFile: string
   private certFile: string
@@ -129,6 +142,23 @@ export class WordAddin {
     this.passFile = join(o.dir, 'localhost.pass')
     // Windows 版 Word 从注册表 Wef\Developer 里登记的路径读清单，清单就放在我们自己的目录里
     this.manifest = IS_WIN ? join(o.dir, 'pararead.xml') : MANIFEST
+  }
+
+  serving(): boolean {
+    return this.servers.length > 0
+  }
+
+  /** Word 里的 ParaRead 窗格开着（6 秒内来问过） */
+  paneOpen(): boolean {
+    return Date.now() - this.lastPoll < 6000
+  }
+
+  push(item: WordInboxItem): void {
+    this.inbox.push(item)
+  }
+
+  brief(p: Paper): CiteItem {
+    return brief(p)
   }
 
   private installed(): boolean {
@@ -303,7 +333,16 @@ export class WordAddin {
     const host = (req.headers.host ?? '').replace(/:\d+$/, '')
     if (!['localhost', '127.0.0.1', '[::1]'].includes(host)) return send(403, '{"error":"host"}')
     const u = new URL(req.url ?? '/', ORIGIN)
+    // 窗格插好了一段：从收件箱拿掉。只有这一处收 POST
+    if (u.pathname === '/api/inbox/done' && req.method === 'POST') {
+      this.inbox = this.inbox.filter((x) => x.id !== u.searchParams.get('id'))
+      return send(200, '{"ok":true}')
+    }
     if (req.method !== 'GET') return send(405, '{"error":"method"}')
+    if (u.pathname === '/api/inbox') {
+      this.lastPoll = Date.now()
+      return send(200, JSON.stringify({ items: this.inbox }))
+    }
     if (u.pathname === '/api/state') return send(200, JSON.stringify({ ...this.o.prefs(), lang: uiLang() }))
     if (u.pathname === '/api/search') {
       const words = (u.searchParams.get('q') ?? '').toLowerCase().split(/\s+/).filter(Boolean)

@@ -1,5 +1,6 @@
-import { ArrowDown, ArrowRight, ArrowUp, Bookmark, BookOpen, BookOpenCheck, Check, ChevronDown, Clock, Download, Eye, FileOutput, FileText, Folder as FolderIcon, FolderOpen, FolderPlus, Globe, LayoutGrid, LibraryBig, Link, List, ListChecks, MessagesSquare, PanelLeft, PanelRight, Pencil, Plus, Quote, RefreshCw, Search as SearchIcon, Trash2, User, X } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, Bookmark, BookOpen, BookOpenCheck, Check, ChevronDown, Clock, Download, Eye, FileOutput, FileText, Folder as FolderIcon, FolderOpen, FolderPlus, Globe, LayoutGrid, LibraryBig, Link, List, ListChecks, MessagesSquare, PanelLeft, PanelRight, Pencil, Plus, Quote, RefreshCw, Search as SearchIcon, Sheet, Trash2, User, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { bibEntry, bibKeys } from '@shared/bib'
 import { CITE_STYLES, citationText, type CiteStyle } from '@shared/cite'
 import type { Folder, Paper, ReadMode, ScholareadPreview, SettingsView } from '@shared/types'
 import { api, errText, type ImportResult, type ReflowProgress, type SearchMatch } from '../api'
@@ -33,6 +34,7 @@ export function Library(props: {
   onFilter: (f: string) => void
   onOpen: (id: string, st: { top: number; selected: string[] }, mode?: ReadMode) => void
   onAskTogether: (ids: string[]) => void
+  onMakeMatrix: (ids: string[]) => void
   onAiFind: (q: string) => void
 }) {
   const s = props.settings
@@ -50,6 +52,8 @@ export function Library(props: {
   const [view, setViewState] = useState(s.libView)
   const [selected, setSelected] = useState<string[]>(props.initial.selected)
   const [batch, setBatch] = useState(false)
+  // 底部批量栏出来时它的「做对比表」是这一屏唯一的实心按钮，「导入」退成次按钮
+  const batchBar = batch || selected.length > 1
   const [insp, setInsp] = useState(true)
   const [drag, setDrag] = useState(0)
   const [flash, setFlash] = useState<string | null>(null)
@@ -264,11 +268,23 @@ export function Library(props: {
       toast(t('已放进「{0}」', name))
     }
   }
-  const citeEntries = (): MenuEntry[] => CITE_STYLES.map((c) => ({ id: `cite:${c.id}`, label: c.name }))
+  const citeEntries = (): MenuEntry[] => [
+    ...CITE_STYLES.map((c) => ({ id: `cite:${c.id}`, label: c.name })),
+    { type: 'separator' as const },
+    { id: 'bib:all', label: t('整个文献库导出成 .bib…'), icon: <FileOutput size={16} /> }
+  ]
+  // .bib 选好文件夹就写一次，之后文献库一变就重写（src/main/bibExport.ts）
+  const exportBib = async (): Promise<void> => {
+    const st = await api.bibChoose()
+    if (st.error) toast(t('.bib 没写上：{0}', st.error))
+    else if (st.file) toast(t('已导出 {0} 篇到 {1}，以后加论文会自动更新', st.count, st.file.replace(/^\/Users\/[^/]+/, '~')))
+  }
   const copyCite = (ids: string[], style: CiteStyle): void => {
     const ps = ids.map((i) => all.find((p) => p.id === i)).filter((p): p is Paper => !!p)
     const sep = style === 'bibtex' || style === 'ris' ? '\n\n' : '\n'
-    void navigator.clipboard.writeText(ps.map((p, i) => (style === 'ieee' && ps.length > 1 ? `[${i + 1}] ` : '') + citationText(p, style)).join(sep))
+    // BibTeX 的 key 和导出的 .bib 一致（撞车的加了 a、b）
+    const keys = style === 'bibtex' ? bibKeys(all) : null
+    void navigator.clipboard.writeText(ps.map((p, i) => (style === 'ieee' && ps.length > 1 ? `[${i + 1}] ` : '') + (keys ? bibEntry(p, keys.get(p.id)!) : citationText(p, style))).join(sep))
     toast(t('已复制{0} {1} 引用', ps.length > 1 ? t(' {0} 条', ps.length) : '', CITE_STYLES.find((c) => c.id === style)?.name))
   }
   const markRead = async (ids: string[], read: boolean): Promise<void> => {
@@ -304,6 +320,7 @@ export function Library(props: {
         { label: t('复制引用'), icon: <Quote size={16} />, submenu: citeEntries() },
         p.progress >= 1 ? { id: 'unread', label: t('标记为未读'), icon: <BookOpen size={16} /> } : { id: 'read', label: t('标记为读完'), icon: <BookOpenCheck size={16} /> },
         ...(!one ? [{ id: 'ask', label: t('一起问 AI（{0} 篇）', ids.length), icon: <MessagesSquare size={16} /> }] : []),
+        ...(!one ? [{ id: 'matrix', label: t('做对比表（{0} 篇）', ids.length), icon: <Sheet size={16} /> }] : []),
         sep,
         ...(one
           ? [
@@ -326,6 +343,8 @@ export function Library(props: {
     if (act === 'export') setDialog({ kind: 'export', id })
     if (act.startsWith('folder:')) void toggleFolder(ids, act.slice(7))
     if (act.startsWith('cite:')) copyCite(ids, act.slice(5) as CiteStyle)
+    if (act === 'bib:all') void exportBib()
+    if (act === 'matrix') props.onMakeMatrix(ids)
     if (act === 'read' || act === 'unread') void markRead(ids, act === 'read')
     if (act === 'ask') props.onAskTogether(ids)
     if (act === 'reveal') void api.revealPaper(id)
@@ -601,11 +620,11 @@ export function Library(props: {
           <PanelRight size={16} />
         </button>
         <div className="btn-group">
-          <button className="btn primary" title={t('导入 PDF 或 EPUB ⌘O')} onClick={() => void doImport()}>
+          <button className={'btn' + (batchBar ? '' : ' primary')} title={t('导入 PDF 或 EPUB ⌘O')} onClick={() => void doImport()}>
             <Plus size={16} />
             {t('导入')}
           </button>
-          <button ref={importArrow} className="btn primary" title={t('更多导入方式')} onClick={() => void importMenu()}>
+          <button ref={importArrow} className={'btn' + (batchBar ? '' : ' primary')} title={t('更多导入方式')} onClick={() => void importMenu()}>
             <ChevronDown size={14} />
           </button>
         </div>
@@ -727,7 +746,7 @@ export function Library(props: {
               </div>
             </>
           )}
-          {(batch || selected.length > 1) && (
+          {batchBar && (
             <div className="batch">
               <span className="n num">{t('已选 {0} 篇', selected.length)}</span>
               <button className="btn ghost sm" onClick={() => setSelected(selected.length === shown.length ? [] : shown.map((p) => p.id))}>
@@ -755,7 +774,8 @@ export function Library(props: {
                 disabled={!selected.length}
                 onClick={async (e) => {
                   const act = await showMenu(citeEntries(), { el: e.currentTarget })
-                  if (act) copyCite(selected, act.slice(5) as CiteStyle)
+                  if (act === 'bib:all') void exportBib()
+                  else if (act) copyCite(selected, act.slice(5) as CiteStyle)
                 }}
               >
                 <Quote size={16} />
@@ -764,6 +784,10 @@ export function Library(props: {
               <button className="btn ghost" disabled={selected.length < 2} onClick={() => props.onAskTogether(selected)}>
                 <MessagesSquare size={16} />
                 {t('一起问 AI')}
+              </button>
+              <button className="btn primary" disabled={selected.length < 2} title={t('一行一篇，比问题、方法、结果、局限，每格能点回原文')} onClick={() => props.onMakeMatrix(selected)}>
+                <Sheet size={16} />
+                {t('做对比表')}
               </button>
               <button className="btn ghost danger" disabled={!selected.length} onClick={() => void remove(selected)}>
                 <Trash2 size={16} />

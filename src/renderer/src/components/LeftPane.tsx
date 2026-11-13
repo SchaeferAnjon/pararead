@@ -6,6 +6,8 @@ import { listFigures } from '@shared/refs'
 import { locateTerms } from '@shared/terms'
 import { HL_COLORS, type Annotation, type Block, type HlColor, type MajorPoint, type MajorType, type ReadMode, type ReflowDoc, type Term, type AnnLabel } from '@shared/types'
 import { LABEL_NAME } from '@shared/annLabels'
+import { isSettled, summaryOf } from '@shared/explain'
+import { LabelChips } from './ExplainBody'
 import { Markdown } from '../lib/Markdown'
 import { showMenu } from '../lib/menu'
 import type { useTranslations } from '../lib/translations'
@@ -322,11 +324,21 @@ function Notes(props: Props) {
                     })
                   }
                 >
-                  <span className={'note-mark' + (a.label ? ` lb-${a.label}` : '')} style={{ background: a.label ? undefined : HL_BG[a.color] }}>
+                  <span className={'note-mark' + (a.label ? ` lb-${a.label}${isSettled(a) ? ' done' : ''}` : '')} style={{ background: a.label ? undefined : HL_BG[a.color] }}>
                     {a.text}
                   </span>
                 </div>
-                {a.label && <span className="lb-chip" data-label={a.label}>{LABEL_NAME[a.label]}</span>}
+                {a.label && (
+                  <div className="note-chips">
+                    <LabelChips a={a} />
+                  </div>
+                )}
+                {a.label && summaryOf(a) && (
+                  <div className="note-sum">
+                    <b>{t('讲解')}</b>
+                    {summaryOf(a)}
+                  </div>
+                )}
                 {a.note && <div className="note-text">{a.note}</div>}
                 {a.mode === 'pdf' && a.page && <div className="hint num">{t('原文 第 {0} 页', a.page)}</div>}
               </div>

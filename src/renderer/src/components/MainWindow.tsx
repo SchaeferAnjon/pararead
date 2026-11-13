@@ -1,7 +1,7 @@
 import { NotesPage } from './NotesPage'
 import { useCallback, useEffect, useState } from 'react'
 import type { Folder, Paper, ReadMode, SettingsView } from '@shared/types'
-import { api, errText, type Project, type ResearchSession, type SyncStatus } from '../api'
+import { api, errText, type OpenAt, type Project, type ResearchSession, type SyncStatus } from '../api'
 import { useToast } from '../lib/ui'
 import { AgentPage } from './Agent'
 import { Library } from './Library'
@@ -19,7 +19,7 @@ export function MainWindow(props: {
   onRoute: (r: Route) => void
   onPricing: () => void
   startWith: 'zotero' | null
-  onOpen: (id: string, st: LibState, mode?: ReadMode, ann?: string) => void
+  onOpen: (id: string, st: LibState, mode?: ReadMode, ann?: string, at?: OpenAt) => void
 }) {
   const toast = useToast()
   const [papers, setPapers] = useState<Paper[] | null>(null)
@@ -61,6 +61,15 @@ export function MainWindow(props: {
       props.onRoute({ kind: 'agent', id: p.id })
     } catch (e) {
       toast(t('建不了项目：{0}', errText(e)))
+    }
+  }
+  const makeMatrix = async (ids: string[]): Promise<void> => {
+    try {
+      const id = await api.matrixCreate(ids)
+      loadSessions()
+      props.onRoute({ kind: 'ai', id })
+    } catch (e) {
+      toast(errText(e))
     }
   }
   const askTogether = async (ids: string[]): Promise<void> => {
@@ -121,6 +130,7 @@ export function MainWindow(props: {
             onFilter={setFilter}
             onOpen={props.onOpen}
             onAskTogether={(ids) => void askTogether(ids)}
+            onMakeMatrix={(ids) => void makeMatrix(ids)}
             onAiFind={(q) => void api.researchCreate('find').then((id) => props.onRoute({ kind: 'ai', id, prompt: q }))}
           />
         )}
@@ -140,7 +150,7 @@ export function MainWindow(props: {
               props.onRoute({ kind: 'ai', id, prompt })
             }}
             onDeleted={() => props.onRoute({ kind: 'ai', id: null })}
-            onOpenPaper={(id) => props.onOpen(id, props.libState)}
+            onOpenPaper={(id, at, ann) => props.onOpen(id, props.libState, undefined, ann, at)}
           />
         )}
         {route.kind === 'agent' && (
