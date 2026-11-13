@@ -217,8 +217,9 @@ describe('问作者清单', () => {
 
 describe('标签状态和讲解存在标注上', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sr-explain-'))
-  afterAll(() => rmSync(dir, { recursive: true, force: true }))
   const db = openDb(join(dir, 'lib.db'))
+  // Windows 上开着的库文件删不掉：先关再删
+  afterAll(() => (db.close(), rmSync(dir, { recursive: true, force: true })))
   const rec = { versions: [{ focus: '', raw: CONFUSED, at: 5 }], misses: 1 }
 
   it('状态和讲解存得下、读得回，改动时间往后走', () => {
