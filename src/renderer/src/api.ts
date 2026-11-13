@@ -13,7 +13,8 @@ import type {
   Settings,
   SettingsView,
   StreamEvent,
-  WordStatus
+  WordStatus,
+  LocalCliStatus
 } from '@shared/types'
 
 export interface ReflowProgress {
@@ -202,6 +203,8 @@ export interface Api {
   setApiKey(key: string): Promise<SettingsView>
   revealApiKey(): Promise<string>
   testKey(): Promise<{ ok: boolean; error?: string; models: string[] }>
+  /** 本机 Claude Code 找到没有、登录了没有；again 重新找一遍 */
+  localCli(again?: boolean): Promise<LocalCliStatus>
   testMineru(): Promise<{ ok: boolean; error?: string }>
   chooseMineru(): Promise<SettingsView>
   openSettings(section?: string): Promise<void>

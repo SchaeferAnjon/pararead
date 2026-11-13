@@ -3,9 +3,9 @@
 .reader { display: grid; height: 100%; grid-template-rows: minmax(0, 1fr); transition: grid-template-columns var(--dur-2) var(--ease); position: relative; }
 body.resizing .reader { transition: none; }
 .col-left, .col-right { position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
-.col-left { background: color-mix(in srgb, var(--bg-sidebar) var(--side-opacity), transparent); border-right: 1px solid var(--stroke); }
-.col-right { background: var(--bg); border-left: 1px solid var(--stroke); }
-.col-mid { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--bg); }
+.col-left { grid-column: 1; background: color-mix(in srgb, var(--bg-sidebar) var(--side-opacity), transparent); border-right: 1px solid var(--stroke); }
+.col-right { grid-column: 3; background: var(--bg); border-left: 1px solid var(--stroke); }
+.col-mid { grid-column: 2; position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--bg); }
 .titlebar.left-bar { padding: 0 10px 0 84px; }
 .titlebar.mid-bar { padding: 0 12px; gap: 6px; border-bottom: 1px solid var(--stroke); }
 .titlebar.mid-bar.no-left { padding-left: 84px; }

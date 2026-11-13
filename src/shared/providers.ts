@@ -1,6 +1,7 @@
 // 可选的 AI 服务，都走 OpenAI 兼容的 chat/completions。照会议字幕的清单（2026-10 各家 /models 核对过），
 // 加上智谱 Coding Plan（路径不同，只接受 reasoning_effort low，账号会把请求串行化）。
 // text：翻译、问答、速览；vision：框选截图、图表解释。member 是会员通道（经我们的服务器转到 DeepSeek），设置里不列出来。
+// claude-code 不走 HTTP：跑用户这台电脑上装好、登录了的 claude 命令行（main/claudeCode.ts），用它自己的订阅，不用 Key。
 
 import { t } from './i18n'
 
@@ -18,6 +19,8 @@ export interface Provider {
   hidden?: boolean
   serial?: boolean // 账号会把请求串行化：发起间隔至少 1.1 秒，翻译并发 2
   ctx?: number // 给 AI 的论文全文最多多少字（按上下文窗口留余量），默认 6 万
+  local?: boolean // 本机的命令行，不用 Key、没有接口地址
+  models?: string[] // 能选的模型是固定的这几个，不用去服务商那里查
 }
 
 export const MEMBER_API = 'https://api.us-cloud.uk'
@@ -32,6 +35,7 @@ export const PROVIDERS: Provider[] = [
   { id: 'openai', name: 'OpenAI API', blurb: t('按用量付费'), icon: 'openai.svg', mono: true, baseUrl: 'https://api.openai.com/v1', keyPage: 'https://platform.openai.com/api-keys', text: 'gpt-5.6-luna', vision: 'gpt-5.6-luna', env: 'OPENAI_API_KEY', ctx: 300000 },
   { id: 'gemini', name: 'Gemini', blurb: t('需要海外网络'), icon: 'gemini.png', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', keyPage: 'https://aistudio.google.com/apikey', text: 'gemini-3.8-flash', vision: 'gemini-3.8-flash', env: 'GEMINI_API_KEY', ctx: 400000 },
   { id: 'claude', name: 'Claude', blurb: t('需要海外网络'), icon: 'claude.svg', baseUrl: 'https://api.anthropic.com/v1', keyPage: 'https://platform.claude.com/settings/keys', text: 'claude-haiku-5-5', vision: 'claude-haiku-5-5', env: 'ANTHROPIC_API_KEY', ctx: 300000 },
+  { id: 'claude-code', name: t('本机 Claude Code'), blurb: t('用它的订阅，不用 Key'), local: true, text: 'haiku', vision: 'haiku', models: ['haiku', 'sonnet', 'opus'], ctx: 300000 },
   { id: 'openrouter', name: 'OpenRouter', blurb: t('一个 Key 用多家模型'), icon: 'openrouter.svg', mono: true, baseUrl: 'https://openrouter.ai/api/v1', keyPage: 'https://openrouter.ai/settings/keys', text: 'openai/gpt-5.6-luna', vision: 'openai/gpt-5.6-luna', env: 'OPENROUTER_API_KEY', ctx: 200000 },
   { id: 'custom', name: t('自定义'), blurb: t('任何 OpenAI 兼容接口') },
   { id: 'member', name: t('ParaRead 会员'), blurb: t('不用 Key'), hidden: true, baseUrl: `${MEMBER_API}/v1/pararead`, text: 'deepseek-flash', vision: 'deepseek-flash', ctx: 300000 }

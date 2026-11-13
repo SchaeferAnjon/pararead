@@ -32,6 +32,7 @@ import {
 } from './db'
 import { exportMarkdown, safeFileName } from './exporter'
 import { Ai } from './ai'
+import { claudeStatus, findClaude } from './claudeCode'
 import { listModels, parseJsonLoose, type ChatMsg, type ContentPart } from './glm'
 import { Library, newId } from './library'
 import { MineruQueue, type MineruProgress } from './mineru'
@@ -79,10 +80,16 @@ function log(msg: string): void {
 const settings = new SettingsStore(join(dataDir, 'settings.json'))
 // 会员：选了会员通道（provider = member）时，AI 走我们的服务器，Key 是设备令牌
 const member = new Member(join(dataDir, 'member.json'), app.getVersion(), (st) => broadcast('member:status', st))
-const ai = new Ai(settings, () => {
-  const t_ = member.token()
-  return settings.get().provider === 'member' && t_ ? { provider: 'member', token: t_ } : null
-})
+const ai = new Ai(
+  settings,
+  () => {
+    const t_ = member.token()
+    return settings.get().provider === 'member' && t_ ? { provider: 'member', token: t_ } : null
+  },
+  join(dataDir, 'claude-code')
+)
+// 选的是本机 Claude Code：先把 claude 命令找好（导入论文时要同步地问 AI 能不能用）
+if (providerOf(settings.get().provider).local) void findClaude().catch((e: Error) => log(`找 claude 命令出错：${e.message}`))
 const db = openDb(join(dataDir, 'library.sqlite'))
 const library = new Library({ db, dataDir, ai, log })
 
@@ -430,6 +437,7 @@ function registerIpc(): void {
       const p = providerOf(patch.provider)
       patch = { ...patch, textModel: p.text ?? '', visionModel: p.vision ?? p.text ?? '' }
     }
+    if (patch.provider && providerOf(patch.provider).local) void findClaude().catch((e: Error) => log(`找 claude 命令出错：${e.message}`))
     settings.set(patch)
     if (patch.theme) nativeTheme.themeSource = patch.theme
     if (patch.uiLang !== undefined) {
@@ -451,12 +459,18 @@ function registerIpc(): void {
   ipcMain.handle('settings:testKey', async () => {
     try {
       const c = ai.conf()
+      // 本机 Claude Code 没有 Key 可验：真问一句，订阅能用就算通过
+      if (providerOf(c.provider).local) {
+        await ai.once([{ role: 'user', content: 'Reply with the single word: ok' }], { timeoutMs: 60_000 })
+        return { ok: true, models: [] }
+      }
       const models = await listModels(c.apiKey, c.baseUrl)
       return { ok: true, models }
     } catch (e) {
       return { ok: false, error: (e as Error).message, models: [] }
     }
   })
+  ipcMain.handle('settings:localCli', (_e, again?: boolean) => claudeStatus(again))
   ipcMain.handle('settings:testMineru', async () => {
     const p = settings.get().mineruPath
     if (!existsSync(p)) return { ok: false, error: t('找不到 {0}', p) }

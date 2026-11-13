@@ -8,7 +8,7 @@ Read English papers on your Mac: a reflowed layout with a translation under ever
 - 下载 / Download：[最新版 Latest release](https://github.com/SchaeferAnjon/pararead/releases/latest)（macOS 13+，Apple 芯片 / Apple silicon）
 - 许可 / License：GPL-3.0
 
-不用注册账号。填你自己的 AI Key（DeepSeek、智谱、通义、Kimi、豆包、OpenAI、Gemini、Claude 等）永久免费；不想配 Key 可以买会员。论文、重排的结果、高亮和笔记都存在你的电脑上。
+不用注册账号。填你自己的 AI Key（DeepSeek、智谱、通义、Kimi、豆包、OpenAI、Gemini、Claude 等）永久免费；电脑上装了 Claude Code 的，可以直接用它和它的订阅，不用 Key；不想配 Key 可以买会员。论文、重排的结果、高亮和笔记都存在你的电脑上。
 
 第一次打开时如果提示无法验证开发者：打开「系统设置 › 隐私与安全性」，拉到最下面点「仍要打开」。
 

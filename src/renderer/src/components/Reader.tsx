@@ -24,6 +24,8 @@ export type Density = 'less' | 'default' | 'more'
 
 let jumpSeq = 1
 const TIER_NAME: Record<Tier, string> = { flash: t('快速'), basic: t('精细'), simple: t('简单'), edited: t('调整过') }
+// 正文那一列最少这么宽：窗口放不下时收侧栏，不压正文
+const MID_MIN = 480
 
 export function Reader(props: { paperId: string; initialMode?: ReadMode; settings: SettingsView; onBack: () => void; onOpenPaper: (id: string) => void }) {
   const { paperId, settings } = props
@@ -365,42 +367,52 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
     else void api.setSettings({ readSize: cmd === 'zoom-reset' ? 18 : Math.min(24, Math.max(14, settings.readSize + (cmd === 'zoom-in' ? 1 : -1))) })
   })
 
+  // 窗口放不下三栏时自动收一栏：刚点开的那一栏留着，收另一栏；窗口拉宽、放得下了再放回来。自动收的不记进设置
+  const autoHid = useRef({ left: false, right: false })
+  const lastOpened = useRef<'left' | 'right'>('right')
   const toggleLeft = useEvent(() => {
-    setLeftCollapsed((v) => {
-      void api.setSettings({ leftCollapsed: !v })
-      return !v
-    })
+    autoHid.current.left = false
+    if (leftCollapsed) lastOpened.current = 'left'
+    setLeftCollapsed(!leftCollapsed)
+    void api.setSettings({ leftCollapsed: !leftCollapsed })
   })
   const toggleRight = useEvent(() => {
-    setRightCollapsed((v) => {
-      void api.setSettings({ rightCollapsed: !v })
-      return !v
-    })
+    autoHid.current.right = false
+    if (rightCollapsed) lastOpened.current = 'right'
+    setRightCollapsed(!rightCollapsed)
+    void api.setSettings({ rightCollapsed: !rightCollapsed })
   })
 
-  // 窗口太窄时先收左栏再收右栏
+  const [winW, setWinW] = useState(window.innerWidth)
   useEffect(() => {
-    const fit = (): void => {
-      const w = window.innerWidth
-      const mid = w - (leftCollapsed ? 0 : leftW) - (rightCollapsed || floating ? 0 : rightW)
-      if (mid < 480) {
-        if (!leftCollapsed) setLeftCollapsed(true)
-        else if (!rightCollapsed) setRightCollapsed(true)
-      }
-    }
-    fit()
-    window.addEventListener('resize', fit)
-    return () => window.removeEventListener('resize', fit)
-  }, [leftCollapsed, rightCollapsed, leftW, rightW, floating])
+    const on = (): void => setWinW(window.innerWidth)
+    window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [])
+  // 右栏让到正文至少剩 MID_MIN：存的宽度比这个窗口放得下的宽时，先按放得下的显示
+  const rightFit = Math.min(rightW, Math.max(320, winW - MID_MIN))
+  useEffect(() => {
+    const room = (l: boolean, r: boolean): boolean => winW - (l ? leftW : 0) - (r ? rightFit : 0) >= MID_MIN
+    const L = !leftCollapsed
+    const R = !rightCollapsed && !floating
+    const hid = autoHid.current
+    if (!room(L, R)) {
+      if (R && lastOpened.current === 'left') ((hid.right = true), setRightCollapsed(true))
+      else ((hid.left = true), setLeftCollapsed(true))
+    } else if (hid.left && !L && room(true, R)) ((hid.left = false), setLeftCollapsed(false))
+    else if (hid.right && rightCollapsed && !floating && room(L, true)) ((hid.right = false), setRightCollapsed(false))
+  }, [winW, leftCollapsed, rightCollapsed, leftW, rightFit, floating])
 
   const startResize = (side: 'left' | 'right') => (e: React.MouseEvent) => {
     e.preventDefault()
     const x0 = e.clientX
-    const w0 = side === 'left' ? leftW : rightW
+    const w0 = side === 'left' ? leftW : rightFit
+    // 拖到正文只剩 MID_MIN 为止，不把另一栏挤掉
+    const cap = winW - MID_MIN - (side === 'left' ? (rightCollapsed || floating ? 0 : rightFit) : leftCollapsed ? 0 : leftW)
     const move = (ev: MouseEvent): void => {
       const d = ev.clientX - x0
-      if (side === 'left') setLeftW(Math.min(400, Math.max(240, w0 + d)))
-      else setRightW(Math.min(560, Math.max(320, w0 - d)))
+      if (side === 'left') setLeftW(Math.max(240, Math.min(400, cap, w0 + d)))
+      else setRightW(Math.max(320, Math.min(560, cap, w0 - d)))
     }
     const up = (): void => {
       window.removeEventListener('mousemove', move)
@@ -477,7 +489,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
 
   const reflowBusy = !doc && (paper.reflow.flash === 'queued' || paper.reflow.flash === 'running' || prog?.status === 'running')
   const showRight = !rightCollapsed && !floating
-  const gridCols = `${leftCollapsed ? 0 : leftW}px minmax(480px, 1fr) ${showRight ? rightW : 0}px`
+  const gridCols = `${leftCollapsed ? 0 : leftW}px minmax(${MID_MIN}px, 1fr) ${showRight ? rightFit : 0}px`
   const meta = [paper.venue, paper.year, paper.progress >= 1 ? t('读完') : paper.progress > 0 ? t('读到 {0}%', Math.round(paper.progress * 100)) : ''].filter(Boolean).join(' · ')
 
   const chat = (

@@ -225,6 +225,14 @@ export interface ScholareadResult {
 }
 
 // Word 引用插件的状态（设置 › Word 插件）
+/** 本机 Claude Code 的状态：找到没有、哪个版本、登录了没有（null 是问不出来） */
+export interface LocalCliStatus {
+  found: boolean
+  path: string
+  version: string
+  loggedIn: boolean | null
+}
+
 export interface WordStatus {
   word: boolean // 这台电脑装了 Microsoft Word
   wordVersion: string

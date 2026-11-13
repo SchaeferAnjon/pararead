@@ -1,12 +1,12 @@
-import { Check, Cloud, Download, Eye, EyeOff, FileText, KeyRound, Languages, Layers, LibraryBig, MessagesSquare, Star } from 'lucide-react'
+import { Check, Cloud, Download, Eye, EyeOff, FileText, KeyRound, Languages, Layers, LibraryBig, MessagesSquare, SquareTerminal, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { t, UI_LANG_NAMES, UI_LANGS } from '@shared/i18n'
 import { PROVIDERS, providerOf } from '@shared/providers'
-import type { ScholareadPreview, SettingsView } from '@shared/types'
+import type { LocalCliStatus, ScholareadPreview, SettingsView } from '@shared/types'
 import { api, errText, type MineruInstallState } from '../api'
 import { AppLogo, money, useMember } from '../lib/member'
 import { useToast } from '../lib/ui'
-import { logoOf, TARGET_LANGS } from './SettingsPage'
+import { CLAUDE_CODE_DOCS, logoOf, TARGET_LANGS } from './SettingsPage'
 
 const STEPS = (): [string, string][] => [
   [t('欢迎'), t('看一眼怎么用')],
@@ -136,14 +136,29 @@ function AiStep({ s, onPricing }: { s: SettingsView; onPricing: () => void }) {
   const [code, setCode] = useState('')
   const own = s.provider === 'member' ? 'deepseek' : s.provider
   const prov = providerOf(own)
+  // 本机 Claude Code：没有 Key 可填，看这台电脑上找到没有
+  const [cli, setCli] = useState<LocalCliStatus | null>(null)
+  useEffect(() => {
+    if (!prov.local) return
+    setCli(null)
+    void api
+      .localCli(true)
+      .then(setCli)
+      .catch(() => setCli({ found: false, path: '', version: '', loggedIn: null }))
+  }, [prov.local])
   const saveKey = async (): Promise<void> => {
-    if (!key.trim()) return
+    if (!prov.local && !key.trim()) return
     setBusy(true)
-    await api.setApiKey(key.trim())
+    if (prov.local) {
+      // 刚装好、刚登录的：先重新找一遍
+      const st = await api.localCli(true)
+      setCli(st)
+      if (!st.found) return setBusy(false)
+    } else await api.setApiKey(key.trim())
     const r = await api.testKey()
     setCheck(r)
     setBusy(false)
-    if (r.ok) toast(t('Key 可用'))
+    if (r.ok) toast(prov.local ? t('Claude Code 可用') : t('Key 可用'))
   }
   const price = m.st?.prices ? money(m.st.prices.month[m.cur], m.cur) : '$4.99'
   return (
@@ -186,25 +201,33 @@ function AiStep({ s, onPricing }: { s: SettingsView; onPricing: () => void }) {
                         void api.setSettings({ provider: p.id })
                       }}
                     >
-                      <span className={'logo sm' + (p.mono ? ' mono' : '')}>{logo ? <img src={logo} alt="" /> : <Cloud size={12} />}</span>
+                      <span className={'logo sm' + (p.mono ? ' mono' : '')}>{logo ? <img src={logo} alt="" /> : p.local ? <SquareTerminal size={12} /> : <Cloud size={12} />}</span>
                       {p.name}
                     </button>
                   )
                 })}
               </div>
               <div className="line" style={{ marginTop: 8 }} onClick={(e) => e.stopPropagation()}>
-                <input
-                  className="input mono"
-                  type={show ? 'text' : 'password'}
-                  placeholder={s.apiKeySource !== 'none' && s.provider === own ? s.apiKeyMasked : t('粘贴 {0} 的 API Key', prov.name)}
-                  value={key}
-                  onChange={(e) => setKey(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && void saveKey()}
-                />
-                <button className="icon-btn" title={show ? t('隐藏') : t('显示')} onClick={() => setShow((v) => !v)}>
-                  {show ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-                <button className="btn" disabled={busy || !key.trim()} onClick={() => void saveKey()}>
+                {prov.local ? (
+                  <span className="hint" style={{ flex: 1 }}>
+                    {!cli ? t('正在找…') : !cli.found ? t('这台电脑上没找到 claude 命令。') : cli.loggedIn === false ? t('还没登录：在终端里运行 claude auth login，再点「验证」') : t('找到了，版本 {0}', cli.version)}
+                  </span>
+                ) : (
+                  <>
+                    <input
+                      className="input mono"
+                      type={show ? 'text' : 'password'}
+                      placeholder={s.apiKeySource !== 'none' && s.provider === own ? s.apiKeyMasked : t('粘贴 {0} 的 API Key', prov.name)}
+                      value={key}
+                      onChange={(e) => setKey(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && void saveKey()}
+                    />
+                    <button className="icon-btn" title={show ? t('隐藏') : t('显示')} onClick={() => setShow((v) => !v)}>
+                      {show ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </>
+                )}
+                <button className="btn" disabled={busy || (!prov.local && !key.trim())} onClick={() => void saveKey()}>
                   {busy && <span className="spin spin-12" />}
                   {t('验证')}
                 </button>
@@ -217,6 +240,14 @@ function AiStep({ s, onPricing }: { s: SettingsView; onPricing: () => void }) {
                     </span>
                   ) : (
                     <span className="err-t">{t('不可用：{0}', check.error ?? '')}</span>
+                  )
+                ) : prov.local ? (
+                  cli && !cli.found ? (
+                    <a href={CLAUDE_CODE_DOCS} target="_blank" rel="noreferrer" className="text-btn" style={{ padding: 0 }} onClick={(e) => e.stopPropagation()}>
+                      {t('怎么安装')}
+                    </a>
+                  ) : (
+                    t('用的是你自己装好、登录了的 Claude Code 和它的订阅，不用 Key')
                   )
                 ) : (
                   prov.keyPage && (

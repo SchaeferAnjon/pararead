@@ -1,7 +1,7 @@
 {
   "name": "pararead",
   "productName": "ParaRead",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Mac 上读英文论文：重排成好读的版面、逐段对照翻译、划词解释、AI 问答",
   "main": "./out/main/index.js",

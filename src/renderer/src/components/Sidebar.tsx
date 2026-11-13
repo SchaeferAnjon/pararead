@@ -1,4 +1,4 @@
-import { BookOpen, BookOpenCheck, ChevronDown, ChevronRight, CircleDashed, FlaskConical, Folder as FolderIcon, FolderPlus, KeyRound, LibraryBig, MessagesSquare, Network, PanelLeft, Pencil, Plus, ScrollText, Search, Settings, SquarePen, Telescope, Trash2 } from 'lucide-react'
+import { BookOpen, BookOpenCheck, ChevronDown, ChevronRight, CircleDashed, FlaskConical, Folder as FolderIcon, FolderPlus, KeyRound, LibraryBig, MessagesSquare, Network, PanelLeft, Pencil, Plus, ScrollText, Search, Settings, SquarePen, SquareTerminal, Telescope, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import type { Folder, Paper, SettingsView } from '@shared/types'
 import { providerOf } from '@shared/providers'
@@ -200,7 +200,7 @@ export function Sidebar(props: {
   }
 
   const prov = providerOf(s.provider)
-  const hasKey = s.apiKeySource !== 'none' || s.provider === 'member'
+  const hasKey = s.apiKeySource !== 'none' || s.provider === 'member' || !!prov.local
   const syncDot = !props.sync?.enabled ? '' : props.sync.error ? 'err' : props.sync.waiting ? 'warn' : 'ok'
 
   return (
@@ -342,6 +342,14 @@ export function Sidebar(props: {
                 {t('会员')}
               </span>
               <span className="d">{t('AI 走会员通道，不用 Key')}</span>
+            </>
+          ) : prov.local ? (
+            <>
+              <span className="t">
+                <SquareTerminal size={14} />
+                {prov.name}
+              </span>
+              <span className="d">{prov.blurb}</span>
             </>
           ) : hasKey ? (
             <>

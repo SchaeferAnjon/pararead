@@ -117,6 +117,7 @@ const api = {
   setApiKey: inv('settings:setKey'),
   revealApiKey: inv('settings:revealKey'),
   testKey: inv('settings:testKey'),
+  localCli: inv('settings:localCli'),
   testMineru: inv('settings:testMineru'),
   chooseMineru: inv('settings:chooseMineru'),
   openSettings: inv('settings:open'),

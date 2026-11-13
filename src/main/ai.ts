@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { providerOf } from '../shared/providers'
+import { ccStream, ccTools, claudeFound, type CcCall } from './claudeCode'
 import { chatOnce, chatStream, chatTools, type ChatMsg, type ToolDef } from './glm'
 import type { SettingsStore } from './settings'
 import { t } from '../shared/i18n'
@@ -27,11 +28,19 @@ export interface AiConf {
 }
 
 // 所有 AI 请求的入口：按设置选服务、Key、模型。会员通道（member）的令牌由 memberAuth 给。
+// 选的是本机 Claude Code 时不发 HTTP，跑命令行（claudeCode.ts），localDir 是给它当工作目录的空文件夹。
 export class Ai {
   constructor(
     private settings: SettingsStore,
-    private memberAuth: () => { provider: string; token: string } | null = () => null
+    private memberAuth: () => { provider: string; token: string } | null = () => null,
+    private localDir = ''
   ) {}
+
+  private local(messages: ChatMsg[], o: AiCall): CcCall | null {
+    const c = this.conf(o.kind)
+    if (!providerOf(c.provider).local) return null
+    return { dir: this.localDir, model: c.model, messages, thinking: o.thinking, timeoutMs: o.timeoutMs, signal: o.signal, onReasoning: o.onReasoning }
+  }
 
   conf(kind: AiKind = 'text'): AiConf {
     const s = this.settings.get()
@@ -50,9 +59,10 @@ export class Ai {
     }
   }
 
-  // 翻译的并发：串行化的账号 2 路，别家 4 路
+  // 翻译的并发：串行化的账号、本机命令行（一路一个进程）2 路，别家 4 路
   concurrency(): number {
-    return this.conf().serial ? 2 : 4
+    const c = this.conf()
+    return c.serial || providerOf(c.provider).local ? 2 : 4
   }
 
   private opts(messages: ChatMsg[], o: AiCall) {
@@ -76,15 +86,18 @@ export class Ai {
   }
 
   once(messages: ChatMsg[], o: AiCall = {}): Promise<string> {
-    return chatOnce(this.opts(messages, o))
+    const cc = this.local(messages, o)
+    return cc ? ccStream(cc) : chatOnce(this.opts(messages, o))
   }
 
   stream(messages: ChatMsg[], onDelta: (t: string) => void, o: AiCall = {}): Promise<string> {
-    return chatStream(this.opts(messages, o), onDelta)
+    const cc = this.local(messages, o)
+    return cc ? ccStream(cc, onDelta) : chatStream(this.opts(messages, o), onDelta)
   }
 
   tools(messages: ChatMsg[], tools: ToolDef[], o: AiCall = {}) {
-    return chatTools({ ...this.opts(messages, o), tools })
+    const cc = this.local(messages, o)
+    return cc ? ccTools({ ...cc, tools }) : chatTools({ ...this.opts(messages, o), tools })
   }
 
   // 给 AI 的论文全文最多多少字：按服务的上下文窗口
@@ -93,7 +106,8 @@ export class Ai {
   }
 
   ready(): boolean {
-    return !!this.conf().apiKey
+    const c = this.conf()
+    return providerOf(c.provider).local ? claudeFound() : !!c.apiKey
   }
 
   model(kind: AiKind = 'text'): string {

@@ -1,7 +1,7 @@
-import { Check, ChevronDown, Copy, Download, ExternalLink, FileText, Mail, Star, Users, Cloud, Eye, EyeOff, FolderOpen, HardDrive, Info, Languages, Layers, MessageCircleQuestion, Monitor, Moon, RefreshCw, Settings, Sun, Zap } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Check, ChevronDown, Copy, Download, ExternalLink, FileText, Mail, Star, Users, Cloud, Eye, EyeOff, FolderOpen, HardDrive, Info, Languages, Layers, MessageCircleQuestion, Monitor, Moon, RefreshCw, Settings, SquareTerminal, Sun, Zap } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 import { PROVIDERS, providerOf } from '@shared/providers'
-import type { SettingsView, WordStatus } from '@shared/types'
+import type { LocalCliStatus, SettingsView, WordStatus } from '@shared/types'
 import { WORD_STYLES } from '@shared/wordCite'
 import { t, UI_LANG_NAMES, UI_LANGS, uiLocale } from '@shared/i18n'
 import { api, errText, type MemberStatus, type SyncStatus, type UpdateState } from '../api'
@@ -11,6 +11,8 @@ import { MenuHost, showMenu } from '../lib/menu'
 import { Segmented, Switch, ToastProvider, useToast } from '../lib/ui'
 
 const LOGOS = import.meta.glob('../assets/providers/*', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
+// Claude Code 的安装和登录说明（官方文档）
+export const CLAUDE_CODE_DOCS = 'https://code.claude.com/docs/en/setup'
 export const logoOf = (icon?: string): string | null => (icon ? (LOGOS[`../assets/providers/${icon}`] ?? null) : null)
 
 // 翻译目标语言和 AI 回答语言：名字直接写进给 AI 的提示里，每种语言写它自己的名字，不翻译
@@ -224,8 +226,20 @@ function Ai({ s, set, setS }: P & { setS: (v: SettingsView) => void }) {
   const [busy, setBusy] = useState(false)
   const prov = providerOf(s.provider)
   const list = PROVIDERS.filter((p) => !p.hidden)
-  const textModels = models.length ? models.filter((m) => !/(^glm-[\d.]+v)|vision|embed|tts|whisper|ocr/i.test(m)) : [prov.text ?? s.textModel]
-  const visionModels = models.length ? models.filter((m) => !/embed|tts|whisper/i.test(m)) : [prov.vision ?? s.visionModel]
+  const textModels = prov.models ?? (models.length ? models.filter((m) => !/(^glm-[\d.]+v)|vision|embed|tts|whisper|ocr/i.test(m)) : [prov.text ?? s.textModel])
+  const visionModels = prov.models ?? (models.length ? models.filter((m) => !/embed|tts|whisper/i.test(m)) : [prov.vision ?? s.visionModel])
+  // 本机 Claude Code：没有 Key，看的是这台电脑上找到没有、登录了没有
+  const [cli, setCli] = useState<LocalCliStatus | null>(null)
+  const findCli = useCallback((again?: boolean) => {
+    setCli(null)
+    void api
+      .localCli(again)
+      .then(setCli)
+      .catch(() => setCli({ found: false, path: '', version: '', loggedIn: null }))
+  }, [])
+  useEffect(() => {
+    if (prov.local) findCli()
+  }, [prov.local, findCli])
 
   const test = async (): Promise<void> => {
     setBusy(true)
@@ -251,7 +265,7 @@ function Ai({ s, set, setS }: P & { setS: (v: SettingsView) => void }) {
                   set({ provider: p.id })
                 }}
               >
-                <span className={'logo' + (p.mono ? ' mono' : '')}>{logo ? <img src={logo} alt="" /> : <Cloud size={16} />}</span>
+                <span className={'logo' + (p.mono ? ' mono' : '')}>{logo ? <img src={logo} alt="" /> : p.local ? <SquareTerminal size={16} /> : <Cloud size={16} />}</span>
                 <span style={{ minWidth: 0 }}>
                   <span className="pn">{p.name}</span>
                   <span className="pd">{p.blurb}</span>
@@ -261,70 +275,107 @@ function Ai({ s, set, setS }: P & { setS: (v: SettingsView) => void }) {
           })}
         </div>
       </FSec>
-      <FSec>
+      <FSec desc={prov.local ? t('用的是这台电脑上你自己装好、登录了的 Claude Code，走它的订阅用量。整篇翻译会一段一段调它，比按量付费的服务慢；问答、解释、速览正合适。') : undefined}>
         {s.provider === 'custom' && (
           <Row label={t('接口地址')} hint={t('OpenAI 兼容的 /v1 地址')}>
             <input className="input mono" style={{ width: 360 }} defaultValue={s.customBaseUrl} placeholder="https://example.com/v1" onBlur={(e) => set({ customBaseUrl: e.target.value.trim() })} />
           </Row>
         )}
-        <Row
-          label="API Key"
-          hint={
-            check ? (
-              check.ok ? (
-                <span className="ok-t">
-                  <Check size={12} />{t(' 可用')}
+        {prov.local ? (
+          <Row
+            label="Claude Code"
+            hint={
+              check ? (
+                check.ok ? (
+                  <span className="ok-t">
+                    <Check size={12} />{t(' 可用')}
+                  </span>
+                ) : (
+                  <span className="err-t">{t('不可用：')}{check.error}</span>
+                )
+              ) : !cli ? undefined : !cli.found ? (
+                <span className="err-t">
+                  {t('这台电脑上没找到 claude 命令。')}{' '}
+                  <a href={CLAUDE_CODE_DOCS} target="_blank" rel="noreferrer" className="text-btn" style={{ padding: 0 }}>
+                    {t('怎么安装')}
+                  </a>
                 </span>
+              ) : cli.loggedIn === false ? (
+                <span className="err-t">{t('还没登录：在终端里运行 claude auth login，再点「重新检测」')}</span>
               ) : (
-                <span className="err-t">{t('不可用：')}{check.error}</span>
+                cli.loggedIn ? t('版本 {0}，已登录', cli.version) : t('版本 {0}', cli.version)
               )
-            ) : s.apiKeySource === 'env' ? (
-              t('用的是环境变量 {0}', s.apiKeyEnv)
-            ) : prov.keyPage ? (
-              <a href={prov.keyPage} target="_blank" rel="noreferrer" className="text-btn" style={{ padding: 0 }}>
-                {t('去 {0} 拿 Key', prov.name)}
-              </a>
-            ) : undefined
-          }
-        >
-          {editing ? (
-            <input
-              autoFocus
-              className="input mono"
-              style={{ width: 300 }}
-              type="password"
-              value={keyInput}
-              placeholder={t('粘贴 API Key')}
-              onChange={(e) => setKeyInput(e.target.value)}
-              onBlur={() => {
-                if (keyInput.trim())
-                  void api.setApiKey(keyInput).then((v) => {
-                    setS(v)
-                    setCheck(null)
-                    void test()
-                  })
-                setEditing(false)
-                setKeyInput('')
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-            />
-          ) : (
-            <input className="input mono" style={{ width: 300 }} readOnly value={reveal ?? s.apiKeyMasked} placeholder={t('还没填')} onFocus={() => setEditing(true)} />
-          )}
-          <button
-            className="icon-btn"
-            title={reveal ? t('隐藏') : t('显示')}
-            onClick={async () => setReveal(reveal ? null : await api.revealApiKey())}
-            disabled={s.apiKeySource === 'none'}
+            }
           >
-            {reveal ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
-          <button className="btn" disabled={busy || s.apiKeySource === 'none'} onClick={() => void test().catch((e) => toast(errText(e)))}>
-            {busy && <span className="spin spin-12" />}
-            {t('验证')}
-          </button>
-        </Row>
-        <Row label={t('文本模型')} hint={models.length ? undefined : t('点「验证」后能从服务商的模型列表里选')}>
+            <input className="input mono" style={{ width: 300 }} readOnly value={cli?.path ?? ''} placeholder={cli ? t('没找到') : t('正在找…')} />
+            <button className="icon-btn" title={t('重新检测')} onClick={() => (setCheck(null), findCli(true))}>
+              <RefreshCw size={16} />
+            </button>
+            <button className="btn" disabled={busy || !cli?.found} onClick={() => void test().catch((e) => toast(errText(e)))}>
+              {busy && <span className="spin spin-12" />}
+              {t('验证')}
+            </button>
+          </Row>
+        ) : (
+          <Row
+            label="API Key"
+            hint={
+              check ? (
+                check.ok ? (
+                  <span className="ok-t">
+                    <Check size={12} />{t(' 可用')}
+                  </span>
+                ) : (
+                  <span className="err-t">{t('不可用：')}{check.error}</span>
+                )
+              ) : s.apiKeySource === 'env' ? (
+                t('用的是环境变量 {0}', s.apiKeyEnv)
+              ) : prov.keyPage ? (
+                <a href={prov.keyPage} target="_blank" rel="noreferrer" className="text-btn" style={{ padding: 0 }}>
+                  {t('去 {0} 拿 Key', prov.name)}
+                </a>
+              ) : undefined
+            }
+          >
+            {editing ? (
+              <input
+                autoFocus
+                className="input mono"
+                style={{ width: 300 }}
+                type="password"
+                value={keyInput}
+                placeholder={t('粘贴 API Key')}
+                onChange={(e) => setKeyInput(e.target.value)}
+                onBlur={() => {
+                  if (keyInput.trim())
+                    void api.setApiKey(keyInput).then((v) => {
+                      setS(v)
+                      setCheck(null)
+                      void test()
+                    })
+                  setEditing(false)
+                  setKeyInput('')
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+              />
+            ) : (
+              <input className="input mono" style={{ width: 300 }} readOnly value={reveal ?? s.apiKeyMasked} placeholder={t('还没填')} onFocus={() => setEditing(true)} />
+            )}
+            <button
+              className="icon-btn"
+              title={reveal ? t('隐藏') : t('显示')}
+              onClick={async () => setReveal(reveal ? null : await api.revealApiKey())}
+              disabled={s.apiKeySource === 'none'}
+            >
+              {reveal ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+            <button className="btn" disabled={busy || s.apiKeySource === 'none'} onClick={() => void test().catch((e) => toast(errText(e)))}>
+              {busy && <span className="spin spin-12" />}
+              {t('验证')}
+            </button>
+          </Row>
+        )}
+        <Row label={t('文本模型')} hint={models.length || prov.models ? undefined : t('点「验证」后能从服务商的模型列表里选')}>
           <Pick value={s.textModel} options={[...new Set([s.textModel, ...textModels])].map((m) => ({ id: m, label: m }))} onChange={(v) => set({ textModel: v })} width={260} />
         </Row>
         <Row label={t('看图模型')} hint={t('截图翻译、图的 AI 解释用它')}>
