@@ -1,6 +1,9 @@
 export type ReadMode = 'pdf' | 'reflow' | 'glance'
 export type HlColor = 'yellow' | 'green' | 'blue' | 'red'
 export const HL_COLORS: HlColor[] = ['yellow', 'green', 'blue', 'red']
+/** 标注上打的标签：这一处看不懂、对这一处有质疑 */
+export type AnnLabel = 'confused' | 'doubt'
+export const ANN_LABELS: AnnLabel[] = ['confused', 'doubt']
 export type Tier = 'flash' | 'basic' | 'simple' | 'edited' // edited：调整区域后重新生成的
 
 export interface Paper {
@@ -89,6 +92,8 @@ export interface Annotation {
   paperId: string
   mode: 'pdf' | 'reflow'
   color: HlColor
+  style?: 'highlight' | 'underline' // 高亮（底色）还是划线；老数据没有这一项，算高亮
+  label?: AnnLabel | null // 看不懂 / 有质疑
   text: string
   note: string
   page: number | null
@@ -122,6 +127,13 @@ export interface MajorPoint {
   blockId: string
   text: string
   type: MajorType
+}
+
+/** 术语表的一条：term 是论文里的原样写法，zh 是译名，explain 是一句解释 */
+export interface Term {
+  term: string
+  zh: string
+  explain: string
 }
 
 export interface Concept {
@@ -158,6 +170,9 @@ export interface Settings {
   srcFont: 'serif' | 'sans'
   display: 'src' | 'both' | 'tr'
   trStyle: 'text' | 'fill'
+  trLayout: 'stack' | 'side' // 双语的排法：译文跟在原文下面，或者原文在左、译文在右
+  termMarks: boolean // 正文里给术语画虚线、悬停看解释
+  senseGroups: boolean // 双语时的意群显示：一句原文配一句译文，原文的一块和译文里对它的那几段同色
   leftW: number
   rightW: number
   leftCollapsed: boolean
@@ -242,3 +257,22 @@ export interface WordStatus {
   running: boolean // 给插件用的本机服务在跑
   error: string
 }
+
+/** 全库笔记页里的一条：标注加它所在的论文 */
+export interface NoteEntry extends Annotation {
+  paperTitle: string
+  paperAuthors: string[]
+  paperYear: number | null
+}
+
+/** 原文模式里用笔画的一笔：points 是页内归一化坐标 [x, y]（0 到 1），按画的先后 */
+export interface Ink {
+  id: string
+  paperId: string
+  page: number
+  color: string
+  width: number
+  points: [number, number][]
+  createdAt: number
+}
+

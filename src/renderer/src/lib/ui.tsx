@@ -1,6 +1,7 @@
 import { uiLocale } from '@shared/i18n'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { t } from '@shared/i18n'
+import { kbd } from '@shared/kbd'
 
 // 通用小组件：分段控件、开关、toast、骨架、空状态
 
@@ -18,7 +19,7 @@ export function Segmented<T extends string>(props: {
           role="tab"
           aria-selected={o.value === props.value}
           className={'seg-item' + (o.value === props.value ? ' on' : '')}
-          title={o.title}
+          title={o.title && kbd(o.title)}
           onClick={() => props.onChange(o.value)}
         >
           {typeof o.label === 'string' ? <span className="seg-t">{o.label}</span> : o.label}

@@ -1,6 +1,7 @@
-import { Copy, Languages, Lightbulb, MessageCircleQuestion, MessageSquareReply, NotebookPen, StickyNote, Trash2 } from 'lucide-react'
+import { Copy, Languages, Lightbulb, MessageCircleQuestion, MessageSquareReply, NotebookPen, StickyNote, Trash2, Underline } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { HL_COLORS, type Annotation, type HlColor, type Paper } from '@shared/types'
+import { ANN_LABELS, HL_COLORS, type Annotation, type AnnLabel, type HlColor, type Paper } from '@shared/types'
+import { LABEL_NAME } from '@shared/annLabels'
 import { api, streamRequest } from '../api'
 import { Markdown } from '../lib/Markdown'
 import { Kbd, Skeleton, useDebounced, useEvent } from '../lib/ui'
@@ -24,7 +25,7 @@ export function SelectionLayer(props: {
   lastColor: HlColor
   midRef: React.RefObject<HTMLDivElement | null>
   onClose: () => void
-  onCreate: (s: SelInfo, c: HlColor, note?: string) => Promise<Annotation | null>
+  onCreate: (s: SelInfo, c: HlColor, note?: string, style?: Annotation['style'], label?: AnnLabel | null) => Promise<Annotation | null>
   onUpdate: (a: Annotation) => Promise<void>
   onDelete: (a: Annotation) => Promise<void>
   onAsk: (quote: string, extra?: string) => void
@@ -100,6 +101,20 @@ export function SelectionLayer(props: {
     if (!sel) return
     if (sel.existing) await props.onUpdate({ ...sel.existing, color: c })
     else await props.onCreate(sel, c)
+    close()
+  })
+  // 标签：新选的字用上次的颜色高亮并打上标签；点在已有标注上是打上 / 去掉这个标签
+  const labelIt = useEvent(async (l: AnnLabel) => {
+    if (!sel) return
+    if (sel.existing) await props.onUpdate({ ...sel.existing, label: sel.existing.label === l ? null : l })
+    else await props.onCreate(sel, props.lastColor, '', 'highlight', l)
+    close()
+  })
+  // 划线：新选的字画一条线（用上次的颜色）；点在已有的标注上是在高亮和划线之间换
+  const underline = useEvent(async () => {
+    if (!sel) return
+    if (sel.existing) await props.onUpdate({ ...sel.existing, style: sel.existing.style === 'underline' ? 'highlight' : 'underline' })
+    else await props.onCreate(sel, props.lastColor, '', 'underline')
     close()
   })
 
@@ -237,6 +252,19 @@ export function SelectionLayer(props: {
         HL_COLORS.map((c, i) => (
           <button key={c} className={'dot-btn' + (ex?.color === c ? ' current' : '')} title={t('{0}色高亮 {1}', [t('黄'), t('绿'), t('蓝'), t('红')][i], i + 1)} onClick={() => void color(c)}>
             <span className="hl-dot" data-color={c} />
+          </button>
+        ))}
+      {(sel.target || ex) && (
+        <button className={'dot-btn' + (ex?.style === 'underline' ? ' current' : '')} title={t('划线')} onClick={() => void underline()}>
+          <Underline size={15} />
+        </button>
+      )}
+      {(sel.target || ex) && <span className="tb-sep" />}
+      {(sel.target || ex) &&
+        ANN_LABELS.map((l) => (
+          <button key={l} className={'tb-btn tb-label' + (ex?.label === l ? ' current' : '')} data-label={l} title={ex?.label === l ? t('去掉「{0}」', LABEL_NAME[l]) : t('标成「{0}」', LABEL_NAME[l])} onClick={() => void labelIt(l)}>
+            <svg className="lb-mark" data-label={l} viewBox="0 0 14 6"><path d="M0 4Q1.75 1 3.5 4T7 4T10.5 4T14 4" /></svg>
+            <span>{LABEL_NAME[l]}</span>
           </button>
         ))}
       {(sel.target || ex) && <span className="tb-sep" />}

@@ -1,6 +1,7 @@
 import { dialog, ipcMain } from 'electron'
-import { rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
+import type { Capture, CaptureResult } from './connector'
 import type { Ctx } from './ctx'
 import { createFolder, getPaper, listFolders, setPaperFolders } from './db'
 import type { ImportResult } from './library'
@@ -15,7 +16,7 @@ export type UrlImportResult = ImportResult | { status: 'noPdf'; meta: MetaPatch;
 export type ZoteroState = 'waiting' | 'importing' | 'done' | 'duplicate' | 'failed' | 'paused' | 'skipped'
 
 // 导入：网址、全网检索、仅链接的论文补 PDF、Zotero。返回给小书签（pararead://add?url=）用的网址导入
-export function registerImport(c: Ctx): { fromInput: (input: string) => Promise<UrlImportResult> } {
+export function registerImport(c: Ctx): { fromInput: (input: string) => Promise<UrlImportResult>; capture: (cap: Capture) => Promise<CaptureResult> } {
   const tmp = join(c.dataDir, 'tmp')
 
   const importUrl = async (pdfUrl: string | null, meta: MetaPatch, landing: string | null, source: 'url' | 'search'): Promise<UrlImportResult> => {
@@ -42,6 +43,42 @@ export function registerImport(c: Ctx): { fromInput: (input: string) => Promise<
   const fromInput = async (input: string): Promise<UrlImportResult> => {
     const r = await resolve(input)
     return importUrl(r.pdfUrl, r.meta, r.landing, 'url')
+  }
+  // 浏览器插件发来的一篇：先用插件下载到的 PDF（它带着登录状态，校园网、机构订阅的都能下）；没有就自己按 PDF 地址下；
+  // 再不行按 arXiv 号、DOI 找开放获取的全文；都没有就存成仅链接（信息在，之后能补 PDF）
+  const capture = async (cap: Capture): Promise<CaptureResult> => {
+    const meta: MetaPatch & { title: string } = { ...cap.meta, title: cap.meta.title.trim(), url: cap.meta.url ?? cap.url }
+    const done = (r: UrlImportResult): CaptureResult | null =>
+      r.status === 'added' || r.status === 'duplicate' ? { status: r.status, title: r.paper.title } : null
+    if (cap.pdf) {
+      mkdirSync(tmp, { recursive: true })
+      const file = join(tmp, `${newId()}.pdf`)
+      writeFileSync(file, Buffer.from(cap.pdf, 'base64'))
+      try {
+        const name = meta.title.replace(/[\\/:*?"<>|]+/g, ' ').slice(0, 120) + '.pdf'
+        const r = await c.library.importFile(file, { title: meta.title, authors: meta.authors, source: 'url', fileName: name, meta })
+        if (r.status === 'added') {
+          // 论文页上写的信息比从 PDF 里猜的可靠（PDF 里常是最新修订的年份）：盖过去
+          c.library.applyMeta(r.paper.id, meta, true)
+          c.afterImport(r.paper.id)
+        }
+        c.broadcast('library:changed', null)
+        const ok = done(r)
+        if (ok) return ok
+      } finally {
+        rmSync(file, { force: true })
+      }
+    }
+    let r = await importUrl(cap.pdfUrl, meta, cap.url, 'url')
+    if (r.status === 'noPdf' && (meta.arxiv || meta.doi)) {
+      const found = await resolve(meta.arxiv ? `arXiv:${meta.arxiv}` : meta.doi!).catch(() => null)
+      if (found?.pdfUrl) r = await importUrl(found.pdfUrl, { ...found.meta, ...meta }, cap.url, 'url')
+    }
+    const ok = done(r)
+    if (ok) return ok
+    const link = c.library.addLink(meta)
+    c.broadcast('library:changed', null)
+    return { status: link.status === 'duplicate' ? 'duplicate' : 'link', title: meta.title, error: r.status === 'noPdf' ? r.error : undefined }
   }
   ipcMain.handle('import:url', (_e, input: string) => fromInput(input))
   ipcMain.handle('import:link', (_e, meta: MetaPatch & { title: string }) => {
@@ -87,7 +124,7 @@ export function registerImport(c: Ctx): { fromInput: (input: string) => Promise<
       found: true,
       dir: d,
       collections: lib.collections,
-      items: lib.items.map((i) => ({ itemId: i.itemId, title: i.title, authors: i.authors, year: i.year, collections: i.collections, hasFile: !!i.file, fileType: i.fileType, inLibrary: !!i.file && hashes.has(i.file.split('/').pop()!) }))
+      items: lib.items.map((i) => ({ itemId: i.itemId, title: i.title, authors: i.authors, year: i.year, collections: i.collections, hasFile: !!i.file, fileType: i.fileType, inLibrary: !!i.file && hashes.has(basename(i.file)) }))
     }
   })
   ipcMain.handle('zotero:chooseDir', async () => {
@@ -168,5 +205,5 @@ export function registerImport(c: Ctx): { fromInput: (input: string) => Promise<
     c.broadcast('zotero:finished', null)
   }
 
-  return { fromInput }
+  return { fromInput, capture }
 }

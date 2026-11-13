@@ -71,6 +71,9 @@
   --hl-blue: rgba(0, 161, 216, .30);   --hl-red: rgba(255, 64, 21, .30);
   --hl-yellow-dot: #feaa02; --hl-green-dot: #75bb3f; --hl-blue-dot: #00a1d8; --hl-red-dot: #ff4015;
   --ai-mark: light-dark(rgba(0, 0, 0, .08), rgba(255, 255, 255, .12));
+  /* 意群：原文的一块和译文里对它的那几段同色，四色循环（蓝、琥珀、绿、粉），和会议字幕的 --chunk-1 到 4 同值 */
+  --sg-1: light-dark(#1f64c8, #7cbcff); --sg-2: light-dark(#9a5b00, #f5c46b);
+  --sg-3: light-dark(#177a45, #7ad69a); --sg-4: light-dark(#b8307a, #f59ac5);
 
   /* 设置窗分区的图标方块（只在设置窗用） */
   --c-gray: #8e8e96; --c-red: #f2555a; --c-orange: #f5883a; --c-yellow: #e9a820; --c-green: #34b86c;

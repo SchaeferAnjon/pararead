@@ -1,17 +1,19 @@
-import { ChevronDown, ChevronRight, Download, Ellipsis, Highlighter, Image as ImageIcon, RefreshCw, Table } from 'lucide-react'
+import { BookA, ChevronDown, ChevronRight, Download, Ellipsis, Highlighter, Image as ImageIcon, RefreshCw, Table } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type * as PdfJs from 'pdfjs-dist'
 import { sectionForText } from '@shared/chunk'
 import { listFigures } from '@shared/refs'
-import { HL_COLORS, type Annotation, type Block, type HlColor, type MajorPoint, type MajorType, type ReadMode, type ReflowDoc } from '@shared/types'
+import { locateTerms } from '@shared/terms'
+import { HL_COLORS, type Annotation, type Block, type HlColor, type MajorPoint, type MajorType, type ReadMode, type ReflowDoc, type Term, type AnnLabel } from '@shared/types'
+import { LABEL_NAME } from '@shared/annLabels'
 import { Markdown } from '../lib/Markdown'
 import { showMenu } from '../lib/menu'
 import type { useTranslations } from '../lib/translations'
-import { Empty, Segmented } from '../lib/ui'
+import { Empty, Segmented, Switch } from '../lib/ui'
 import type { Density } from './Reader'
 import { t } from '@shared/i18n'
 
-export type LeftTab = 'toc' | 'notes' | 'figs' | 'keys'
+export type LeftTab = 'toc' | 'notes' | 'figs' | 'keys' | 'terms'
 
 export const MAJOR_NAME: Record<MajorType, string> = { objective: t('研究目标'), method: t('方法'), result: t('结论'), novelty: t('创新点') }
 
@@ -49,6 +51,12 @@ type Props = {
   onAnn: (a: Annotation) => void
   onHoverAnn: (id: string | null) => void
   onExport: () => void
+  terms: Term[] | null
+  termsBusy: boolean
+  termMarks: boolean
+  onTermMarks: (v: boolean) => void
+  onLoadTerms: (force?: boolean) => void
+  onTerm: (blocks: string[]) => void
 }
 
 export function LeftPane(props: Props) {
@@ -58,6 +66,7 @@ export function LeftPane(props: Props) {
       {props.tab === 'notes' && <Notes {...props} />}
       {props.tab === 'figs' && <Figures {...props} />}
       {props.tab === 'keys' && <Keys {...props} />}
+      {props.tab === 'terms' && <Terms {...props} />}
     </div>
   )
 }
@@ -206,12 +215,12 @@ const HL_BG: Record<string, string> = { yellow: 'var(--hl-yellow)', green: 'var(
 const COLOR_NAME: Record<HlColor, string> = { yellow: t('黄'), green: t('绿'), blue: t('蓝'), red: t('红') }
 
 function Notes(props: Props) {
-  const [kind, setKind] = useState<'all' | 'hl' | 'note'>('all')
+  const [kind, setKind] = useState<'all' | 'note' | AnnLabel>('all')
   const [colors, setColors] = useState<Set<HlColor>>(new Set())
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const groups = useMemo(() => {
-    const list = props.anns.filter((a) => (!colors.size || colors.has(a.color)) && (kind === 'all' || (kind === 'note' ? !!a.note : !a.note)))
+    const list = props.anns.filter((a) => (!colors.size || colors.has(a.color)) && (kind === 'all' || (kind === 'note' ? !!a.note : a.label === kind)))
     const secOf = (a: Annotation): string => {
       if (a.mode === 'pdf' && props.doc) {
         const s = sectionForText(props.doc.blocks, props.sections, a.text)
@@ -268,8 +277,9 @@ function Notes(props: Props) {
           onChange={setKind}
           options={[
             { value: 'all', label: t('全部') },
-            { value: 'hl', label: t('高亮') },
-            { value: 'note', label: t('笔记') }
+            { value: 'note', label: t('笔记') },
+            { value: 'confused', label: LABEL_NAME.confused },
+            { value: 'doubt', label: LABEL_NAME.doubt }
           ]}
         />
         {colors.size > 0 && (
@@ -312,10 +322,11 @@ function Notes(props: Props) {
                     })
                   }
                 >
-                  <span className="note-mark" style={{ background: HL_BG[a.color] }}>
+                  <span className={'note-mark' + (a.label ? ` lb-${a.label}` : '')} style={{ background: a.label ? undefined : HL_BG[a.color] }}>
                     {a.text}
                   </span>
                 </div>
+                {a.label && <span className="lb-chip" data-label={a.label}>{LABEL_NAME[a.label]}</span>}
                 {a.note && <div className="note-text">{a.note}</div>}
                 {a.mode === 'pdf' && a.page && <div className="hint num">{t('原文 第 {0} 页', a.page)}</div>}
               </div>
@@ -406,3 +417,60 @@ function Keys(props: Props) {
     </div>
   )
 }
+
+// 术语：AI 从全文挑出要懂的术语，每条原文、译名、出现几次、一句解释；点一条跳到它下一次出现的那段。
+// 「正文里标术语」开着时正文里的术语画虚线，鼠标停上去看解释
+function Terms(props: Props) {
+  const where = useMemo(() => (props.doc && props.terms ? locateTerms(props.terms, props.doc.blocks.filter((b) => b.translatable)) : null), [props.doc, props.terms])
+  if (!props.doc) return <div className="pane-empty">{t('重排好以后才能列术语')}</div>
+  return (
+    <div className="terms">
+      <div className="lp-bar">
+        <span className="hint">{t('正文里标出来')}</span>
+        <Switch on={props.termMarks} onChange={props.onTermMarks} label={t('正文里标出来')} />
+        <span className="spacer" />
+        {props.terms && (
+          <button className="icon-btn sm" title={t('重新生成（问一次 AI）')} disabled={props.termsBusy} onClick={() => props.onLoadTerms(true)}>
+            {props.termsBusy ? <span className="spin spin-12" /> : <RefreshCw size={14} />}
+          </button>
+        )}
+      </div>
+      {props.termsBusy && !props.terms ? (
+        <div className="pane-empty">
+          <span className="spin spin-12" />{t(' AI 在读全文，挑出要懂的术语…')}
+        </div>
+      ) : !props.terms ? (
+        <div style={{ padding: '24px 12px' }}>
+          <Empty
+            icon={<BookA size={32} strokeWidth={1.5} />}
+            title={t('术语')}
+            text={t('AI 读一遍全文，列出读懂这篇要知道的术语和缩写：译名、一句解释、出现几次。问一次 AI。')}
+            action={
+              <button className="btn" onClick={() => props.onLoadTerms()}>
+                <BookA size={16} />
+                {t('列出术语')}
+              </button>
+            }
+          />
+        </div>
+      ) : (
+        props.terms.map((x) => {
+          const w = where?.get(x.term)
+          return (
+            <button key={x.term} className="term-item" data-term={x.term} disabled={!w?.blocks.length} onClick={() => w && props.onTerm(w.blocks)}>
+              <span className="term-head">
+                <span className="term-name">
+                  <b>{x.term}</b>
+                  {x.zh && x.zh !== x.term && <span>{x.zh}</span>}
+                </span>
+                <span className="hint num">{t('{0} 次', w?.count ?? 0)}</span>
+              </span>
+              {x.explain && <span className="term-ex">{x.explain}</span>}
+            </button>
+          )
+        })
+      )}
+    </div>
+  )
+}
+

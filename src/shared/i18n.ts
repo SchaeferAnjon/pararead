@@ -9,6 +9,7 @@ import it from '../i18n/it.json'
 import ja from '../i18n/ja.json'
 import ko from '../i18n/ko.json'
 import zhHant from '../i18n/zh-Hant.json'
+import { kbd } from './kbd'
 
 export const UI_LANGS = ['zh', 'zh-Hant', 'en', 'ja', 'ko', 'de', 'fr', 'es', 'it'] as const
 export type UiLang = (typeof UI_LANGS)[number]
@@ -50,10 +51,10 @@ export function t(s: string, ...args: unknown[]): string {
     const hit = dict[m[2]]
     if (hit !== undefined) out = m[1] + hit + m[3]
   }
-  if (!args.length) return out
+  if (!args.length) return kbd(out)
   out = out.replace(/\{(\d+)\|([^|}]*)\|([^}]*)\}/g, (_, i: string, a: string, b: string) => (one(args[Number(i)]) ? a : b))
   for (let i = 0; i < args.length; i++) out = out.split(`{${i}}`).join(String(args[i]))
-  return out
+  return kbd(out)
 }
 
 // 窗口里：preload 已经把主进程定下来的语言放在 window.__uiLang

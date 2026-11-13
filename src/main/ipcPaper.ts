@@ -4,14 +4,14 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { cyrb53 } from '../shared/hash'
 import { plain } from '../shared/refs'
-import type { ChatMessage, Concept, MajorPoint, MajorType, Tier } from '../shared/types'
+import type { ChatMessage, Concept, MajorPoint, MajorType, Term, Tier } from '../shared/types'
 import type { Ctx } from './ctx'
 import { addChat, addReadTime, getAiCache, getPaper, getPaperCache, listChats, putAiCache, putPaperCache, updatePaper } from './db'
 import { safeFileName } from './exporter'
 import { parseJsonLoose, type ChatMsg, type ContentPart } from './glm'
 import { newId } from './library'
 import { oaSearch, squashTitle, type SearchHit } from './meta'
-import { chatSystem, conceptsMessages, FOLLOWUP_HINT, majorPointsMessages } from './prompts'
+import { chatSystem, conceptsMessages, FOLLOWUP_HINT, majorPointsMessages, termsMessages } from './prompts'
 import { t } from '../shared/i18n'
 
 const MAJOR_COUNT = { less: 8, default: 14, more: 24 }
@@ -146,6 +146,27 @@ export function registerPaper(c: Ctx): void {
       questions: (j.questions ?? []).map(String).filter(Boolean).slice(0, 5)
     }
     putPaperCache(db, paperId, 'concepts', v)
+    return v
+  })
+
+  // 术语表：问一次 AI，按论文缓存；force 重新生成
+  ipcMain.handle('paper:terms', async (_e, paperId: string, force = false): Promise<Term[]> => {
+    if (!force) {
+      const hit = getPaperCache<Term[]>(db, paperId, 'terms')
+      if (hit) return hit
+    }
+    const paper = getPaper(db, paperId)
+    if (!paper) throw new Error(t('论文不存在'))
+    const s = settings.get()
+    const ctx = library.contextText(paperId, Math.min(ai.ctxChars(), 80000))
+    const out = await ai.once(termsMessages({ title: paper.title, context: ctx.text, lang: s.aiLang || s.targetLang }), { json: true, timeoutMs: 120_000 })
+    const seen = new Set<string>()
+    const v = (parseJsonLoose<{ terms?: Partial<Term>[] }>(out).terms ?? [])
+      .map((x) => ({ term: String(x.term ?? '').trim(), zh: String(x.zh ?? '').trim(), explain: String(x.explain ?? '').trim() }))
+      .filter((x) => x.term.length >= 2 && !seen.has(x.term.toLowerCase()) && seen.add(x.term.toLowerCase()))
+      .slice(0, 24)
+    if (!v.length) throw new Error(t('AI 没列出术语'))
+    putPaperCache(db, paperId, 'terms', v)
     return v
   })
 

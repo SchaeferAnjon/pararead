@@ -8,6 +8,7 @@ import { Markdown } from '../lib/Markdown'
 import { showMenu } from '../lib/menu'
 import { Dots, useToast } from '../lib/ui'
 import { t } from '@shared/i18n'
+import { thinkMode } from '@shared/thinking'
 
 export interface Attach {
   quote: string | null
@@ -356,17 +357,20 @@ export function ChatPanel(props: {
         }
         tools={
           <>
-            <button
-              className={'tchip' + (thinking ? ' on' : '')}
-              title={t('深度思考：先想清楚再答，慢一些')}
-              onClick={() => {
-                setThinking((v) => !v)
-                void api.setSettings({ thinking: !thinking })
-              }}
-            >
-              <Brain size={14} />
-              {t('深度思考')}
-            </button>
+            {/* 总会先想的模型（Kimi K3、Claude）开关不起作用，不显示 */}
+            {thinkMode(props.settings.provider, props.settings.textModel) !== 'always' && (
+              <button
+                className={'tchip' + (thinking ? ' on' : '')}
+                title={t('深度思考：先想清楚再答，慢一些')}
+                onClick={() => {
+                  setThinking((v) => !v)
+                  void api.setSettings({ thinking: !thinking })
+                }}
+              >
+                <Brain size={14} />
+                {t('深度思考')}
+              </button>
+            )}
             <button className="tchip" title={t('加一篇文献一起问')} onClick={(e) => void addPaperMenu(e.currentTarget)}>
               <AtSign size={14} />
               {t('文献')}

@@ -5,13 +5,15 @@
 import { execFile } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import type { Annotation, Glance, ReadMode, ReadPosition } from '../shared/types'
 import type { Ctx } from './ctx'
 import { getGlance, listAnnotations, saveAnnotation, saveGlance, tombstone, type DB } from './db'
 import { t } from '../shared/i18n'
+import { IS_WIN } from './platform'
 
-export const ICLOUD = join(homedir(), 'Library/Mobile Documents/com~apple~CloudDocs')
+// iCloud 云盘在本机的位置：Mac 的 Mobile Documents，Windows 版 iCloud 的 iCloudDrive
+export const ICLOUD = IS_WIN ? join(homedir(), 'iCloudDrive') : join(homedir(), 'Library/Mobile Documents/com~apple~CloudDocs')
 
 interface SnapPaper {
   hash: string
@@ -376,14 +378,12 @@ export class Sync {
   }
 }
 
-// iCloud 还没下载到本机的文件是 .名字.icloud 的占位
+// Mac 上 iCloud 还没下载到本机的文件是 .名字.icloud 的占位；Windows 版 iCloud 读的时候自己下载，没有占位
 function placeholder(f: string): string {
-  const parts = f.split('/')
-  const name = parts.pop()!
-  return [...parts, `.${name}.icloud`].join('/')
+  return join(dirname(f), `.${basename(f)}.icloud`)
 }
 
 function download(f: string): void {
-  execFile('/usr/bin/brctl', ['download', f], { timeout: 10_000 }, () => {})
+  if (!IS_WIN) execFile('/usr/bin/brctl', ['download', f], { timeout: 10_000 }, () => {})
 }
 

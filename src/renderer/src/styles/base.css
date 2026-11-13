@@ -183,3 +183,9 @@ svg.lucide { flex: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
+
+/* Windows：没有红绿灯，原来给红绿灯留的 84 左边距不要；右上角是系统的最小化、最大化、关闭（titleBarOverlay），
+   挨着窗口右边的标题栏右边留出它的宽度（env(titlebar-area-*) 是 Chromium 给的窗口按钮之外的区域） */
+.platform-win { --wco-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)); }
+.platform-win .titlebar.left-bar { padding-left: 16px; }
+.platform-win .titlebar.mid-bar.no-left, .platform-win .hdr.side-hidden, .platform-win .np-bar.no-side { padding-left: 16px; }

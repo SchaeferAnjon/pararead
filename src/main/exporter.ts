@@ -1,4 +1,5 @@
 import type { Annotation, Paper } from '../shared/types'
+import { LABEL_NAME } from '../shared/annLabels'
 
 const COLOR_NAME: Record<string, string> = { yellow: '黄', green: '绿', blue: '蓝', red: '红' }
 
@@ -38,6 +39,7 @@ export function exportMarkdown(paper: Paper, anns: Annotation[], sectionOrder: s
     const list = groups.get(k)!.sort((a, b) => (a.page ?? 0) - (b.page ?? 0) || (a.start ?? 0) - (b.start ?? 0) || a.createdAt - b.createdAt)
     for (const a of list) {
       const where = a.mode === 'pdf' && a.page ? `（原文 第 ${a.page} 页，${COLOR_NAME[a.color]}）` : `（${COLOR_NAME[a.color]}）`
+      if (a.label) lines.push(`**【${LABEL_NAME[a.label]}】**`, '')
       lines.push(...a.text.split('\n').map((l) => `> ${l}`))
       lines.push(`> ${where}`)
       lines.push('')

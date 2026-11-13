@@ -1,12 +1,12 @@
 import { spawn } from 'node:child_process'
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, screen, type MenuItemConstructorOptions, type WebContents } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, rmSync } from 'node:fs'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, screen, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type WebContents } from 'electron'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, appendFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { sectionForText, sectionsOf } from '../shared/chunk'
 import { cyrb53 } from '../shared/hash'
-import type { Annotation, ChatMessage, Glance, MenuItem, Settings, StreamEvent, Tier } from '../shared/types'
+import type { Annotation, ChatMessage, Glance, MenuItem, Settings, StreamEvent, Tier, Ink } from '../shared/types'
 import {
   addChat,
   createFolder,
@@ -14,6 +14,10 @@ import {
   listFolders,
   setPaperFolders,
   tombstone,
+  allAnnotations,
+  deleteInk,
+  listInks,
+  saveInk,
   getAiCache,
   getCachedTranslation,
   getGlance,
@@ -32,7 +36,10 @@ import {
 } from './db'
 import { exportMarkdown, safeFileName } from './exporter'
 import { Ai } from './ai'
+import { pageOfText } from '../shared/refs'
+import { SenseQueue } from './senses'
 import { claudeStatus, findClaude } from './claudeCode'
+import { Connector, CONNECTOR_PORT } from './connector'
 import { listModels, parseJsonLoose, type ChatMsg, type ContentPart } from './glm'
 import { Library, newId } from './library'
 import { MineruQueue, type MineruProgress } from './mineru'
@@ -57,6 +64,7 @@ import { WordAddin } from './wordAddin'
 import { setUiLang, t, uiLang } from '../shared/i18n'
 import { Sync } from './sync'
 import { randomUUID } from 'node:crypto'
+import { IS_WIN, keyMatches, openExtensionsPage, quitWatchdog, winAcc } from './platform'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -65,6 +73,9 @@ app.setName('ParaRead')
 const dataArg = process.argv.find((a) => a.startsWith('--data-dir='))
 if (dataArg) app.setPath('userData', dataArg.slice('--data-dir='.length))
 const dataDir = app.getPath('userData')
+// Windows：双击 PDF、点 pararead:// 链接会再起一个进程，它把参数交给已经开着的那个（second-instance）就退出。
+// 锁按数据目录算，测试实例各用各的 --data-dir，互不影响
+if (IS_WIN && !app.requestSingleInstanceLock()) process.exit(0)
 mkdirSync(dataDir, { recursive: true })
 
 const logFile = join(dataDir, 'main.log')
@@ -198,6 +209,15 @@ const translator = new Translator({
   maxBatchChars: 4000
 })
 
+// 意群显示：一段一个请求，结果按「原文 + 译文」缓存
+const senses = new SenseQueue({
+  getCached: (k) => getAiCache(db, k),
+  putCached: (k, json) => putAiCache(db, k, json),
+  call: (messages) => ai.once(messages, { json: true, timeoutMs: 120_000 }),
+  onResult: (r) => broadcast('senses:result', r),
+  concurrency: () => ai.concurrency()
+})
+
 
 const ctx: Ctx = {
   db,
@@ -223,6 +243,7 @@ const { streamTo, sendCached, aborts } = streamer
 ctx.streamer = streamer
 
 let urlImporter: ReturnType<typeof registerImport> | null = null
+let connector: Connector | null = null
 
 function registerIpc(): void {
   registerLibrary(ctx)
@@ -232,6 +253,23 @@ function registerIpc(): void {
   registerExportPdf(ctx, loadRenderer)
   registerLayout(ctx)
   urlImporter = registerImport(ctx)
+  // 浏览器插件：接收口随应用开着；插件的文件放一份到数据目录（应用包里的浏览器读不了），每次启动更新
+  connector = new Connector({ version: app.getVersion(), save: urlImporter.capture, log })
+  connector.start()
+  const extDir = join(dataDir, 'browser-extension')
+  const copyDir = (from: string, to: string): void => {
+    mkdirSync(to, { recursive: true })
+    for (const e of readdirSync(from, { withFileTypes: true })) {
+      if (e.isDirectory()) copyDir(join(from, e.name), join(to, e.name))
+      else writeFileSync(join(to, e.name), readFileSync(join(from, e.name)))
+    }
+  }
+  copyDir(join(__dirname, '../renderer/extension'), extDir)
+  ipcMain.handle('connector:status', () => ({ running: connector!.running, port: CONNECTOR_PORT, error: connector!.error, dir: extDir }))
+  ipcMain.handle('connector:reveal', () => shell.showItemInFolder(join(extDir, 'manifest.json')))
+  ipcMain.handle('connector:openBrowser', (_e, name: 'Google Chrome' | 'Microsoft Edge') => {
+    openExtensionsPage(name)
+  })
   // 文献库
   ipcMain.handle('papers:list', () => listPapers(db).map((p) => withProgress(p)))
   ipcMain.handle('papers:get', (_e, id: string) => {
@@ -306,6 +344,8 @@ function registerIpc(): void {
     translator.request(paperId, texts.map((text) => ({ text })), priority)
   )
   ipcMain.handle('translate:cancel', (_e, paperId: string) => translator.cancel(paperId))
+  ipcMain.handle('senses:request', (_e, paperId: string, items: { en: string; zh: string }[]) => senses.request(paperId, items))
+  ipcMain.handle('senses:cancel', (_e, paperId: string) => senses.cancel(paperId))
 
   // 划词翻译、解释
   // 划词翻译和解释；带 image 的是原文模式里框选的截图，走看图模型
@@ -376,10 +416,19 @@ function registerIpc(): void {
 
   // 高亮和笔记
   ipcMain.handle('ann:list', (_e, paperId: string) => listAnnotations(db, paperId))
+  ipcMain.handle('ann:all', () => allAnnotations(db))
+  ipcMain.handle('ink:list', (_e, paperId: string) => listInks(db, paperId))
+  ipcMain.handle('ink:save', (_e, k: Ink) => saveInk(db, k))
+  ipcMain.handle('ink:delete', (_e, id: string) => deleteInk(db, id))
+  // 对照模式的截图翻译：截窗口里的一块（CSS 像素），给成 PNG 的 data URL
+  ipcMain.handle('shot:capture', async (e, r: { x: number; y: number; width: number; height: number }) => (await e.sender.capturePage(r)).toDataURL())
   ipcMain.handle('ann:save', (_e, a: Annotation) => {
+    // 对照模式里做的标注没有页码：按摘的字去原文每页的文字里找，笔记页里每条都能说出出处
+    if (a.mode === 'reflow' && a.page === null) a.page = pageOfText(library.pageTexts(a.paperId), a.text)
     saveAnnotation(db, a)
     sync.touch()
     if (a.color !== settings.get().lastColor) settings.set({ lastColor: a.color })
+    return a.page
   })
   ipcMain.handle('ann:delete', (_e, id: string) => {
     deleteAnnotation(db, id)
@@ -476,7 +525,7 @@ function registerIpc(): void {
     if (!existsSync(p)) return { ok: false, error: t('找不到 {0}', p) }
     const { spawn } = await import('node:child_process')
     return new Promise((resolve) => {
-      const child = spawn(p, ['--help'], { stdio: ['ignore', 'pipe', 'pipe'] })
+      const child = spawn(p, ['--help'], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
       let out = ''
       const t_ = setTimeout(() => {
         child.kill('SIGKILL')
@@ -684,18 +733,30 @@ function loadRenderer(w: BrowserWindow, hash = ''): void {
   else void w.loadFile(join(__dirname, '../renderer/index.html'), hash ? { hash } : undefined)
 }
 
+// 标题栏 52 高。Mac：红绿灯 16 高，2 × y + 16 = 52；侧栏是毛玻璃，内容区自己画底色。
+// Windows：没有红绿灯和毛玻璃，系统标题栏藏起来，右上角是系统画的最小化、最大化、关闭（titleBarOverlay，也是 52 高），
+// 颜色跟着浅色、深色换；窗口底色是侧栏的颜色
+const overlay = (): { color: string; symbolColor: string; height: number } =>
+  nativeTheme.shouldUseDarkColors ? { color: '#1b1b1d', symbolColor: '#ececec', height: 52 } : { color: '#ffffff', symbolColor: '#1d1d1f', height: 52 }
+function chrome(): BrowserWindowConstructorOptions {
+  if (IS_WIN) return { titleBarStyle: 'hidden', titleBarOverlay: overlay(), backgroundColor: nativeTheme.shouldUseDarkColors ? '#202023' : '#f3f3f5' }
+  return { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 20, y: 18 }, vibrancy: 'sidebar', visualEffectState: 'followWindow', backgroundColor: '#00000000' }
+}
+if (IS_WIN)
+  nativeTheme.on('updated', () => {
+    for (const w of BrowserWindow.getAllWindows()) {
+      w.setTitleBarOverlay(overlay())
+      w.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#202023' : '#f3f3f5')
+    }
+  })
+
 function createMainWindow(): void {
   const st = loadWinState()
   mainWin = new BrowserWindow({
     ...st,
     minWidth: 960,
     minHeight: 640,
-    titleBarStyle: 'hiddenInset',
-    // 标题栏 52 高：红绿灯 16 高，2 × y + 16 = 52；侧栏是毛玻璃，内容区自己画底色
-    trafficLightPosition: { x: 20, y: 18 },
-    vibrancy: 'sidebar',
-    visualEffectState: 'followWindow',
-    backgroundColor: '#00000000',
+    ...chrome(),
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
@@ -705,6 +766,7 @@ function createMainWindow(): void {
     }
   })
   mainWin.once('ready-to-show', () => mainWin?.show())
+  winKeys(mainWin)
   let t_: ReturnType<typeof setTimeout> | null = null
   const save = (): void => {
     if (t_) clearTimeout(t_)
@@ -740,15 +802,12 @@ function openSettings(section?: string): void {
     minimizable: false,
     fullscreenable: false,
     title: t('设置'),
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 20, y: 18 },
-    vibrancy: 'sidebar',
-    visualEffectState: 'followWindow',
-    backgroundColor: '#00000000',
+    ...chrome(),
     show: false,
     webPreferences: { preload: join(__dirname, '../preload/index.cjs'), sandbox: false, contextIsolation: true }
   })
   settingsWin.once('ready-to-show', () => settingsWin?.show())
+  winKeys(settingsWin)
   settingsWin.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
@@ -764,8 +823,46 @@ function sendCommand(cmd: string): void {
   else w.webContents.send('menu:command', cmd)
 }
 
+// Windows 上没有菜单栏（标题栏藏起来了），快捷键由窗口自己接：菜单里每一项的快捷键 Cmd 换成 Ctrl、Ctrl+Cmd 换成 Ctrl+Alt
+const KEYS: { acc: string; run: () => void }[] = []
+function winKeys(w: BrowserWindow): void {
+  if (!IS_WIN) return
+  w.webContents.on('before-input-event', (e, input) => {
+    const hit = KEYS.find((k) => keyMatches(input, k.acc))
+    if (!hit) return
+    e.preventDefault()
+    hit.run()
+  })
+}
+
 function buildMenu(): void {
   const c = (label: string, accelerator: string | undefined, cmd: string): MenuItemConstructorOptions => ({ id: cmd, label, accelerator, click: () => sendCommand(cmd) })
+  if (IS_WIN) {
+    const win: MenuItemConstructorOptions[] = [
+      { label: '', accelerator: 'Cmd+,', click: () => openSettings() },
+      { label: '', accelerator: 'Cmd+W', click: () => BrowserWindow.getFocusedWindow()?.close() },
+      c('', 'Cmd+O', 'import'),
+      c('', 'Shift+Cmd+F', 'web-search'),
+      c('', 'Cmd+I', 'paper-info'),
+      c('', 'Cmd+Shift+E', 'export'),
+      c('', 'Cmd+F', 'find'),
+      c('', 'Cmd+K', 'quick-search'),
+      c('', 'Cmd+1', 'mode-pdf'),
+      c('', 'Cmd+2', 'mode-reflow'),
+      c('', 'Cmd+3', 'mode-glance'),
+      c('', 'Cmd+=', 'zoom-in'),
+      c('', 'Cmd+-', 'zoom-out'),
+      c('', 'Cmd+0', 'zoom-reset'),
+      c('', 'Ctrl+Cmd+S', 'toggle-left'),
+      c('', 'Ctrl+Cmd+I', 'toggle-right'),
+      c('', 'Cmd+L', 'ask-ai'),
+      c('', 'Cmd+[', 'back'),
+      { label: '', accelerator: 'Cmd+Shift+I', click: () => BrowserWindow.getFocusedWindow()?.webContents.toggleDevTools() }
+    ]
+    KEYS.splice(0, KEYS.length, ...win.map((m) => ({ acc: winAcc(m.accelerator as string), run: () => (m.click as () => void)() })))
+    Menu.setApplicationMenu(null)
+    return
+  }
   const template: MenuItemConstructorOptions[] = [
     {
       label: 'ParaRead',
@@ -851,7 +948,7 @@ app.on('open-file', (e, path) => {
 async function openExternalFile(path: string): Promise<void> {
   const r = await library.importFile(path)
   if (r.status === 'failed') {
-    broadcast('app:toast', t('打不开 {0}：{1}', path.split('/').pop(), r.error))
+    broadcast('app:toast', t('打不开 {0}：{1}', basename(path), r.error))
     return
   }
   if (r.status === 'added') afterImport(r.paper.id)
@@ -861,8 +958,26 @@ async function openExternalFile(path: string): Promise<void> {
   mainWin?.webContents.send('app:openPaper', r.paper.id)
 }
 
-// 浏览器小书签：pararead://add?url=<当前网页>
-app.setAsDefaultProtocolClient('pararead')
+// Windows：双击打开的文件、点的 pararead:// 链接在命令行参数里（第一次启动在 process.argv，已经开着时在 second-instance）
+function openArgs(argv: string[]): void {
+  for (const a of argv.slice(1)) {
+    if (/^pararead:/i.test(a)) {
+      if (!ready) pendingUrls.push(a)
+      else void handleProtocol(a)
+    } else if (/\.(pdf|epub)$/i.test(a) && existsSync(a)) {
+      if (!ready) pendingOpen.push(a)
+      else void openExternalFile(a)
+    }
+  }
+}
+app.on('second-instance', (_e, argv) => {
+  openArgs(argv)
+  if (mainWin?.isMinimized()) mainWin.restore()
+  mainWin?.focus()
+})
+
+// 浏览器小书签：pararead://add?url=<当前网页>。Windows 的开发版不登记（登记的会是光秃秃的 electron.exe）
+if (!IS_WIN || app.isPackaged) app.setAsDefaultProtocolClient('pararead')
 const pendingUrls: string[] = []
 app.on('open-url', (e, url) => {
   e.preventDefault()
@@ -915,6 +1030,7 @@ void app.whenReady().then(() => {
   createMainWindow()
   resumeReflow()
   void purgeDeleted()
+  if (IS_WIN) openArgs(process.argv)
   ready = true
   sync.start()
   updater.start()
@@ -950,6 +1066,8 @@ app.on('will-quit', () => {
   mineruInstaller.stop()
   wordAddin.stop()
   translator.stop()
+  senses.stop()
+  connector?.stop()
   for (const c of aborts.values()) c.abort()
   db.close()
   // 到这里要存的都存好了（数据库已关，设置、会员、窗口位置是同步写的文件；界面不用 localStorage、Cookie）。
@@ -957,7 +1075,7 @@ app.on('will-quit', () => {
   // （几个 G 的 MinerU 刚被杀）这一步实测约 6 次里有 1 次要 3 到 15 秒，期间 Dock 上图标还在、再点打不开。
   // 所以最多给它 1.5 秒，没退完就强杀自己。will-quit 之后进程里的定时器不再跑，由一个脱离的 sh 来杀；
   // 杀之前核对这个进程号还是本应用。更新包由系统的 ShipIt 在进程退出后装，不受影响。
-  spawn('/bin/sh', ['-c', 'sleep 1.5; [ "$(ps -p "$1" -o comm=)" = "$2" ] && kill -9 "$1"', 'sh', String(process.pid), process.execPath], { detached: true, stdio: 'ignore' }).unref()
+  quitWatchdog()
   app.exit(0)
 })
 

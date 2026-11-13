@@ -37,7 +37,9 @@ export function makeStreamer(ai: Ai, db: DB, log: (m: string) => void) {
         thinking: o.thinking,
         useId: o.useId,
         maxTokens: o.maxTokens,
+        // 关着深度思考时不给界面看思考：GLM-5.3、Gemini 3 关不掉，只是压到最浅
         onReasoning: (r) => {
+          if (!o.thinking) return
           reasoning += r
           send({ reqId, reasoning: r })
         }

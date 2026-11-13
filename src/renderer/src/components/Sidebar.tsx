@@ -1,5 +1,5 @@
-import { BookOpen, BookOpenCheck, ChevronDown, ChevronRight, CircleDashed, FlaskConical, Folder as FolderIcon, FolderPlus, KeyRound, LibraryBig, MessagesSquare, Network, PanelLeft, Pencil, Plus, ScrollText, Search, Settings, SquarePen, SquareTerminal, Telescope, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { BookOpen, BookOpenCheck, ChevronDown, ChevronRight, CircleDashed, FlaskConical, Folder as FolderIcon, FolderPlus, Hash, KeyRound, LibraryBig, MessagesSquare, Network, NotebookPen, PanelLeft, Pencil, Plus, ScrollText, Search, Settings, SquarePen, SquareTerminal, Telescope, Trash2 } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import type { Folder, Paper, SettingsView } from '@shared/types'
 import { providerOf } from '@shared/providers'
 import { api, errText, type Project, type ResearchKind, type ResearchSession, type SyncStatus } from '../api'
@@ -7,7 +7,7 @@ import { showMenu } from '../lib/menu'
 import { Kbd, useToast } from '../lib/ui'
 import { t } from '@shared/i18n'
 
-export type Route = { kind: 'lib' } | { kind: 'ai'; id: string | null; prompt?: string } | { kind: 'agent'; id: string }
+export type Route = { kind: 'lib' } | { kind: 'notes' } | { kind: 'ai'; id: string | null; prompt?: string } | { kind: 'agent'; id: string }
 
 export const SMART = [
   { id: 'all', label: t('全部论文'), icon: LibraryBig },
@@ -51,6 +51,12 @@ export function Sidebar(props: {
   const [renamingProject, setRenamingProject] = useState<string | null>(null)
   const [dropOn, setDropOn] = useState<string | null>(null)
   const libOn = props.route.kind === 'lib'
+  // 所有论文用到的标签和各有几篇，按篇数多的在前
+  const tagList = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const p of props.papers) for (const g of p.tags) m.set(g, (m.get(g) ?? 0) + 1)
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  }, [props.papers])
 
   const newFolder = async (parent: string | null): Promise<void> => {
     const id = await api.createFolder(t('新文件夹'), parent)
@@ -225,6 +231,10 @@ export function Sidebar(props: {
               <span className="count">{props.papers.filter((p) => smartCount(x.id, p)).length}</span>
             </button>
           ))}
+          <button className={'nav-item' + (props.route.kind === 'notes' ? ' on' : '')} onClick={() => props.onRoute({ kind: 'notes' })}>
+            <NotebookPen size={16} />
+            <span className="l">{t('笔记')}</span>
+          </button>
         </div>
 
         <div
@@ -255,6 +265,24 @@ export function Sidebar(props: {
               </button>
             )}
           </div>
+        )}
+
+        {/* 标签：论文上打的自定义标签，点一个只看带它的论文（在「文献信息」里给论文加标签） */}
+        {tagList.length > 0 && (
+          <>
+            <div className="nav-sec">
+              <span>{t('标签')}</span>
+            </div>
+            <div className="nav">
+              {tagList.map(([name, n]) => (
+                <button key={name} className={'nav-item' + (libOn && props.filter === `tag:${name}` ? ' on' : '')} data-tag={name} onClick={() => props.onFilter(`tag:${name}`)}>
+                  <Hash size={16} />
+                  <span className="l">{name}</span>
+                  <span className="count">{n}</span>
+                </button>
+              ))}
+            </div>
+          </>
         )}
 
         <div className="nav-sec">

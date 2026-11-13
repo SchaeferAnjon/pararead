@@ -60,6 +60,7 @@ type Field = { key: keyof PaperPatch | 'abstract'; label: string }
 const ROWS: (Field | [Field, Field])[] = [
   { key: 'title', label: t('标题') },
   { key: 'authors', label: t('作者') },
+  { key: 'tags', label: t('标签') },
   { key: 'venue', label: t('期刊') },
   [
     { key: 'year', label: t('年份') },
@@ -106,6 +107,8 @@ export function PaperInfo(props: { id: string; onClose: () => void }) {
     const v = (form[key] ?? '').trim()
     let patch: PaperPatch
     if (key === 'authors') patch = { authors: v.split(/[;；\n]/).map((a) => a.trim()).filter(Boolean) }
+    // 标签：逗号、顿号、分号隔开，去掉重复的
+    else if (key === 'tags') patch = { tags: [...new Set(v.split(/[,，、;；\n]/).map((a) => a.trim().replace(/^#/, '')).filter(Boolean))] }
     else if (key === 'year') patch = { year: /^\d{4}$/.test(v) ? Number(v) : null }
     else if (key === 'title') patch = { title: v || p.title }
     else patch = { [key]: v || null } as PaperPatch
@@ -256,6 +259,7 @@ function toForm(p: Paper): Record<string, string> {
   return {
     title: p.title,
     authors: p.authors.join('; '),
+    tags: p.tags.join('，'),
     venue: p.venue ?? '',
     year: p.year ? String(p.year) : '',
     published: p.published ?? '',

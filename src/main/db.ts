@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import type { Annotation, ChatMessage, Folder, Glance, Paper, ReadMode, ReadPosition, ReflowState, Tier, JobStatus } from '../shared/types'
+import type { Annotation, ChatMessage, Folder, Glance, Paper, ReadMode, ReadPosition, ReflowState, Tier, JobStatus, Ink } from '../shared/types'
 import { t } from '../shared/i18n'
 
 export type DB = Database.Database
@@ -48,6 +48,16 @@ CREATE TABLE IF NOT EXISTS translations (
   model TEXT,
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS inks (
+  id TEXT PRIMARY KEY,
+  paper_id TEXT NOT NULL,
+  page INTEGER NOT NULL,
+  color TEXT NOT NULL,
+  width REAL NOT NULL,
+  points TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS inks_paper ON inks (paper_id);
 CREATE TABLE IF NOT EXISTS annotations (
   id TEXT PRIMARY KEY,
   paper_id TEXT NOT NULL,
@@ -173,6 +183,9 @@ export function openDb(file: string): DB {
   if (!folderCols.has('updated_at')) db.exec('ALTER TABLE folders ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0')
   const chatCols = new Set((db.prepare('PRAGMA table_info(chats)').all() as { name: string }[]).map((c) => c.name))
   if (!chatCols.has('reasoning')) db.exec('ALTER TABLE chats ADD COLUMN reasoning TEXT')
+  const annCols = new Set((db.prepare('PRAGMA table_info(annotations)').all() as { name: string }[]).map((r) => r.name))
+  if (!annCols.has('style')) db.exec("ALTER TABLE annotations ADD COLUMN style TEXT NOT NULL DEFAULT 'highlight'")
+  if (!annCols.has('label')) db.exec('ALTER TABLE annotations ADD COLUMN label TEXT')
   if (!chatCols.has('paper_ids')) db.exec('ALTER TABLE chats ADD COLUMN paper_ids TEXT')
   if (!chatCols.has('think_ms')) db.exec('ALTER TABLE chats ADD COLUMN think_ms INTEGER')
   migrateTagsToFolders(db)
@@ -376,6 +389,8 @@ interface AnnRow {
   paper_id: string
   mode: string
   color: string
+  style: string
+  label: string | null
   text: string
   note: string
   page: number | null
@@ -395,6 +410,8 @@ function rowToAnn(r: AnnRow): Annotation {
     paperId: r.paper_id,
     mode: r.mode === 'reflow' ? 'reflow' : 'pdf',
     color: r.color as Annotation['color'],
+    style: r.style === 'underline' ? 'underline' : 'highlight',
+    label: r.label === 'confused' || r.label === 'doubt' ? r.label : null,
     text: r.text,
     note: r.note,
     page: r.page,
@@ -416,11 +433,19 @@ export function listAnnotations(db: DB, paperId: string): Annotation[] {
 
 export function saveAnnotation(db: DB, a: Annotation, sourceId: string | null = null): void {
   db.prepare(
-    `INSERT INTO annotations (id, paper_id, mode, color, text, note, page, rects, block_id, block_hash, start, "end", section, source_id, created_at, updated_at)
-     VALUES (@id, @paperId, @mode, @color, @text, @note, @page, @rects, @blockId, @blockHash, @start, @end, @section, @sourceId, @createdAt, @updatedAt)
-     ON CONFLICT(id) DO UPDATE SET color = excluded.color, note = excluded.note, section = excluded.section,
+    `INSERT INTO annotations (id, paper_id, mode, color, style, label, text, note, page, rects, block_id, block_hash, start, "end", section, source_id, created_at, updated_at)
+     VALUES (@id, @paperId, @mode, @color, @style, @label, @text, @note, @page, @rects, @blockId, @blockHash, @start, @end, @section, @sourceId, @createdAt, @updatedAt)
+     ON CONFLICT(id) DO UPDATE SET color = excluded.color, style = excluded.style, label = excluded.label, note = excluded.note, section = excluded.section, page = COALESCE(excluded.page, page),
        rects = excluded.rects, updated_at = excluded.updated_at`
-  ).run({ ...a, rects: a.rects ? JSON.stringify(a.rects) : null, sourceId })
+  ).run({ ...a, style: a.style ?? 'highlight', label: a.label ?? null, rects: a.rects ? JSON.stringify(a.rects) : null, sourceId })
+}
+
+/** 全库的标注，连着论文的标题、作者、年份（笔记页用）；删掉的论文不算 */
+export function allAnnotations(db: DB): (Annotation & { paperTitle: string; paperAuthors: string[]; paperYear: number | null })[] {
+  const rows = db
+    .prepare('SELECT a.*, p.title AS p_title, p.authors AS p_authors, p.year AS p_year FROM annotations a JOIN papers p ON p.id = a.paper_id WHERE p.deleted = 0 ORDER BY a.created_at DESC')
+    .all() as (AnnRow & { p_title: string; p_authors: string; p_year: number | null })[]
+  return rows.map((r) => ({ ...rowToAnn(r), paperTitle: r.p_title, paperAuthors: JSON.parse(r.p_authors) as string[], paperYear: r.p_year }))
 }
 
 export function deleteAnnotation(db: DB, id: string): void {
@@ -589,3 +614,16 @@ export function putPaperCache(db: DB, paperId: string, kind: string, v: unknown)
 export function delPaperCache(db: DB, paperId: string, kind: string): void {
   db.prepare('DELETE FROM paper_cache WHERE paper_id = ? AND kind = ?').run(paperId, kind)
 }
+
+// 原文模式的手写笔画
+export function listInks(db: DB, paperId: string): Ink[] {
+  const rows = db.prepare('SELECT * FROM inks WHERE paper_id = ? ORDER BY created_at').all(paperId) as { id: string; paper_id: string; page: number; color: string; width: number; points: string; created_at: number }[]
+  return rows.map((r) => ({ id: r.id, paperId: r.paper_id, page: r.page, color: r.color, width: r.width, points: JSON.parse(r.points) as [number, number][], createdAt: r.created_at }))
+}
+export function saveInk(db: DB, k: Ink): void {
+  db.prepare('INSERT OR REPLACE INTO inks (id, paper_id, page, color, width, points, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(k.id, k.paperId, k.page, k.color, k.width, JSON.stringify(k.points), k.createdAt)
+}
+export function deleteInk(db: DB, id: string): void {
+  db.prepare('DELETE FROM inks WHERE id = ?').run(id)
+}
+

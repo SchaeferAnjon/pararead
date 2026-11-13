@@ -6,6 +6,7 @@ import { showMenu } from '../lib/menu'
 import { Segmented, Switch, useToast } from '../lib/ui'
 import { folderPath, Modal, ModalHead } from './PaperInfo'
 import { t } from '@shared/i18n'
+import { modKey } from '@shared/kbd'
 
 // 选「放进哪个文件夹」的下拉
 function FolderPick(props: { folders: Folder[]; value: string | null; onChange: (v: string | null) => void }) {
@@ -96,7 +97,7 @@ export function UrlImport(props: { folders: Folder[]; folder: string | null; onC
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && e.metaKey && lines.length) void run()
+              if (e.key === 'Enter' && modKey(e) && lines.length) void run()
             }}
           />
         ) : (

@@ -3,13 +3,14 @@
 //   1. 下载 uv（一个可执行文件，管 Python 和包）  2. uv 建一个带 Python 3.12 的环境
 //   3. 装 mineru（带 PyTorch，约 1.3 GB）        4. 下载版面、公式、表格、OCR 模型（约 850 MB，放在 ~/.mineru/models）
 // 中途退出下次接着来（uv 和模型下载都有缓存、能续）。装好后把设置里的 mineruPath 指过去。
-import { execFile, spawn, type ChildProcess } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { t } from '../shared/i18n'
+import { dirKb, IS_WIN, killTree, venvExe } from './platform'
 
 // 这个版本在本机实测过（4.0.12）；升级要先测重排的输出格式
 const MINERU_VERSION = '4.0.12'
@@ -41,7 +42,7 @@ export class MineruInstaller {
   }
 
   command(): string {
-    return join(this.dir, 'venv', 'bin', 'mineru-kit')
+    return venvExe(join(this.dir, 'venv'), 'mineru-kit')
   }
   private marker(): string {
     return join(this.dir, 'installed.json')
@@ -63,13 +64,7 @@ export class MineruInstaller {
 
   stop(): void {
     this.abort?.abort()
-    if (this.child?.pid) {
-      try {
-        process.kill(-this.child.pid, 'SIGKILL')
-      } catch {
-        this.child.kill('SIGKILL')
-      }
-    }
+    if (this.child) killTree(this.child)
   }
 
   async start(): Promise<void> {
@@ -83,10 +78,10 @@ export class MineruInstaller {
       const env = { ...process.env, UV_CACHE_DIR: join(this.dir, 'cache'), UV_PYTHON_INSTALL_DIR: join(this.dir, 'python'), PYTHONUNBUFFERED: '1' }
       const venv = join(this.dir, 'venv')
       this.step('python', 0, t('准备 Python 环境'))
-      if (!existsSync(join(venv, 'bin', 'python'))) await this.run(uv, ['venv', '--python', PYTHON, venv], env, 'python')
+      if (!existsSync(venvExe(venv, 'python'))) await this.run(uv, ['venv', '--python', PYTHON, venv], env, 'python')
       this.step('packages', 0, t('下载 MinerU 和 PyTorch（约 1.3 GB）'))
       // uv 和模型下载的输出里没有总进度：按下载目录长到多大来算（包先进 uv 的缓存，约 1.3 GB；模型约 850 MB）
-      await this.run(uv, ['pip', 'install', '--python', join(venv, 'bin', 'python'), `mineru==${MINERU_VERSION}`], env, 'packages', { dir: join(this.dir, 'cache'), expectKb: 1_300_000 })
+      await this.run(uv, ['pip', 'install', '--python', venvExe(venv, 'python'), `mineru==${MINERU_VERSION}`], env, 'packages', { dir: join(this.dir, 'cache'), expectKb: 1_300_000 })
       this.step('models', 0, t('下载识别模型（约 850 MB）'))
       await this.run(this.command(), ['models', 'download', '--tier', 'basic'], env, 'models', { dir: join(homedir(), '.mineru', 'models'), expectKb: 850_000 })
       await this.run(this.command(), ['--version'], env, 'models')
@@ -105,19 +100,20 @@ export class MineruInstaller {
     }
   }
 
-  // uv：官方发布的单个可执行文件。Mac 上已经装了 uv 的也用自己这份，版本一致
+  // uv：官方发布的单个可执行文件。已经装了 uv 的也用自己这份，版本一致。
+  // Mac 的是 tar.gz（uv 在一层文件夹里），Windows 的是 zip（uv.exe 在最外层），都用系统自带的 tar 解（Windows 10 起有）
   private async getUv(): Promise<string> {
-    const bin = join(this.dir, 'uv')
+    const bin = join(this.dir, IS_WIN ? 'uv.exe' : 'uv')
     if (existsSync(bin)) return bin
     const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64'
-    const name = `uv-${arch}-apple-darwin`
-    const url = `https://github.com/astral-sh/uv/releases/latest/download/${name}.tar.gz`
+    const name = IS_WIN ? `uv-${arch}-pc-windows-msvc` : `uv-${arch}-apple-darwin`
+    const url = `https://github.com/astral-sh/uv/releases/latest/download/${name}${IS_WIN ? '.zip' : '.tar.gz'}`
     this.step('uv', 0, t('下载安装工具 uv'))
     this.abort = new AbortController()
     const res = await fetch(url, { signal: this.abort.signal, redirect: 'follow' })
     if (!res.ok || !res.body) throw new Error(t('下载 uv 失败：{0}', `HTTP ${res.status}`))
     const total = Number(res.headers.get('content-length')) || 0
-    const tgz = join(this.dir, 'uv.tar.gz')
+    const tgz = join(this.dir, IS_WIN ? 'uv.zip' : 'uv.tar.gz')
     let got = 0
     const body = Readable.fromWeb(res.body as never)
     body.on('data', (b: Buffer) => {
@@ -125,7 +121,8 @@ export class MineruInstaller {
       if (total) this.step('uv', got / total)
     })
     await pipeline(body, createWriteStream(tgz))
-    await this.run('/usr/bin/tar', ['-xzf', tgz, '-C', this.dir, '--strip-components', '1', `${name}/uv`], process.env, 'uv')
+    if (IS_WIN) await this.run('tar', ['-xf', tgz, '-C', this.dir, 'uv.exe'], process.env, 'uv')
+    else await this.run('/usr/bin/tar', ['-xzf', tgz, '-C', this.dir, '--strip-components', '1', `${name}/uv`], process.env, 'uv')
     rmSync(tgz, { force: true })
     if (!existsSync(bin)) throw new Error(t('uv 解压后没找到可执行文件'))
     return bin
@@ -134,14 +131,13 @@ export class MineruInstaller {
   // 跑一步：输出的最后一行给界面看；uv 和 tqdm 的进度行里有百分比或「已下载 / 总量」就用它
   private run(cmd: string, args: string[], env: NodeJS.ProcessEnv, phase: keyof typeof SPAN, watch?: { dir: string; expectKb: number }): Promise<void> {
     return new Promise((resolve, reject) => {
-      const child = spawn(cmd, args, { cwd: this.dir, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+      const child = spawn(cmd, args, { cwd: this.dir, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true, windowsHide: true })
       this.child = child
       let tail = ''
       let frac = 0
       const timer = watch
         ? setInterval(() => {
-            execFile('/usr/bin/du', ['-sk', watch.dir], { timeout: 10_000 }, (_err, out) => {
-              const kb = Number(String(out).split(/\s/)[0]) || 0
+            void dirKb(watch.dir).then((kb) => {
               frac = Math.max(frac, Math.min(0.98, kb / watch.expectKb))
               this.step(phase, frac)
             })
@@ -157,11 +153,11 @@ export class MineruInstaller {
       }
       child.stdout!.on('data', onData)
       child.stderr!.on('data', onData)
-      child.on('error', (e) => reject(new Error(`${cmd.split('/').pop()}：${e.message}`)))
+      child.on('error', (e) => reject(new Error(`${basename(cmd)}：${e.message}`)))
       child.on('close', (code, sig) => {
         if (code === 0) return resolve()
         const last = tail.split(/[\r\n]/).map((x) => x.trim()).filter(Boolean).slice(-3).join(' · ')
-        reject(new Error(sig ? t('已停止') : `${cmd.split('/').pop()} ${args[0]} ${t('退出码')} ${code}：${last.slice(0, 300)}`))
+        reject(new Error(sig ? t('已停止') : `${basename(cmd)} ${args[0]} ${t('退出码')} ${code}：${last.slice(0, 300)}`))
       })
     })
   }

@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "ParaRead Connector",
+  "description": "把正在看的论文存进 ParaRead：PDF 和题名、作者、期刊、DOI 一起存。 Save the paper you are viewing to ParaRead.",
+  "version": "0.1.0",
+  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "action": { "default_title": "存进 ParaRead / Save to ParaRead", "default_popup": "popup.html", "default_icon": { "16": "icons/16.png", "32": "icons/32.png" } },
+  "background": { "service_worker": "sw.js" },
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["<all_urls>"]
+}

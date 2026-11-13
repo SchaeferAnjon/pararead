@@ -1,5 +1,6 @@
 import { Check, ChevronRight } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { kbd } from '@shared/kbd'
 
 // 自绘菜单（设计第 15 条）：右键菜单和页面里的下拉一个样，带子菜单、勾、危险项、快捷键提示。
 // showMenu 返回选中项的 id，关掉返回 null。正文里的右键（查询、拷贝）仍走系统菜单。
@@ -159,7 +160,7 @@ function MenuPanel(props: { items: MenuEntry[]; at: At; onPick: (id: string | nu
                   <ChevronRight size={14} />
                 </span>
               ) : (
-                it.hint !== undefined && <span className="h">{it.hint}</span>
+                it.hint !== undefined && <span className="h">{typeof it.hint === 'string' ? kbd(it.hint) : it.hint}</span>
               )}
             </button>
           )

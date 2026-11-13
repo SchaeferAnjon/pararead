@@ -3,8 +3,9 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { HlColor } from '../shared/types'
+import { IS_WIN } from './platform'
 
-export const SCHOLAREAD_DIR = join(homedir(), 'Library/Application Support/scholaread')
+export const SCHOLAREAD_DIR = IS_WIN ? join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'scholaread') : join(homedir(), 'Library/Application Support/scholaread')
 
 export interface SrPaperRow {
   _id: number

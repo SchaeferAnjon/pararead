@@ -7,6 +7,7 @@ import { getPaper, setReflow, updatePaper } from './db'
 import { fromMiddle, toMarkdown, type Layout, type Region } from './layout'
 import { extractPdf, itemsToLines, type PdfExtract } from './pdftext'
 import { t } from '../shared/i18n'
+import { killTree } from './platform'
 
 // 调整重排区域：取版面（第一次要跑 MinerU 的 middle_json，约和精细重排一样久）、保存后重新生成重排
 export function registerLayout(c: Ctx): void {
@@ -20,7 +21,7 @@ export function registerLayout(c: Ctx): void {
     mkdirSync(dir(id), { recursive: true })
     return new Promise((resolve, reject) => {
       const args = ['parse', c.library.pdfPath(id), '-o', out, '-f', 'middle_json', '--tier', 'basic', ...(p.scanned ? ['--ocr-mode', 'ocr'] : []), '-v']
-      const child = spawn(c.settings.get().mineruPath, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: true, env: { ...process.env, PYTHONUNBUFFERED: '1' } })
+      const child = spawn(c.settings.get().mineruPath, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: true, windowsHide: true, env: { ...process.env, PYTHONUNBUFFERED: '1' } })
       let tail = ''
       const onData = (b: Buffer): void => {
         tail = (tail + b.toString()).slice(-2000)
@@ -30,11 +31,7 @@ export function registerLayout(c: Ctx): void {
       child.stdout.on('data', onData)
       child.stderr.on('data', onData)
       const t_ = setTimeout(() => {
-        try {
-          process.kill(-child.pid!, 'SIGKILL')
-        } catch {
-          child.kill('SIGKILL')
-        }
+        killTree(child)
       }, 15 * 60_000)
       child.on('error', (e) => {
         clearTimeout(t_)

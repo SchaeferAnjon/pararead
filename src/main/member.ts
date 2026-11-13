@@ -1,12 +1,12 @@
 // 会员：不登录，按这台电脑注册拿设备令牌；买了订阅或一次买就成会员，授权码（PR-）能在别的电脑上激活。
 // 服务器是 meetcaption-server 的 pararead 产品（接口见那边 docs/multi-product.md §4）；AI 经它转发，密钥只在服务器上。
 // 这里只管和服务器说话、记住令牌；没有免费额度，不是会员就用自己的 Key。
-import { execFile } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { uiLang } from '../shared/i18n'
 import { MEMBER_API } from '../shared/providers'
 import { t } from '../shared/i18n'
+import { machineId } from './platform'
 
 export const PRODUCT = 'pararead'
 const BASE = `${(process.env.PARAREAD_API ?? MEMBER_API).replace(/\/+$/, '')}/v1/${PRODUCT}`
@@ -58,8 +58,6 @@ function codeText(code: string): string | null {
   return m[code] ?? null
 }
 
-const run = (cmd: string, args: string[]): Promise<string> => new Promise((res) => execFile(cmd, args, { timeout: 5000 }, (err, out) => res(err ? '' : String(out))))
-
 export class Member {
   private state: { token: string | null; device: string | null }
   status: MemberStatus | null = null
@@ -80,10 +78,10 @@ export class Member {
     writeFileSync(this.file, JSON.stringify(this.state))
   }
 
-  // 设备标识：Mac 硬件 UUID 的哈希；拿不到就用本机存的随机值
+  // 设备标识：硬件标识（Mac 的 IOPlatformUUID、Windows 的 MachineGuid）的哈希；拿不到就用本机存的随机值
   private async device(): Promise<string> {
     if (this.state.device) return this.state.device
-    const raw = (await run('ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'])).match(/"IOPlatformUUID" = "([^"]+)"/)?.[1]
+    const raw = await machineId()
     this.state.device = createHash('sha256').update(`${PRODUCT}:${raw ?? randomBytes(16).toString('hex')}`).digest('hex')
     this.save()
     return this.state.device

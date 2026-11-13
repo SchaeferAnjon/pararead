@@ -1,3 +1,4 @@
+import { thinkParams } from '../shared/thinking'
 import { t } from '../shared/i18n'
 // OpenAI 兼容的 chat/completions 客户端，支持 SSE 流式。默认端点是智谱 Coding Plan（/api/coding/paas/v4）；
 // 别家服务（DeepSeek、通义、OpenAI 等，见 shared/providers.ts）传 baseUrl。各家的特殊参数在 buildRequest 里按模型加。
@@ -62,12 +63,8 @@ export function buildRequest(o: ChatOptions): { url: string; init: RequestInit; 
     messages: o.messages,
     stream: !!o.stream
   }
-  // glm-5.3 系列文本模型只接受 low；看图模型不传这个参数
-  if (/^glm-5/.test(o.model)) body.reasoning_effort = 'low'
-  // 看图模型开着思考时会先输出一版草稿再给最终答案，界面上像重复了一遍；关掉思考
-  if (/^glm-\d+(\.\d+)?v/.test(o.model)) body.thinking = { type: 'disabled' }
-  // DeepSeek V4 默认开思考：平时关掉（快、省），深度思考时打开
-  if (/^deepseek/.test(o.model)) body.thinking = { type: o.thinking ? 'enabled' : 'disabled' }
+  // 深度思考按各家自己的参数开关（shared/thinking.ts）
+  Object.assign(body, thinkParams(o.model, o.baseUrl ?? GLM_BASE, !!o.thinking))
   if (o.stream) body.stream_options = { include_usage: true }
   if (o.temperature !== undefined) body.temperature = o.temperature
   if (o.maxTokens) body.max_tokens = o.maxTokens

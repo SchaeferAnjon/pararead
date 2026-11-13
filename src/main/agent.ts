@@ -12,6 +12,7 @@ import type { ChatMsg, ToolCall, ToolDef } from './glm'
 import { newId } from './library'
 import { getText, searchWeb } from './meta'
 import { t } from '../shared/i18n'
+import { killTree, SHELL_NAME, shellOf } from './platform'
 
 export interface Project {
   id: string
@@ -42,7 +43,7 @@ export const TOOLS: ToolDef[] = [
   fn('list_files', '列出项目文件夹里的文件和子文件夹（最多两层）', { path: { type: 'string', description: '相对项目根目录的路径，默认 .' } }),
   fn('read_file', '读项目里的一个文本文件（代码、Markdown、CSV、JSON 等）', { path: { type: 'string' } }, ['path']),
   fn('write_file', '在项目里新建或覆盖一个文本文件', { path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content']),
-  fn('run_command', '在项目文件夹里跑一条 shell 命令（比如 python3 analyze.py），最长 2 分钟。会先问用户同意', { command: { type: 'string' } }, ['command']),
+  fn('run_command', `在项目文件夹里跑一条 ${SHELL_NAME} 命令（比如 python3 analyze.py），最长 2 分钟。会先问用户同意`, { command: { type: 'string' } }, ['command']),
   fn('search_library', '在用户的文献库里按关键词找论文，返回编号、标题、年份、摘要开头', { query: { type: 'string' } }, ['query']),
   fn('read_paper', '读文献库里一篇论文的全文（重排后的 Markdown）。长论文分段读：offset 是从第几个字开始，每次最多 4 万字', { paper_id: { type: 'string' }, offset: { type: 'number' } }, ['paper_id']),
   fn('search_web', '在全网学术数据库（OpenAlex）检索论文，返回标题、年份、期刊、被引数、摘要、有没有开放获取 PDF', { query: { type: 'string' }, year_from: { type: 'number' } }, ['query']),
@@ -363,10 +364,11 @@ function safeArgs(call: ToolCall): Record<string, unknown> {
   }
 }
 
-// 跑命令：zsh -lc，项目文件夹里，超时整组杀；输出截到 2 万字
+// 跑命令：Mac 上 zsh -lc，Windows 上 PowerShell；项目文件夹里，超时整组杀；输出截到 2 万字
 export function runShell(command: string, cwd: string, timeoutMs: number): Promise<string> {
   return new Promise((res) => {
-    const child = spawn('/bin/zsh', ['-lc', command], { cwd, detached: true, env: { ...process.env, PYTHONUNBUFFERED: '1' } })
+    const [sh, argv] = shellOf(command)
+    const child = spawn(sh, argv, { cwd, detached: true, windowsHide: true, env: { ...process.env, PYTHONUNBUFFERED: '1' } })
     let out = ''
     const add = (b: Buffer): void => {
       out += b.toString('utf8')
@@ -376,11 +378,7 @@ export function runShell(command: string, cwd: string, timeoutMs: number): Promi
     child.stderr.on('data', add)
     const t_ = setTimeout(() => {
       out += `\n超时：超过 ${timeoutMs / 1000} 秒，已停止`
-      try {
-        process.kill(-child.pid!, 'SIGKILL')
-      } catch {
-        child.kill('SIGKILL')
-      }
+      killTree(child)
     }, timeoutMs)
     child.on('error', (e) => {
       clearTimeout(t_)

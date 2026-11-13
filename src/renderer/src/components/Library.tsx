@@ -13,6 +13,7 @@ import { Inspector } from './Inspector'
 import { folderPath, PaperInfo } from './PaperInfo'
 import { SMART, smartCount } from './Sidebar'
 import { t } from '@shared/i18n'
+import { modKey, ON_WIN } from '@shared/kbd'
 
 type SortKey = SettingsView['libSort']['key']
 type Dialog = { kind: 'url' } | { kind: 'zotero' } | { kind: 'web'; q?: string } | { kind: 'bookmarklet' } | { kind: 'info'; id: string } | { kind: 'export'; id: string }
@@ -117,7 +118,7 @@ export function Library(props: {
   }, [folders])
 
   const deepById = useMemo(() => new Map(deep.map((d) => [d.id, d])), [deep])
-  const inFilter = useCallback((p: Paper): boolean => (filter.startsWith('folder:') ? p.folders.includes(filter.slice(7)) : smartCount(filter, p)), [filter])
+  const inFilter = useCallback((p: Paper): boolean => (filter.startsWith('folder:') ? p.folders.includes(filter.slice(7)) : filter.startsWith('tag:') ? p.tags.includes(filter.slice(4)) : smartCount(filter, p)), [filter])
   const shown = useMemo(() => {
     let list = q && scopeAll ? all : all.filter(inFilter)
     if (q) list = list.filter((p) => (p.title + ' ' + p.authors.join(' ') + ' ' + (p.venue ?? '')).toLowerCase().includes(q) || deepById.has(p.id))
@@ -340,7 +341,7 @@ export function Library(props: {
   // 单击选中，⌘ 点或多选模式下加减，⇧ 点连选；双击打开
   const onItemClick = (e: React.MouseEvent, id: string, idx: number): void => {
     listRef.current?.focus({ preventScroll: true })
-    if (batch || e.metaKey) setSelected((x) => (x.includes(id) ? x.filter((y) => y !== id) : [...x, id]))
+    if (batch || modKey(e)) setSelected((x) => (x.includes(id) ? x.filter((y) => y !== id) : [...x, id]))
     else if (e.shiftKey && selected.length) {
       const last = shown.findIndex((p) => p.id === selected[selected.length - 1])
       const [a, b] = [Math.min(last, idx), Math.max(last, idx)]
@@ -364,8 +365,9 @@ export function Library(props: {
     else if (e.key === 'ArrowLeft' && view === 'card') move(-1)
     else if (e.key === 'Enter' && selected.length === 1) open(selected[0])
     else if (e.key === ' ') setInsp((v) => !v)
-    else if (e.key === 'a' && e.metaKey) setSelected(shown.map((p) => p.id))
-    else if (e.key === 'Backspace' && e.metaKey && selected.length) void remove(selected)
+    else if (e.key === 'a' && modKey(e)) setSelected(shown.map((p) => p.id))
+    // 删除：Mac 上 ⌘⌫，Windows 上 Delete（照各自的文件管理器）
+    else if (selected.length && (ON_WIN ? e.key === 'Delete' : e.key === 'Backspace' && e.metaKey)) void remove(selected)
     else if (e.key === 'Escape' && (batch || selected.length > 1)) {
       setBatch(false)
       setSelected(selected.slice(-1))
@@ -422,7 +424,7 @@ export function Library(props: {
   }, [query, all, folders, s.recentSearches])
 
   const grouped = (sort.key === 'opened' || sort.key === 'added') && sort.desc && !q
-  const pageTitle = curFolder ? curFolder.name : (SMART.find((x) => x.id === filter)?.label ?? t('全部论文'))
+  const pageTitle = curFolder ? curFolder.name : filter.startsWith('tag:') ? `# ${filter.slice(4)}` : (SMART.find((x) => x.id === filter)?.label ?? t('全部论文'))
   const empty = props.papers !== null && props.papers.length === 0
   const selPapers = selected.map((i) => all.find((p) => p.id === i)).filter((p): p is Paper => !!p)
   const scopeLabel = q ? t('找到 {0} 篇 · 范围：{1}', shown.length, scopeAll ? t('全部论文') : pageTitle) : ''

@@ -98,3 +98,20 @@ export function listFigures(blocks: Block[]): FigureItem[] {
   }
   return out
 }
+
+/**
+ * 一段摘录在原文的第几页（从 1 起）：只看字母和数字，拿开头的 40 个去每页的文字里找，找不到再拿 20 个试一次。
+ * 对照模式里的标注用它补页码；摘的是译文（没有英文字母）的找不到，返回 null。
+ */
+export function pageOfText(pages: string[], text: string): number | null {
+  const squash = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  const all = squash(text)
+  if (all.length < 8) return null
+  const flat = pages.map(squash)
+  for (const n of [40, 20]) {
+    const needle = all.slice(0, n)
+    const i = flat.findIndex((p) => p.includes(needle))
+    if (i >= 0) return i + 1
+  }
+  return null
+}

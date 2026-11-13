@@ -1,0 +1,56 @@
+# Windows 安装包：在 windows-latest 上装依赖、跑单元测试、打 nsis 安装包，再用 Playwright 把装好的包真的打开走一遍
+# （scripts/e2e/windows.mjs），截图和安装包都作为 artifact 留下。发版时 scripts/release.mjs 从这里取安装包。
+name: windows
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # 单元测试用 Electron 自带的 Node 跑（better-sqlite3 编给 Electron）；package.json 里的 test 是 Mac 的 shell 写法
+      - run: npx electron-builder install-app-deps
+      - name: Unit tests
+        env:
+          ELECTRON_RUN_AS_NODE: '1'
+        run: npx electron node_modules/vitest/vitest.mjs run
+      - name: Build installer
+        run: |
+          npx electron-vite build
+          npx electron-builder --win --x64 --publish never
+      - name: Try the installed app
+        shell: pwsh
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: |
+          npm i --no-save playwright@1.56.1
+          New-Item -ItemType Directory -Force e2e-tmp | Out-Null
+          Invoke-WebRequest -Uri https://arxiv.org/pdf/1706.03762v7 -OutFile e2e-tmp\paper.pdf
+          $env:PLAYWRIGHT_ROOT = "$pwd\"
+          $env:E2E_APP = "$pwd\release\win-unpacked\ParaRead.exe"
+          $env:E2E_PAPER = "$pwd\e2e-tmp\paper.pdf"
+          $env:E2E_SHOTS = "$pwd\e2e-tmp\shots"
+          node scripts/e2e/windows.mjs "$pwd\e2e-tmp\data"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-shots
+          path: e2e-tmp/shots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            release/*.exe
+            release/*.exe.blockmap
+            release/latest.yml

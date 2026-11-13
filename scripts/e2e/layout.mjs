@@ -34,6 +34,10 @@ try {
   await win.dblclick(`[data-paper="${r.paper.id}"]`)
   await expect('960 宽打开：左栏自动收起，正文和 AI 栏都在', { left: '-', mid: '0+580', right: '580+380', firstBtn: 84 }, 2500)
   console.log(await shot(win, 'layout-960'))
+  // 标题栏放不下带字的按钮时只留图标：搜索、显示设置不能被挤出去
+  const bar = await ev(() => { const mid = document.querySelector('.col-mid').getBoundingClientRect(); const r = (t) => Math.round(document.querySelector(`button[title^="${t}"]`).getBoundingClientRect().right); return { mid: Math.round(mid.right), aa: r('显示设置'), find: r('搜索') } })
+  console.log(bar.aa <= bar.mid && bar.find < bar.aa ? '通过' : '没过', '960 宽：搜索和显示设置都在标题栏里', JSON.stringify(bar))
+  if (!(bar.aa <= bar.mid && bar.find < bar.aa)) fails.push('标题栏')
   await click('显示左栏')
   await expect('点显示左栏：左栏留着，收 AI 栏', { left: '0+260', mid: '260+700', right: '-' })
   await click('显示 AI 问答')

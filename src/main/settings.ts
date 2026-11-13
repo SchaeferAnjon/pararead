@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { providerOf } from '../shared/providers'
 import type { Settings, SettingsView } from '../shared/types'
+import { venvExe } from './platform'
 
 export const DEFAULT_SETTINGS: Settings = {
   provider: 'deepseek',
@@ -11,12 +12,15 @@ export const DEFAULT_SETTINGS: Settings = {
   textModel: 'deepseek-flash',
   visionModel: 'deepseek-flash',
   targetLang: '简体中文',
-  mineruPath: join(homedir(), '.mineru-venv/bin/mineru-kit'),
+  mineruPath: venvExe(join(homedir(), '.mineru-venv'), 'mineru-kit'),
   theme: 'system',
   readSize: 18,
   srcFont: 'serif',
   display: 'both',
   trStyle: 'text',
+  trLayout: 'stack',
+  senseGroups: false,
+  termMarks: true,
   leftW: 260,
   rightW: 380,
   leftCollapsed: false,

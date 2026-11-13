@@ -14,8 +14,12 @@ import type {
   SettingsView,
   StreamEvent,
   WordStatus,
-  LocalCliStatus
+  LocalCliStatus,
+  NoteEntry,
+  Term,
+  Ink
 } from '@shared/types'
+import type { SenseSentence } from '@shared/senses'
 
 export interface ReflowProgress {
   paperId: string
@@ -135,6 +139,9 @@ export interface Api {
   simpleReflow(id: string): Promise<void>
   translate(paperId: string, texts: string[], priority: boolean): Promise<Record<string, string>>
   cancelTranslate(paperId: string): Promise<void>
+  /** 意群：返回已经缓存的（键是 sensesKey），没有的排队去问，结果走 onSensesResult */
+  senses(paperId: string, items: { en: string; zh: string }[]): Promise<Record<string, SenseSentence[]>>
+  cancelSenses(paperId: string): Promise<void>
   aiSelection(reqId: string, kind: 'translate' | 'explain', o: { text: string; paragraph: string; title: string; image?: string }): Promise<void>
   aiAbort(reqId: string): Promise<void>
   chatList(paperId: string): Promise<ChatMessage[]>
@@ -147,6 +154,8 @@ export interface Api {
   chatDelete(id: string): Promise<void>
   chatExport(paperId: string, onlyId?: string): Promise<string | null>
   majorPoints(paperId: string, density?: 'less' | 'default' | 'more', force?: boolean): Promise<MajorPoint[]>
+  /** 术语表（问一次 AI，按论文缓存） */
+  terms(paperId: string, force?: boolean): Promise<Term[]>
   concepts(paperId: string, force?: boolean): Promise<{ concepts: Concept[]; questions: string[] }>
   refsLookup(entry: string): Promise<SearchHit | null>
   readTime(paperId: string, ms: number): Promise<void>
@@ -192,7 +201,15 @@ export interface Api {
   glanceGet(paperId: string): Promise<Glance | null>
   glanceGenerate(paperId: string): Promise<Glance>
   annList(paperId: string): Promise<Annotation[]>
-  annSave(a: Annotation): Promise<void>
+  /** 全库的标注，连着论文的标题、作者、年份 */
+  annAll(): Promise<NoteEntry[]>
+  inkList(paperId: string): Promise<Ink[]>
+  inkSave(k: Ink): Promise<void>
+  inkDelete(id: string): Promise<void>
+  /** 截窗口里的一块，返回 PNG 的 data URL */
+  capture(r: { x: number; y: number; width: number; height: number }): Promise<string>
+  /** 存一条标注；返回它在原文的第几页（对照模式里做的由主进程去找，找不到是 null） */
+  annSave(a: Annotation): Promise<number | null>
   annDelete(id: string): Promise<void>
   annExport(paperId: string): Promise<string | null>
   annSections(paperId: string): Promise<Record<string, string>>
@@ -214,6 +231,10 @@ export interface Api {
   mineruInstall(): Promise<void>
   mineruStopInstall(): Promise<void>
   onMineruInstall(cb: (s: MineruInstallState) => void): Off
+  /** 浏览器插件的接收口开着没有，插件文件夹在哪 */
+  connectorStatus(): Promise<{ running: boolean; port: number; error: string; dir: string }>
+  connectorReveal(): Promise<void>
+  connectorOpenBrowser(name: 'Google Chrome' | 'Microsoft Edge'): Promise<void>
   wordStatus(): Promise<WordStatus>
   /** 装 Word 插件：系统会弹一次密码框（信任本机证书） */
   wordInstall(): Promise<WordStatus>
@@ -237,6 +258,7 @@ export interface Api {
   onReflowFailed(cb: (p: { paperId: string; tier: string; error: string }) => void): Off
   onLibraryChanged(cb: () => void): Off
   onTranslateResult(cb: (r: { paperId: string; key: string; text?: string; error?: string }) => void): Off
+  onSensesResult(cb: (r: { paperId: string; key: string; data?: SenseSentence[]; error?: string }) => void): Off
   onStream(cb: (e: StreamEvent) => void): Off
   onSettings(cb: (s: SettingsView) => void): Off
   onCommand(cb: (cmd: string) => void): Off

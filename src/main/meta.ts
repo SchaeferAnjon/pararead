@@ -331,8 +331,14 @@ export async function lookupMeta(o: { title: string; firstPage: string; info: Re
   else if (o.title.length > 12) {
     const hit = (await oaSearch(o.title, 1).catch(() => []))[0] ?? (await s2Match(o.title).catch(() => null))
     // 标题差太多的不认
-    if (hit && squashTitle(hit.title) === squashTitle(o.title))
+    if (hit && squashTitle(hit.title) === squashTitle(o.title)) {
       m = { doi: hit.doi, arxiv: hit.arxiv, venue: hit.venue, abstract: hit.abstract, year: hit.year, url: hit.url, authors: hit.authors }
+      // 按标题对上了、又有 DOI：再查一次 Crossref 把卷、期、页码、出版社补齐（引用要用）
+      if (hit.doi) {
+        const full = await crossref(hit.doi).catch(() => null)
+        if (full) m = { ...m, ...Object.fromEntries(Object.entries(full).filter(([, v]) => v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length))) }
+      }
+    }
   }
   if (ax && !m.arxiv) m.arxiv = ax
   if (!m.abstract) m.abstract = abstractFromText(o.firstPage)

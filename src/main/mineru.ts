@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { t } from '../shared/i18n'
 import { existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { dirname } from 'node:path'
+import { killTree } from './platform'
 
 export type MineruTier = 'flash' | 'basic'
 
@@ -115,7 +116,8 @@ export class MineruQueue {
     const child = sp(cmd, ['parse', job.pdf, '-o', tmp, '--tier', job.tier, ...(job.args ?? []), '-v'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, PYTHONUNBUFFERED: '1' },
-      detached: true // 自成一个进程组，停的时候整组杀
+      detached: true, // 自成一个进程组，停的时候整组杀
+      windowsHide: true
     })
     this.current = { job, child, startedAt }
     report({ logLine: `mineru-kit parse --tier ${job.tier}` })
@@ -174,10 +176,3 @@ export class MineruQueue {
   }
 }
 
-function killTree(child: ChildProcess, sig: NodeJS.Signals): void {
-  try {
-    if (child.pid) process.kill(-child.pid, sig)
-  } catch {
-    child.kill(sig)
-  }
-}

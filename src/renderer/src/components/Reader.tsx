@@ -1,8 +1,8 @@
-import { ALargeSmall, Check, ChevronDown, ChevronLeft, ChevronUp, Cloud, FileOutput, GripVertical, Highlighter, Info, Languages, Minimize2, PanelLeft, PanelRight, PictureInPicture2, RefreshCw, ScanText, Search, SquarePen, X, Zap } from 'lucide-react'
+import { ALargeSmall, Check, ChevronDown, ChevronLeft, ChevronUp, Cloud, FileOutput, GripVertical, Highlighter, Info, Languages, Minimize2, PanelLeft, PanelRight, PictureInPicture2, RefreshCw, ScanText, Search, SquarePen, X, Zap, Eraser, Pencil } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type * as PdfJs from 'pdfjs-dist'
 import { sectionsOf } from '@shared/chunk'
-import type { Annotation, HlColor, MajorPoint, Paper, ReadMode, ReadPosition, ReflowDoc, SettingsView, Tier } from '@shared/types'
+import type { Annotation, HlColor, MajorPoint, Paper, ReadMode, ReadPosition, ReflowDoc, SettingsView, Tier, Term, Ink, AnnLabel } from '@shared/types'
 import { api, errText, type ReflowProgress } from '../api'
 import { showMenu } from '../lib/menu'
 import { loadPdf } from '../lib/pdf'
@@ -13,10 +13,11 @@ import { ExportDialog } from './ExportDialog'
 import { GlanceView } from './GlanceView'
 import { LeftPane, type LeftTab } from './LeftPane'
 import { PaperInfo } from './PaperInfo'
-import { PdfView } from './PdfView'
+import { INK_COLORS, INK_WIDTH, PdfView, type InkTool } from './PdfView'
 import { ReflowView } from './ReflowView'
 import { RegionEditor } from './RegionEditor'
 import { SelectionLayer, type SelInfo } from './Selection'
+import { ShotLayer } from './ShotLayer'
 import { t } from '@shared/i18n'
 
 export type Jump = { nonce: number; kind: 'block'; blockId: string; annId?: string } | { nonce: number; kind: 'page'; page: number; annId?: string; frac?: number }
@@ -26,8 +27,10 @@ let jumpSeq = 1
 const TIER_NAME: Record<Tier, string> = { flash: t('快速'), basic: t('精细'), simple: t('简单'), edited: t('调整过') }
 // 正文那一列最少这么宽：窗口放不下时收侧栏，不压正文
 const MID_MIN = 480
+// 正文列比这个窄，标题栏的文字按钮只留图标
+const COMPACT_BAR = 700
 
-export function Reader(props: { paperId: string; initialMode?: ReadMode; settings: SettingsView; onBack: () => void; onOpenPaper: (id: string) => void }) {
+export function Reader(props: { paperId: string; initialMode?: ReadMode; initialAnn?: string; settings: SettingsView; onBack: () => void; onOpenPaper: (id: string) => void }) {
   const { paperId, settings } = props
   const toast = useToast()
   const [paper, setPaper] = useState<Paper | null>(null)
@@ -48,6 +51,25 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
   const [attach, setAttach] = useState<Attach | null>(null)
   const [focusChat, setFocusChat] = useState(0)
   const [boxMode, setBoxMode] = useState(false)
+  // 原文模式的手写：拿着的是笔（哪个颜色）还是橡皮，没拿是 null；这篇的笔画；这次画的（⌘Z 撤销用）
+  const [inkTool, setInkTool] = useState<InkTool | null>(null)
+  const [inks, setInks] = useState<Ink[]>([])
+  const myInks = useRef<string[]>([])
+  const lastInk = useRef(INK_COLORS[0])
+  useEffect(() => {
+    if (!inkTool) return
+    const key = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setInkTool(null)
+      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && myInks.current.length) {
+        e.preventDefault()
+        const id = myInks.current.pop()!
+        setInks((l) => l.filter((k) => k.id !== id))
+        void api.inkDelete(id)
+      }
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [inkTool])
   const [shot, setShot] = useState<{ page: number; frac: [number, number, number, number] } | null>(null)
   const [zoom, setZoom] = useState(1)
   const [aaOpen, setAaOpen] = useState(false)
@@ -60,6 +82,9 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
   const [hoverAnn, setHoverAnn] = useState<string | null>(null)
   const [keysOn, setKeysOn] = useState(false)
   const [keys, setKeys] = useState<MajorPoint[] | null>(null)
+  const [terms, setTerms] = useState<Term[] | null>(null)
+  const [termsBusy, setTermsBusy] = useState(false)
+  const termHop = useRef<{ key: string; i: number }>({ key: '', i: -1 })
   const [keysBusy, setKeysBusy] = useState(false)
   const [density, setDensity] = useState<Density>('default')
   const [dialog, setDialog] = useState<'info' | 'export' | 'region' | null>(null)
@@ -84,6 +109,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
       // 新论文重排好之前停在原文，好了以后默认对照；之后记住上次的模式
       setMode(props.initialMode ?? p.lastMode ?? (d ? 'reflow' : 'pdf'))
       setAnns(await api.annList(paperId))
+      setInks(await api.inkList(paperId))
       setProg(await api.reflowProgress(paperId))
       void api.updatePaper(paperId, { lastOpened: Date.now() })
       api.pageTexts(paperId).then((t_) => alive && setPageTexts(t_))
@@ -159,6 +185,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
     setShot(null)
     setMode(m)
     setBoxMode(false)
+    setInkTool(null)
     void api.updatePaper(paperId, { lastMode: m })
   })
 
@@ -204,7 +231,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
   )
 
   // 高亮
-  const createAnn = useEvent(async (info: SelInfo, color: HlColor, note: string = ''): Promise<Annotation | null> => {
+  const createAnn = useEvent(async (info: SelInfo, color: HlColor, note: string = '', style: Annotation['style'] = 'highlight', label: AnnLabel | null = null): Promise<Annotation | null> => {
     const t_ = info.target
     if (!t_) return null
     const now = Date.now()
@@ -213,6 +240,8 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
       paperId,
       mode: t_.mode,
       color,
+      style,
+      label,
       text: info.text,
       note,
       page: t_.mode === 'pdf' ? t_.page : null,
@@ -225,7 +254,8 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
       createdAt: now,
       updatedAt: now
     }
-    await api.annSave(a)
+    // 对照模式里做的标注，主进程会按这几个字去原文里找它在第几页，带着页码回来
+    a.page = (await api.annSave(a)) ?? a.page
     setAnns((l) => [...l, a])
     void api.setSettings({ lastColor: color })
     window.getSelection()?.removeAllRanges()
@@ -269,6 +299,16 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
       if (a.page) setJump({ nonce: jumpSeq++, kind: 'page', page: a.page, annId: a.id, frac: a.rects?.[0]?.[1] })
     }
   })
+  // 从笔记页点进来的：论文和标注都读到了以后，跳到那一条
+  const cameFor = useRef(props.initialAnn)
+  useEffect(() => {
+    const a = cameFor.current && paper && mode ? anns.find((x) => x.id === cameFor.current) : undefined
+    if (!a) return
+    cameFor.current = undefined
+    const t_ = setTimeout(() => goTo(a), 400)
+    return () => clearTimeout(t_)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anns, paper, mode])
   const goBlock = useEvent((blockId: string) => {
     if (mode !== 'reflow') switchMode('reflow')
     setTimeout(() => setJump({ nonce: jumpSeq++, kind: 'block', blockId }), mode === 'reflow' ? 0 : 60)
@@ -321,6 +361,29 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
       setKeysBusy(false)
     }
   })
+  const loadTerms = useEvent(async (force?: boolean) => {
+    setTermsBusy(true)
+    try {
+      setTerms(await api.terms(paperId, !!force))
+    } catch (e) {
+      toast(t('列术语失败：{0}', errText(e)))
+    } finally {
+      setTermsBusy(false)
+    }
+  })
+  // 第一次点开「术语」这一栏就去要（之前要过的直接从缓存出来）
+  useEffect(() => {
+    if (leftTab === 'terms' && doc && !terms && !termsBusy) void loadTerms()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leftTab, doc])
+  // 点一条术语：跳到它下一次出现的那段，点一次往后一处，到头了回第一处
+  const onTerm = useEvent((blocks: string[]) => {
+    const key = blocks.join(',')
+    const h = termHop.current
+    h.i = h.key === key ? (h.i + 1) % blocks.length : 0
+    h.key = key
+    goBlock(blocks[h.i])
+  })
   const toggleKeys = useEvent(() => {
     if (!doc) return toast(t('重排好以后才能标重点'))
     const on = !keysOn
@@ -344,7 +407,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
         if (cmd === 'translate-all') setTrAll(true)
         if (cmd === 'paper-info') setDialog('info')
         if (cmd === 'box-select') {
-          switchMode('pdf')
+          if (mode !== 'reflow' || !doc) switchMode('pdf')
           setBoxMode(true)
         }
         if (cmd === 'ask-ai') {
@@ -489,7 +552,10 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
 
   const reflowBusy = !doc && (paper.reflow.flash === 'queued' || paper.reflow.flash === 'running' || prog?.status === 'running')
   const showRight = !rightCollapsed && !floating
+  const trPct = Math.round((trDone / Math.max(1, translatable.length)) * 100)
   const gridCols = `${leftCollapsed ? 0 : leftW}px minmax(${MID_MIN}px, 1fr) ${showRight ? rightFit : 0}px`
+  // 正文列窄的时候（13 寸屏幕开着 AI 栏）：标题栏里带字的按钮只留图标，不然搜索和显示设置会被挤出去
+  const compact = winW - (leftCollapsed ? 0 : leftW) - (showRight ? rightFit : 0) < COMPACT_BAR
   const meta = [paper.venue, paper.year, paper.progress >= 1 ? t('读完') : paper.progress > 0 ? t('读到 {0}%', Math.round(paper.progress * 100)) : ''].filter(Boolean).join(' · ')
 
   const chat = (
@@ -546,7 +612,8 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
                 { value: 'toc', label: t('目录') },
                 { value: 'notes', label: t('笔记') },
                 { value: 'figs', label: t('图表') },
-                { value: 'keys', label: t('重点') }
+                { value: 'keys', label: t('重点') },
+                { value: 'terms', label: t('术语') }
               ]}
             />
           </div>
@@ -566,6 +633,12 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
             sectionForPage={sectionForPage}
             keys={keys}
             keysBusy={keysBusy}
+            terms={terms}
+            termsBusy={termsBusy}
+            termMarks={settings.termMarks}
+            onTermMarks={(v) => void api.setSettings({ termMarks: v })}
+            onLoadTerms={(force) => void loadTerms(force)}
+            onTerm={onTerm}
             density={density}
             onDensity={(d) => {
               setDensity(d)
@@ -611,12 +684,13 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
           />
           {findOpen && <FindBar scroller={midRef} onClose={() => setFindOpen(false)} />}
           <div className="spacer" />
+          <div className="bar-tools">
           {mode === 'reflow' && doc && (
             <>
               {!trAllDone && settings.display !== 'src' && (
                 <button
                   className={'btn' + (trAll ? ' on' : '')}
-                  title={trAll ? t('点一下停止') : t('一次翻完全文（一篇算一次）')}
+                  title={trAll ? t('点一下停止') : compact ? t('全文翻译：一次翻完全文（一篇算一次）') : t('一次翻完全文（一篇算一次）')}
                   onClick={() => {
                     if (trAll) {
                       setTrAll(false)
@@ -625,7 +699,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
                   }}
                 >
                   {trAll ? <span className="spin spin-12" /> : <Languages size={16} />}
-                  {trAll ? t('翻译中 {0}%', Math.round((trDone / Math.max(1, translatable.length)) * 100)) : t('全文翻译')}
+                  {trAll ? (compact ? `${trPct}%` : t('翻译中 {0}%', trPct)) : !compact && t('全文翻译')}
                 </button>
               )}
               <button className="btn ghost" title={t('重排引擎')} onClick={(e) => void engineMenu(e)}>
@@ -640,6 +714,11 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
               </button>
             </>
           )}
+          {mode === 'reflow' && doc && (
+            <button className={'icon-btn' + (boxMode ? ' active' : '')} title={t('截图翻译：框选一块翻译或提问')} onClick={() => (setBoxMode((v) => !v), setSel(null))}>
+              <ScanText size={16} />
+            </button>
+          )}
           {mode === 'pdf' && (
             <>
               <button
@@ -652,8 +731,31 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
                 }}
               >
                 <ScanText size={16} />
-                {t('截图翻译')}
+                {!compact && t('截图翻译')}
               </button>
+              <button
+                className={'icon-btn' + (inkTool?.kind === 'pen' ? ' active' : '')}
+                title={t('笔：在页面上画（Esc 放下）')}
+                onClick={() => {
+                  setBoxMode(false)
+                  setSel(null)
+                  setInkTool((v) => (v?.kind === 'pen' ? null : { kind: 'pen', color: lastInk.current }))
+                }}
+              >
+                <Pencil size={16} />
+              </button>
+              {inkTool && (
+                <span className="ink-tools">
+                  {INK_COLORS.map((c) => (
+                    <button key={c} className={'ink-dot' + (inkTool.kind === 'pen' && inkTool.color === c ? ' on' : '')} title={t('换这个颜色')} onClick={() => ((lastInk.current = c), setInkTool({ kind: 'pen', color: c }))}>
+                      <span style={{ background: c }} />
+                    </button>
+                  ))}
+                  <button className={'icon-btn' + (inkTool.kind === 'eraser' ? ' active' : '')} title={t('橡皮：擦掉碰到的笔画')} onClick={() => setInkTool({ kind: 'eraser' })}>
+                    <Eraser size={16} />
+                  </button>
+                </span>
+              )}
               <button className="btn ghost num" title={t('缩放')} onClick={(e) => void zoomMenu(e)}>
                 {Math.round(zoom * 100)}%
                 <ChevronDown size={12} />
@@ -662,9 +764,9 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
           )}
           {mode === 'glance' && (
             <>
-              <button className="btn ghost" onClick={() => setRegenSignal((n) => n + 1)}>
+              <button className="btn ghost" title={t('重新生成')} onClick={() => setRegenSignal((n) => n + 1)}>
                 <RefreshCw size={16} />
-                {t('重新生成')}
+                {!compact && t('重新生成')}
               </button>
               {doc && (
                 <button className="icon-btn" title={t('导出双语 PDF')} onClick={() => setDialog('export')}>
@@ -673,6 +775,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
               )}
             </>
           )}
+          </div>
           <button className="icon-btn" title={t('文献信息 ⌘I')} onClick={() => setDialog('info')}>
             <Info size={16} />
           </button>
@@ -728,6 +831,19 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
                   })
                 }}
                 onRectsFound={(a, rects) => void api.annSave({ ...a, rects })}
+                inkTool={inkTool}
+                inks={inks}
+                onInkAdd={(d) => {
+                  if (inkTool?.kind !== 'pen') return
+                  const k: Ink = { id: crypto.randomUUID().slice(0, 12), paperId, page: d.page, color: inkTool.color, width: INK_WIDTH, points: d.points, createdAt: Date.now() }
+                  setInks((l) => [...l, k])
+                  myInks.current.push(k.id)
+                  void api.inkSave(k)
+                }}
+                onInkErase={(id) => {
+                  setInks((l) => l.filter((k) => k.id !== id))
+                  void api.inkDelete(id)
+                }}
               />
             ) : (
               <div className="center-note">{pdfErr ? t('打不开 PDF：{0}', pdfErr) : ''}</div>
@@ -744,6 +860,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
               hoverAnn={hoverAnn}
               sections={sections}
               marks={keysOn ? keys : null}
+              terms={settings.termMarks ? terms : null}
               initial={posRef.current}
               onPosition={(p, progress) => {
                 setCurBlock(p.blockId)
@@ -767,6 +884,16 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; setting
           )}
           {mode === 'glance' && <GlanceView paper={paper} onSection={goHeadingByName} hasDoc={!!doc} regenSignal={regenSignal} />}
         </div>
+        {mode === 'reflow' && boxMode && (
+          <ShotLayer
+            host={midRef}
+            onCancel={() => setBoxMode(false)}
+            onShot={(img, text, paragraph, rect) => {
+              setBoxMode(false)
+              setSel({ text, paragraph, image: img, target: null, getRect: () => rect })
+            }}
+          />
+        )}
         <SelectionLayer
           sel={sel}
           paper={paper}
@@ -934,6 +1061,27 @@ function AaPanel(props: { mode: ReadMode; settings: SettingsView; zoom: number; 
                     ]}
                   />
                 )}
+                {s.display === 'both' &&
+                  row(
+                    t('排列'),
+                    <Segmented
+                      className="sm block"
+                      value={s.trLayout}
+                      onChange={(v) => set({ trLayout: v })}
+                      options={[
+                        { value: 'stack', label: t('上下') },
+                        { value: 'side', label: t('左右') }
+                      ]}
+                    />
+                  )}
+                {s.display === 'both' &&
+                  row(
+                    t('意群'),
+                    <>
+                      <Switch on={s.senseGroups} onChange={(v) => set({ senseGroups: v })} label={t('意群')} />
+                      <span className="aa-hint">{t('一句一行，对应的意群同色')}</span>
+                    </>
+                  )}
                 {row(
                   t('译文样式'),
                   <Segmented

@@ -4,6 +4,7 @@ import Database from 'better-sqlite3'
 import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { IS_WIN } from './platform'
 
 export interface ZoteroCollection {
   id: number
@@ -37,16 +38,18 @@ export interface ZoteroLibrary {
   items: ZoteroItem[]
 }
 
-// Zotero 的数据目录：默认 ~/Zotero，用户改过的在 prefs.js 的 extensions.zotero.dataDir
-export function findZoteroDir(home = homedir()): string | null {
-  const profiles = join(home, 'Library/Application Support/Zotero/Profiles')
+// Zotero 的数据目录：默认 ~/Zotero，用户改过的在 prefs.js 的 extensions.zotero.dataDir。
+// 配置文件夹 Mac 在 Application Support 里，Windows 在 %APPDATA%\Zotero\Zotero（prefs.js 里的路径反斜杠是转义过的）
+export function findZoteroDir(home = homedir(), win = IS_WIN): string | null {
+  const profiles = win ? join(process.env.APPDATA ?? join(home, 'AppData', 'Roaming'), 'Zotero', 'Zotero', 'Profiles') : join(home, 'Library/Application Support/Zotero/Profiles')
   if (existsSync(profiles))
     for (const p of readdirSync(profiles)) {
       const prefs = join(profiles, p, 'prefs.js')
       if (!existsSync(prefs)) continue
       const m = /user_pref\("extensions\.zotero\.dataDir",\s*"([^"]+)"\)/.exec(readFileSync(prefs, 'utf8'))
       const custom = /user_pref\("extensions\.zotero\.useDataDir",\s*true\)/.test(readFileSync(prefs, 'utf8'))
-      if (m && custom && existsSync(join(m[1], 'zotero.sqlite'))) return m[1]
+      const dir = m?.[1].replace(/\\\\/g, '\\')
+      if (dir && custom && existsSync(join(dir, 'zotero.sqlite'))) return dir
     }
   const def = join(home, 'Zotero')
   return existsSync(join(def, 'zotero.sqlite')) ? def : null

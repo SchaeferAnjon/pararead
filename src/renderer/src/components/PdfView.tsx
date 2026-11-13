@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { LABEL_NAME } from '@shared/annLabels'
 import type * as PdfJs from 'pdfjs-dist'
-import type { Annotation, Paper, ReadPosition } from '@shared/types'
+import type { Annotation, Paper, ReadPosition, Ink} from '@shared/types'
 import { pdfjs } from '../lib/pdf'
 import { findTextRange, normRects, selectionText } from '../lib/selection'
 import { useNotePreview } from '../lib/ui'
@@ -12,6 +13,11 @@ interface Size {
   w: number
   h: number
 }
+
+// 手写笔：当前选的是笔（带颜色）还是橡皮；笔画粗细（缩放 100% 时的像素）
+export type InkTool = { kind: 'pen'; color: string } | { kind: 'eraser' }
+export const INK_WIDTH = 2.5
+export const INK_COLORS = ['#e5484d', '#2f6fde', '#1d1d1f']
 
 // 原文模式：pdf.js 连续滚动。页面进入视口附近才渲染画布和文字层；高亮是盖在文字层上的矩形。
 export function PdfView(props: {
@@ -29,6 +35,10 @@ export function PdfView(props: {
   onSelect: (s: SelInfo | null) => void
   onBox: (dataUrl: string, page: number, frac: [number, number, number, number], text: string) => void
   onRectsFound: (a: Annotation, rects: number[][]) => void
+  inkTool: InkTool | null
+  inks: Ink[]
+  onInkAdd: (k: { page: number; points: [number, number][] }) => void
+  onInkErase: (id: string) => void
 }) {
   const { pdf } = props
   const scroller = useRef<HTMLDivElement>(null)
@@ -41,6 +51,9 @@ export function PdfView(props: {
   const [found, setFound] = useState<Record<string, number[][]>>({})
   const [flashAnn, setFlashAnn] = useState<string | null>(null)
   const [box, setBox] = useState<{ page: number; x0: number; y0: number; x1: number; y1: number } | null>(null)
+  // 手写：正在画的这一笔（页内归一化坐标），橡皮按住时一路擦
+  const [drawing, setDrawing] = useState<{ page: number; points: [number, number][] } | null>(null)
+  const erasing = useRef(false)
   const restored = useRef(false)
   const chipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -163,6 +176,13 @@ export function PdfView(props: {
 
   // 选区：松开鼠标时看选中了什么
   const onMouseUp = (e: React.MouseEvent): void => {
+    erasing.current = false
+    if (drawing) {
+      if (drawing.points.length >= 2) props.onInkAdd(drawing)
+      setDrawing(null)
+      return
+    }
+    if (props.inkTool) return
     if (box) return finishBox()
     const sel = window.getSelection()
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
@@ -205,7 +225,39 @@ export function PdfView(props: {
   }
 
   // 框选：标题栏「框选」或按住 ⌥ 拖
+  // 鼠标在哪一页的哪个位置（页内 0 到 1）
+  const pagePoint = (e: { clientX: number; clientY: number }, page?: number): { page: number; x: number; y: number; w: number; h: number } | null => {
+    const el = (page ? document.querySelector(`.page[data-page="${page}"]`) : document.elementFromPoint(e.clientX, e.clientY)?.closest('.page')) as HTMLElement | null
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    return { page: Number(el.dataset.page), x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)), w: r.width, h: r.height }
+  }
+  // 橡皮：碰到的笔画（离任何一段不到 8 像素）整笔擦掉
+  const eraseAt = (e: { clientX: number; clientY: number }): void => {
+    const q = pagePoint(e)
+    if (!q) return
+    const near = (k: Ink): boolean =>
+      k.points.some((a, i) => {
+        const b = k.points[i + 1] ?? a
+        const [ax, ay, bx, by, px, py] = [a[0] * q.w, a[1] * q.h, b[0] * q.w, b[1] * q.h, q.x * q.w, q.y * q.h]
+        const dx = bx - ax
+        const dy = by - ay
+        const t_ = dx || dy ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy))) : 0
+        return Math.hypot(px - (ax + t_ * dx), py - (ay + t_ * dy)) < 8
+      })
+    for (const k of props.inks) if (k.page === q.page && near(k)) props.onInkErase(k.id)
+  }
+
   const onMouseDown = (e: React.MouseEvent): void => {
+    if (props.inkTool && e.button === 0) {
+      const q = pagePoint(e)
+      if (!q) return
+      e.preventDefault()
+      window.getSelection()?.removeAllRanges()
+      if (props.inkTool.kind === 'pen') setDrawing({ page: q.page, points: [[q.x, q.y]] })
+      else ((erasing.current = true), eraseAt(e))
+      return
+    }
     if (!(props.boxMode || e.altKey) || e.button !== 0) return
     const pageEl = (e.target as Element).closest('.page') as HTMLElement | null
     if (!pageEl) return
@@ -223,7 +275,7 @@ export function PdfView(props: {
           const r = el.getBoundingClientRect()
           if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
             const a = props.anns.find((n) => n.id === el.dataset.ann)
-            if (a?.note) return { note: a.note, rect: r }
+            if (a?.note || a?.label) return { note: [a.label ? `【${LABEL_NAME[a.label]}】` : '', a.note].filter(Boolean).join('\n'), rect: r }
           }
         }
         return null
@@ -233,6 +285,13 @@ export function PdfView(props: {
   )
 
   const onMouseMove = (e: React.MouseEvent): void => {
+    if (drawing) {
+      const q = pagePoint(e, drawing.page)
+      const last = drawing.points[drawing.points.length - 1]
+      if (q && Math.hypot((q.x - last[0]) * q.w, (q.y - last[1]) * q.h) >= 1.5) setDrawing({ ...drawing, points: [...drawing.points, [Math.round(q.x * 1e4) / 1e4, Math.round(q.y * 1e4) / 1e4]] })
+      return
+    }
+    if (erasing.current) return eraseAt(e)
     preview.onMove(e)
     if (!box) return
     const pageEl = document.querySelector(`.page[data-page="${box.page}"]`)
@@ -277,7 +336,7 @@ export function PdfView(props: {
   return (
     <div className={'pdf-wrap' + (props.invert ? ' invert' : '')}>
       <div
-        className={'pdf-scroller' + (props.boxMode ? ' box-mode' : '')}
+        className={'pdf-scroller' + (props.boxMode ? ' box-mode' : '') + (props.inkTool ? ` ink-mode ink-${props.inkTool.kind}` : '')}
         ref={scroller}
         onScroll={onScroll}
         onMouseUp={onMouseUp}
@@ -305,6 +364,8 @@ export function PdfView(props: {
             }}
             box={box && box.page === i + 1 ? box : null}
             shot={props.shot && props.shot.page === i + 1 ? props.shot.frac : null}
+            inks={props.inks.filter((k) => k.page === i + 1)}
+            drawing={drawing && drawing.page === i + 1 && props.inkTool?.kind === 'pen' ? { points: drawing.points, color: props.inkTool.color } : null}
           />
         ))}
       </div>
@@ -372,6 +433,8 @@ const PageView = memo(function PageView(p: {
   onFound: (a: Annotation, rects: number[][]) => void
   box: { x0: number; y0: number; x1: number; y1: number } | null
   shot: [number, number, number, number] | null
+  inks: Ink[]
+  drawing: { points: [number, number][]; color: string } | null
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const textRef = useRef<HTMLDivElement>(null)
@@ -432,15 +495,23 @@ const PageView = memo(function PageView(p: {
           (a.rects?.length ? a.rects : (p.found[a.id] ?? [])).map((r, i) => (
             <div
               key={a.id + i}
-              className={'pdf-hl' + (a.note ? ' noted' : '') + (p.hoverAnn === a.id ? ' hover' : '') + (p.flashAnn === a.id ? ' flash' : '')}
+              className={'pdf-hl' + (a.style === 'underline' ? ' ul' : '') + (a.note || a.label ? ' noted' : '') + (a.label ? ` lb-${a.label}` : '') + (p.hoverAnn === a.id ? ' hover' : '') + (p.flashAnn === a.id ? ' flash' : '')}
               data-ann={a.id}
               data-color={a.color}
-              style={{ left: `${r[0] * 100}%`, top: `${r[1] * 100}%`, width: `${r[2] * 100}%`, height: `${r[3] * 100}%`, background: HL_BG[a.color] }}
+              style={{ left: `${r[0] * 100}%`, top: `${r[1] * 100}%`, width: `${r[2] * 100}%`, height: `${r[3] * 100}%`, background: a.label ? 'none' : HL_BG[a.color] }}
             />
           ))
         )}
       </div>
       <div className="textLayer" ref={textRef} />
+      {(p.inks.length > 0 || p.drawing) && (
+        <svg className="ink-layer" viewBox="0 0 1 1" preserveAspectRatio="none">
+          {p.inks.map((k) => (
+            <polyline key={k.id} data-ink={k.id} points={k.points.map((q) => q.join(',')).join(' ')} stroke={k.color} strokeWidth={k.width * p.scale} />
+          ))}
+          {p.drawing && <polyline points={p.drawing.points.map((q) => q.join(',')).join(' ')} stroke={p.drawing.color} strokeWidth={INK_WIDTH * p.scale} />}
+        </svg>
+      )}
       {p.shot && <div className="box-rect shot" style={{ left: `${p.shot[0] * 100}%`, top: `${p.shot[1] * 100}%`, width: `${p.shot[2] * 100}%`, height: `${p.shot[3] * 100}%` }} />}
       {p.box && (
         <div

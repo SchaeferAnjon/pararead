@@ -13,9 +13,13 @@ import { App } from './App'
 import { PrintView } from './components/PrintView'
 import { SettingsPage } from './components/SettingsPage'
 import { uiLang } from '@shared/i18n'
+import { ON_WIN } from '@shared/kbd'
 
 // 界面语言写到 <html lang>：断词、字体回退跟着走，样式里也按它给长词多的语言放宽列（library.css）
 document.documentElement.lang = uiLang() === 'zh' ? 'zh-Hans' : uiLang()
+
+// Windows：没有红绿灯、没有毛玻璃，右上角是系统的窗口按钮（样式里按 .platform-win 调）
+if (ON_WIN) document.documentElement.classList.add('platform-win')
 
 // 主题：主进程 nativeTheme.themeSource 决定跟随系统还是固定，这里按 prefers-color-scheme 设 data-theme
 const mq = window.matchMedia('(prefers-color-scheme: dark)')

@@ -1,14 +1,20 @@
 import { BookOpen, Check, Copy, CornerDownRight, ExternalLink, Maximize2, MessageCircleQuestion, Minimize2, Plus } from 'lucide-react'
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { alignPosition } from '@shared/chunk'
+import { sensesKey } from '@shared/hash'
 import { CITE_RE, expandCite, findReferences, plain } from '@shared/refs'
-import type { Annotation, Block, MajorPoint, Paper, ReadPosition, ReflowDoc, SettingsView } from '@shared/types'
+import { termOf, termRegex } from '@shared/terms'
+import { LABEL_NAME } from '@shared/annLabels'
+import { alignOffsets, counterpart, cut, needsMd, senseable, toMd, type SenseSentence, type Span } from '@shared/senses'
+import type { Annotation, Block, MajorPoint, Paper, ReadPosition, ReflowDoc, SettingsView, Term } from '@shared/types'
 import { api, errText, type ReflowProgress, type SearchHit } from '../api'
 import { Markdown } from '../lib/Markdown'
 import { offsetsIn, rangeAt, selectionText } from '../lib/selection'
+import { useSenses } from '../lib/senses'
 import type { TrState, useTranslations } from '../lib/translations'
 import { authorsShort, fmtElapsed, Skeleton, useEvent, useNotePreview, useToast } from '../lib/ui'
 import { MAJOR_NAME } from './LeftPane'
+import { Lightbox } from './Lightbox'
 import type { Jump } from './Reader'
 import type { SelInfo } from './Selection'
 import { t } from '@shared/i18n'
@@ -27,6 +33,7 @@ export function ReflowView(props: {
   hoverAnn: string | null
   sections: Map<string, string>
   marks: MajorPoint[] | null
+  terms: Term[] | null
   initial: ReadPosition
   onPosition: (p: { blockId: string; blockHash: string; textPrefix: string; heading: string; offset: number }, progress: number) => void
   onSelect: (s: SelInfo | null) => void
@@ -43,7 +50,9 @@ export function ReflowView(props: {
   const scroller = useRef<HTMLDivElement>(null)
   const article = useRef<HTMLElement>(null)
   const [now, setNow] = useState(Date.now())
+  // 点图放大：弹出大图盖住整个窗口（Lightbox），这里记着要放大的那张图的地址
   const [zoomed, setZoomed] = useState<string | null>(null)
+  const imgSrc = (blockId: string): string | null => scroller.current?.querySelector<HTMLImageElement>(`[data-block="${CSS.escape(blockId)}"] img`)?.src ?? null
   const [simpleBusy, setSimpleBusy] = useState(false)
   const [cite, setCite] = useState<{ ns: string[]; n: string; range: Range } | null>(null)
   const [tags, setTags] = useState<{ top: number; left: number; label: string }[]>([])
@@ -87,6 +96,111 @@ export function ReflowView(props: {
     }
   }, [doc, settings.display, tr])
 
+  // 意群显示：视口上下一屏内、译文已经到了的正文段去要意群（一段一个请求，主进程排队、缓存）
+  const senseOn = settings.display === 'both' && settings.senseGroups
+  const side = settings.display === 'both' && settings.trLayout === 'side'
+  const senseWarned = useRef(false)
+  const sn = useSenses(props.paper.id, (msg) => {
+    if (senseWarned.current) return
+    senseWarned.current = true
+    toast(t('没拿到原文和译文的对应：{0}', msg))
+  })
+  useEffect(() => {
+    if (!senseOn) return
+    senseWarned.current = false
+    sn.retryFailed()
+    return () => void api.cancelSenses(props.paper.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [senseOn, props.paper.id])
+  useEffect(() => {
+    const el = scroller.current
+    if (!senseOn || !doc || !el) return
+    const byId = new Map(doc.blocks.map((b) => [b.id, b]))
+    let t_: ReturnType<typeof setTimeout> | null = null
+    const scan = (): void => {
+      t_ = null
+      const box = el.getBoundingClientRect()
+      const items: { en: string; zh: string; far: number }[] = []
+      const mid = (box.top + box.bottom) / 2
+      for (const n of el.querySelectorAll<HTMLElement>('.blk.paragraph')) {
+        const r = n.getBoundingClientRect()
+        if (r.bottom < box.top - box.height) continue
+        if (r.top > box.bottom + box.height) break
+        const b = byId.get(n.dataset.block!)
+        const s = b && tr.map[tr.keyOf(b)]
+        // 离窗口中间近的先要：眼前这几段先出来
+        if (b && s && 'text' in s && senseable(b.md)) items.push({ en: b.md.trim(), zh: s.text.trim(), far: r.top <= mid && r.bottom >= mid ? 0 : Math.min(Math.abs(r.top - mid), Math.abs(r.bottom - mid)) })
+      }
+      if (items.length) void sn.request(items.sort((a, b) => a.far - b.far).map(({ en, zh }) => ({ en, zh })))
+    }
+    const later = (): void => void (t_ ??= setTimeout(scan, 150))
+    later()
+    el.addEventListener('scroll', later, { passive: true })
+    return () => {
+      el.removeEventListener('scroll', later)
+      if (t_) clearTimeout(t_)
+    }
+  }, [senseOn, doc, tr, sn.request])
+  const senseOf = (b: Block): SenseSentence[] | undefined => {
+    if (!senseOn || b.type !== 'paragraph') return undefined
+    const s = tr.map[tr.keyOf(b)]
+    if (!s || !('text' in s)) return undefined
+    const st = sn.map[sensesKey(b.md.trim(), s.text.trim())]
+    return st && 'data' in st ? st.data : undefined
+  }
+  // 选中一边、另一边跟着亮：记下选区在哪一段、哪一边、画出来的字符偏移；对应关系用同一份意群对齐（没有就去要，一段一次）
+  const [link, setLink] = useState<{ blockId: string; inTr: boolean; start: number; end: number } | null>(null)
+  useEffect(() => {
+    const on = (): void => {
+      if (window.getSelection()?.isCollapsed) setLink(null)
+    }
+    document.addEventListener('selectionchange', on)
+    return () => document.removeEventListener('selectionchange', on)
+  }, [])
+  const linkBlock = link ? doc?.blocks.find((b) => b.id === link.blockId) : undefined
+  const linkTr = linkBlock ? tr.map[tr.keyOf(linkBlock)] : undefined
+  const linkPair = linkBlock && linkTr && 'text' in linkTr ? { en: linkBlock.md.trim(), zh: linkTr.text.trim() } : null
+  const linkKey = linkPair ? sensesKey(linkPair.en, linkPair.zh) : ''
+  useEffect(() => {
+    if (linkPair) void sn.request([linkPair])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkKey, sn.request])
+  const linkState = linkKey ? sn.map[linkKey] : undefined
+  const linkData = linkState && 'data' in linkState ? linkState.data : null
+  useEffect(() => {
+    const blk = link && scroller.current?.querySelector(`[data-block="${CSS.escape(link.blockId)}"]`)
+    const srcEl = blk?.querySelector('.src')
+    const trEl = blk?.querySelector('.tr-text')
+    if (!link || !linkPair || !linkData || !srcEl || !trEl) return
+    const en = alignOffsets(linkPair.en, srcEl.textContent ?? '')
+    const zh = alignOffsets(linkPair.zh, trEl.textContent ?? '')
+    const [from, to, target] = link.inTr ? [zh, en, srcEl] : [en, zh, trEl]
+    const ranges = counterpart(linkData, link.inTr ? 'zh' : 'en', toMd(from, link.start), toMd(from, link.end))
+      .map(([a, b]) => rangeAt(target, to[a], to[b]))
+      .filter((r): r is Range => !!r && !r.collapsed)
+    if (!ranges.length) return
+    CSS.highlights.set('sel-link', new Highlight(...ranges))
+    return () => void CSS.highlights.delete('sel-link')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [link, linkKey, linkData, senseOn, side])
+
+  // 鼠标停在一块上：原文和译文里对上的那几段一起亮
+  const hot = useRef<{ key: string; nodes: Element[] }>({ key: '', nodes: [] })
+  const onOver = (e: React.MouseEvent): void => {
+    const sg = (e.target as Element).closest('.sg')
+    const blk = sg?.closest('.blk')
+    const key = sg && blk ? `${(blk as HTMLElement).dataset.block}:${sg.getAttribute('data-k')}` : ''
+    if (key === hot.current.key) return
+    for (const n of hot.current.nodes) n.classList.remove('hot')
+    hot.current = { key, nodes: sg && blk ? [...blk.querySelectorAll(`.sg[data-k="${sg.getAttribute('data-k')}"]`)] : [] }
+    hot.current.nodes.forEach((n) => n.classList.add('hot'))
+  }
+  // 鼠标移出正文（到标题栏、侧栏）：亮着的那一块熄掉
+  const offHot = (): void => {
+    for (const n of hot.current.nodes) n.classList.remove('hot')
+    hot.current = { key: '', nodes: [] }
+  }
+
   // 位置：顶部那块的哈希、文字前缀、所在标题
   const onScroll = (): void => {
     const el = scroller.current
@@ -129,6 +243,19 @@ export function ReflowView(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc])
 
+  // 换排法（上下 / 左右）每段的高度都变了：让原来顶上那一段还在顶上
+  const layoutKey = `${side}|${senseOn}`
+  const lastSide = useRef(layoutKey)
+  useLayoutEffect(() => {
+    if (lastSide.current === layoutKey) return
+    lastSide.current = layoutKey
+    const pos = posRef.current
+    const id = doc && pos ? alignPosition(doc.blocks, pos) : null
+    const n = id ? scroller.current?.querySelector<HTMLElement>(`[data-block="${CSS.escape(id)}"]`) : null
+    if (n && scroller.current) scroller.current.scrollTop += n.getBoundingClientRect().top - scroller.current.getBoundingClientRect().top + Math.min(pos!.offset, 0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutKey])
+
   // 跳转
   useEffect(() => {
     const j = props.jump
@@ -148,7 +275,7 @@ export function ReflowView(props: {
   useEffect(() => {
     const t_ = setTimeout(() => setHlTick((x) => x + 1), 60)
     return () => clearTimeout(t_)
-  }, [doc, props.anns, settings.display, tr.map, props.marks])
+  }, [doc, props.anns, settings.display, tr.map, props.marks, sn.map, senseOn, props.terms])
   useEffect(() => {
     const el = article.current
     if (!el) return
@@ -159,6 +286,7 @@ export function ReflowView(props: {
   const refs = useMemo(() => (doc ? findReferences(doc.blocks) : []), [doc])
   const annRanges = useRef(new Map<string, Range>())
   const citeRanges = useRef<{ range: Range; inner: string }[]>([])
+  const termRanges = useRef<{ range: Range; term: Term }[]>([])
   useEffect(() => {
     const root = scroller.current
     if (!root || !doc) return
@@ -175,8 +303,12 @@ export function ReflowView(props: {
       const r = rangeAt(el, a.start, a.end)
       if (!r) continue
       ranges.set(a.id, r)
-      ;(groups[`hl-${a.color}`] ??= []).push(r)
-      if (a.note) (groups[`hl-note-${a.color}`] ??= []).push(r)
+      // 打了「看不懂」「有质疑」的只画标签的波浪线，不铺底色、不画批注线
+      if (!a.label) {
+        ;(groups[`${a.style === 'underline' ? 'ul' : 'hl'}-${a.color}`] ??= []).push(r)
+        if (a.note) (groups[`hl-note-${a.color}`] ??= []).push(r)
+      }
+      if (a.label) (groups[`lb-${a.label}`] ??= []).push(r)
       if (props.hoverAnn === a.id) (groups['hl-hover'] ??= []).push(r)
     }
     annRanges.current = ranges
@@ -197,21 +329,58 @@ export function ReflowView(props: {
         }
       }
     citeRanges.current = cites
+    // 术语：正文（原文那一边）里的每一处画虚线，记下是哪个术语，悬停时出解释
+    const termHits: { range: Range; term: Term }[] = []
+    const tre = props.terms ? termRegex(props.terms) : null
+    if (tre && props.terms)
+      for (const el of root.querySelectorAll('.blk .src')) {
+        const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentElement?.closest('.katex') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) })
+        for (let n = w.nextNode(); n; n = w.nextNode())
+          for (const m of (n as Text).data.matchAll(tre)) {
+            const x = termOf(props.terms, m[0])
+            if (!x) continue
+            const r = document.createRange()
+            r.setStart(n, m.index!)
+            r.setEnd(n, m.index! + m[0].length)
+            termHits.push({ range: r, term: x })
+          }
+      }
+    termRanges.current = termHits
+    groups['term'] = termHits.map((h) => h.range)
     groups['cite'] = cites.map((c) => c.range)
     if (cite) groups['cite-on'] = [cite.range]
     // AI 重点句
     const tagList: { top: number; left: number; label: string }[] = []
+    const wantAlign: { en: string; zh: string }[] = []
     const art = article.current?.getBoundingClientRect()
     for (const m of props.marks ?? []) {
       const el = root.querySelector(`[data-block="${CSS.escape(m.blockId)}"] .src`)
       const r = el && findText(el, m.text)
       if (!r) continue
       ;(groups['ai-mark'] ??= []).push(r)
+      // 译文里对应的那一句也圈上：用意群的那份对齐；这一段还没有对齐就先只圈原文，同时去要，到了再圈
+      const blk = doc.blocks.find((x) => x.id === m.blockId)
+      const trState = blk && tr.map[tr.keyOf(blk)]
+      const trEl = root.querySelector(`[data-block="${CSS.escape(m.blockId)}"] .tr-text`)
+      if (blk && trState && 'text' in trState && trEl) {
+        const pair = { en: blk.md.trim(), zh: trState.text.trim() }
+        const st = sn.map[sensesKey(pair.en, pair.zh)]
+        const off = st && 'data' in st ? offsetsIn(el, r) : null
+        if (st && 'data' in st && off) {
+          const en = alignOffsets(pair.en, el.textContent ?? '')
+          const zh = alignOffsets(pair.zh, trEl.textContent ?? '')
+          for (const [a, b] of counterpart(st.data, 'en', toMd(en, off.start), toMd(en, off.end))) {
+            const q = rangeAt(trEl, zh[a], zh[b])
+            if (q && !q.collapsed) groups['ai-mark'].push(q)
+          }
+        } else if (!st) wantAlign.push(pair)
+      }
       const first = r.getClientRects()[0]
       if (first && art) tagList.push({ top: first.top - art.top, left: el.getBoundingClientRect().left - art.left, label: MAJOR_NAME[m.type] })
     }
     setTags(tagList)
-    const names = ['yellow', 'green', 'blue', 'red'].flatMap((c) => [`hl-${c}`, `hl-note-${c}`]).concat('hl-hover', 'cite', 'cite-on', 'ai-mark')
+    if (wantAlign.length) void sn.request(wantAlign)
+    const names = ['yellow', 'green', 'blue', 'red'].flatMap((c) => [`hl-${c}`, `ul-${c}`, `hl-note-${c}`]).concat('hl-hover', 'cite', 'cite-on', 'ai-mark', 'term', 'lb-confused', 'lb-doubt')
     for (const nm of names) CSS.highlights.set(nm, new Highlight(...(groups[nm] ?? [])))
     return () => names.forEach((nm) => CSS.highlights.delete(nm))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -224,12 +393,18 @@ export function ReflowView(props: {
         if (!pos) return null
         for (const [id, r] of annRanges.current) {
           const a = props.anns.find((n) => n.id === id)
-          if (a?.note && r.isPointInRange(pos.offsetNode, pos.offset)) {
+          if ((a?.note || a?.label) && r.isPointInRange(pos.offsetNode, pos.offset)) {
             const rects = [...r.getClientRects()]
             const rect = rects.find((q) => y >= q.top && y <= q.bottom) ?? r.getBoundingClientRect()
-            return { note: a.note, rect }
+            return { note: [a.label ? `【${LABEL_NAME[a.label]}】` : '', a.note].filter(Boolean).join('\n'), rect }
           }
         }
+        for (const h of termRanges.current)
+          if (h.range.isPointInRange(pos.offsetNode, pos.offset)) {
+            const rect = [...h.range.getClientRects()].find((q) => y >= q.top && y <= q.bottom) ?? h.range.getBoundingClientRect()
+            const head = h.term.zh && h.term.zh !== h.term.term ? `${h.term.term}　${h.term.zh}` : h.term.term
+            return { note: h.term.explain ? `${head}\n${h.term.explain}` : head, rect }
+          }
         return null
       },
       [props.anns]
@@ -268,6 +443,7 @@ export function ReflowView(props: {
         }
       }
       setCite(null)
+      setLink(null)
       props.onSelect(null)
       return
     }
@@ -283,6 +459,7 @@ export function ReflowView(props: {
     const inTr = !!startEl.closest('.tr')
     const root = blockEl.querySelector(inTr ? '.tr-text' : '.src')
     const off = root ? offsetsIn(root, range) : null
+    setLink(off && block.translatable ? { blockId: block.id, inTr, start: off.start, end: off.end } : null)
     const r = range.cloneRange()
     props.onSelect({
       text,
@@ -301,7 +478,7 @@ export function ReflowView(props: {
     const capText = cap ? plain(cap.md) : ''
     if (b.type === 'image') {
       const src = /!\[[^\]]*\]\((data:image[^)]+)\)/.exec(b.md)?.[1]
-      if (act === 'zoom') setZoomed((z) => (z === b.id ? null : b.id))
+      if (act === 'zoom') setZoomed(imgSrc(b.id))
       if (!src) return
       if (act === 'ai') props.onAskImage(src, capText, t('解释这张图'))
       if (act === 'copy') {
@@ -347,9 +524,9 @@ export function ReflowView(props: {
     )
 
   return (
-    <div className="reflow-scroller" ref={scroller} onScroll={onScroll} onMouseUp={onMouseUp} onMouseMove={preview.onMove} onMouseLeave={preview.onLeave}>
+    <div className="reflow-scroller" ref={scroller} onScroll={onScroll} onMouseUp={onMouseUp} onMouseMove={preview.onMove} onMouseLeave={() => (preview.onLeave(), offHot())} onMouseOver={onOver}>
       {preview.node}
-      <article ref={article} className={`reflow display-${settings.display} tr-${settings.trStyle}`}>
+      <article ref={article} className={`reflow display-${settings.display} tr-${settings.trStyle}${side ? ' lay-side' : ''}`}>
         <h1 className="doc-title">{props.paper.title}</h1>
         <div className="doc-authors">
           {[authorsShort(props.paper.authors), [props.paper.venue, props.paper.year].filter(Boolean).join(' ')].filter(Boolean).join(' · ')}
@@ -377,14 +554,17 @@ export function ReflowView(props: {
               b={b}
               tr={b.translatable ? tr.map[tr.keyOf(b)] : undefined}
               display={settings.display}
-              zoomed={zoomed === b.id}
+              sense={senseOf(b)}
+              side={side}
+              zoomed={false}
               onAct={blockAct}
-              onZoom={() => setZoomed((z) => (z === b.id ? null : b.id))}
+              onZoom={() => setZoomed(imgSrc(b.id))}
               onRetry={() => tr.retry(b)}
             />
           )
         )}
       </article>
+      {zoomed && <Lightbox src={zoomed} onClose={() => setZoomed(null)} />}
       {cite && (
         <CitePop
           key={cite.n}
@@ -641,7 +821,7 @@ function HoverBar(p: { b: Block; onAct: (b: Block, a: 'ai' | 'copy' | 'zoom') =>
   )
 }
 
-const BlockView = memo(function BlockView(p: { b: Block; tr: TrState | undefined; display: string; zoomed: boolean; onAct: (b: Block, a: 'ai' | 'copy' | 'zoom') => void; onZoom: () => void; onRetry: () => void }) {
+const BlockView = memo(function BlockView(p: { b: Block; tr: TrState | undefined; display: string; sense?: SenseSentence[]; side?: boolean; zoomed: boolean; onAct: (b: Block, a: 'ai' | 'copy' | 'zoom') => void; onZoom: () => void; onRetry: () => void }) {
   const { b } = p
   const showSrc = !b.translatable || p.display !== 'tr'
   const showTr = b.translatable && p.display !== 'src'
@@ -671,6 +851,32 @@ const BlockView = memo(function BlockView(p: { b: Block; tr: TrState | undefined
         <HoverBar b={b} onAct={p.onAct} />
       </div>
     )
+  // 意群显示：一句原文配一句译文。.src 和 .tr-text 里的文字一个字不变（高亮按字符偏移存，开关意群不能错位），
+  // 只是按句包成 .sen；这两个容器不占盒子（display: contents），各句按行号摆进同一个网格里交错排
+  if (p.sense && p.tr && 'text' in p.tr) {
+    const src = b.md.trim()
+    const trText = p.tr.text.trim()
+    return (
+      <div className={`blk ${b.type} senses`} data-block={b.id}>
+        <div className="src" lang="en">
+          {p.sense.map((s, i) => (
+            <span key={i} className="sen" style={{ gridRow: p.side ? i + 1 : 2 * i + 1, gridColumn: 1 }}>
+              <Pieces text={src} range={s.en} marks={s.chunks.map((c, k) => ({ span: c.en, k: c.zh.length ? k : null }))} sen={i} />
+            </span>
+          ))}
+        </div>
+        <div className="tr" lang="zh-Hans">
+          <div className="tr-text">
+            {p.sense.map((s, i) => (
+              <span key={i} className="sen" style={{ gridRow: p.side ? i + 1 : 2 * i + 2, gridColumn: p.side ? 2 : 1 }}>
+                <Pieces text={trText} range={s.zh} marks={s.chunks.flatMap((c, k) => c.zh.map((z) => ({ span: z, k })))} sen={i} />
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
   const Tag = b.type === 'heading' ? (`h${Math.min(4, (b.level ?? 2) + 1)}` as 'h2') : 'div'
   return (
     <div className={`blk ${b.type}${b.type === 'heading' ? ` lv${b.level}` : ''}`} data-block={b.id}>
@@ -683,6 +889,33 @@ const BlockView = memo(function BlockView(p: { b: Block; tr: TrState | undefined
     </div>
   )
 })
+
+// 一句里的各个片段：意群包一层带颜色号的 span，意群之间的字原样放
+function Pieces(p: { text: string; range: Span; marks: { span: Span; k: number | null }[]; sen: number }) {
+  return cut(p.text, p.range, p.marks).map((x, i) =>
+    x.k === null ? (
+      <Piece key={i} text={x.text} />
+    ) : (
+      <span key={i} className="sg" data-c={x.k % 4} data-k={`${p.sen}-${x.k}`}>
+        <Piece text={x.text} />
+      </span>
+    )
+  )
+}
+// 和整段一起画时一样的文字：前后的空白原样留着（Markdown 会吃掉），中间有公式、强调这些记号的才交给 Markdown
+const softBreak = (s: string): string => s.replace(/[ \t]*\n[ \t]*/g, '\n')
+function Piece(p: { text: string }) {
+  const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(p.text)!
+  // 单独拿出来画时，开头的「1) 」「- 」会被当成列表：转义掉
+  const core = m[2].replace(/^(\d+)([.)]\s)/, '$1\\$2').replace(/^([-+*>#])(\s)/, '\\$1$2')
+  return (
+    <>
+      {softBreak(m[1])}
+      {needsMd(m[2]) ? <Markdown text={core} inline /> : softBreak(m[2])}
+      {softBreak(m[3])}
+    </>
+  )
+}
 
 function TrView(p: { tr: TrState | undefined; onRetry: () => void; heading: boolean }) {
   const s = p.tr

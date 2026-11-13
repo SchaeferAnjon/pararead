@@ -9,6 +9,7 @@ import { delimiter, join } from 'node:path'
 import { GlmError, type ChatMsg, type ToolCall, type ToolDef } from './glm'
 import { t } from '../shared/i18n'
 import type { LocalCliStatus } from '../shared/types'
+import { IS_WIN } from './platform'
 
 interface Cli {
   path: string
@@ -16,24 +17,30 @@ interface Cli {
   env: NodeJS.ProcessEnv
 }
 
-// 从访达打开的应用拿不到终端里的 PATH（claude 常装在 ~/.local/bin，或者跟着 nvm 的 node 走）：问一次登录 shell
+// 从访达打开的应用拿不到终端里的 PATH（claude 常装在 ~/.local/bin，或者跟着 nvm 的 node 走）：问一次登录 shell。
+// Windows 上应用拿到的就是用户的 PATH，不用问
 function loginPath(): Promise<string> {
+  if (IS_WIN) return Promise.resolve('')
   return new Promise((res) => {
     execFile(process.env.SHELL || '/bin/zsh', ['-ilc', 'echo "__PATH__${PATH}__END__"'], { timeout: 5000, encoding: 'utf8' }, (_e, out) => res(/__PATH__(.*?)__END__/.exec(out ?? '')?.[1] ?? ''))
   })
 }
 
 const run = (file: string, argv: string[], env: NodeJS.ProcessEnv): Promise<string> =>
-  new Promise((res, rej) => execFile(file, argv, { timeout: 15_000, encoding: 'utf8', env }, (e, out) => (e && !out ? rej(e) : res(out))))
+  new Promise((res, rej) => execFile(file, argv, { timeout: 15_000, encoding: 'utf8', env, windowsHide: true }, (e, out) => (e && !out ? rej(e) : res(out))))
 
-const KNOWN_DIRS = [join(homedir(), '.local/bin'), join(homedir(), '.claude/local'), join(homedir(), '.npm-global/bin'), join(homedir(), '.bun/bin'), '/opt/homebrew/bin', '/usr/local/bin']
+const KNOWN_DIRS = IS_WIN
+  ? [join(homedir(), '.local', 'bin'), join(homedir(), '.claude', 'local')]
+  : [join(homedir(), '.local/bin'), join(homedir(), '.claude/local'), join(homedir(), '.npm-global/bin'), join(homedir(), '.bun/bin'), '/opt/homebrew/bin', '/usr/local/bin']
+// Windows 只认官方安装器装的 claude.exe：npm 装的 claude.cmd 要经 cmd.exe 转，参数里的 JSON 会被它改掉
+const EXE = IS_WIN ? 'claude.exe' : 'claude'
 
 let finding: Promise<Cli | null> | null = null
 let known: Cli | null = null
 
 async function find(): Promise<Cli | null> {
   const dirs = [...new Set([...(process.env.PATH ?? '').split(delimiter), ...(await loginPath()).split(delimiter), ...KNOWN_DIRS])].filter(Boolean)
-  const path = dirs.map((d) => join(d, 'claude')).find((f) => existsSync(f))
+  const path = dirs.map((d) => join(d, EXE)).find((f) => existsSync(f))
   if (!path) return null
   // 老的 npm 装法里 claude 是个 node 脚本，要在 PATH 里找得到 node
   const env = { ...process.env, PATH: dirs.join(delimiter) }
@@ -185,7 +192,7 @@ export async function ccStream(o: CcCall, onDelta?: (text: string) => void): Pro
   const argv = ['-p', '--system-prompt-file', sysFile, '--tools', '', '--strict-mcp-config', '--setting-sources', '', '--disable-slash-commands', '--no-session-persistence',
     '--model', o.model, '--effort', o.thinking ? 'high' : 'low', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages']
   return new Promise<string>((resolve, reject) => {
-    const child = spawn(cli.path, argv, { cwd: o.dir, env: cli.env, stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = spawn(cli.path, argv, { cwd: o.dir, env: cli.env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
     let buf = ''
     let errOut = ''
     let result: Line | null = null

@@ -58,5 +58,20 @@ mac:
   notarize: false
   extendInfo:
     CFBundleDisplayName: ParaRead
+# Windows：只出 x64 的 nsis 安装包（GitHub Actions 的 windows-latest 上打，.github/workflows/windows.yml）。
+# 没有 Windows 代码签名证书：第一次装时 SmartScreen 会拦一下，点「更多信息 › 仍要运行」。
+# 自动更新查同一个 Release 里的 latest.yml。装在用户自己的目录（不要管理员权限），能改位置。
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  shortcutName: ParaRead
+  uninstallDisplayName: ParaRead
 dmg:
   title: ParaRead ${version}

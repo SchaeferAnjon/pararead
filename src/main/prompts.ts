@@ -152,3 +152,65 @@ export function conceptsMessages(o: { title: string; context: string; lang: stri
     { role: 'user', content: `论文标题：${o.title}\n\n${o.context}` }
   ]
 }
+
+// 意群对照（照会议字幕的 enhance 请求）：一段原文和它的译文，按句子切开、每句按意群切块，给出每块的原文片段和译文片段。
+// 字段固定叫 en / zh（原文、译文是别的语言时也叫这两个名字）。
+const SENSES_EXAMPLE = {
+  en: 'If you increase the learning rate too much, the loss $L$ will start to diverge [3]. Could you tell me why the new model converges faster on the small dataset?',
+  zh: '学习率调得太大，损失 $L$ 就会开始发散[3]。你能说说为什么新模型在小数据集上收敛更快吗？',
+  out: {
+    sentences: [
+      [
+        { en: 'If you increase the learning rate too much,', zh: '学习率调得太大，' },
+        { en: 'the loss $L$ will start to diverge [3].', zh: '损失 $L$ 就会开始发散[3]。' }
+      ],
+      [
+        { en: 'Could you tell me', zh: '你能说说' },
+        { en: 'why the new model converges faster', zh: ['为什么新模型', '收敛更快'] },
+        { en: 'on the small dataset?', zh: '在小数据集上' }
+      ]
+    ]
+  }
+}
+export function sensesMessages(en: string, zh: string): ChatMsg[] {
+  return [
+    {
+      role: 'system',
+      content: [
+        '你做双语对照的意群对齐。给你一段原文（en）和它的译文（zh），把原文按句子切开，每一句再按意群切成几块，给出每块的原文片段 en 和它在译文里对应的片段 zh。',
+        '- 一句 2 到 5 块：主干、从句、介词短语、插入语各自一块；很短的句子可以只有 1 块。',
+        '- en 从原文里原样复制（公式 $…$、引用号 [3]、标点都照抄，不改一个字），按原文顺序首尾相接：所有 en 连起来就是整段原文，开头和结尾都不能漏。',
+        '- zh 必须是译文里连续的原样子串，各块的 zh 互不重叠；译文的语序和原文不同没关系。',
+        '- 一块原文对应的译文被别的内容隔开了，zh 就给数组，列出译文里的这几段，每段都是译文的原样子串。',
+        '- 不要把一个 $…$ 公式切成两块。',
+        '只输出 JSON：{"sentences": [[{"en": "…", "zh": "…"}]]}。外层一项是一句，里层是这一句的各块。',
+        '',
+        '示例',
+        `en：${SENSES_EXAMPLE.en}`,
+        `zh：${SENSES_EXAMPLE.zh}`,
+        `输出：${JSON.stringify(SENSES_EXAMPLE.out)}`
+      ].join('\n')
+    },
+    { role: 'user', content: `en：${en}\nzh：${zh}` }
+  ]
+}
+
+// 术语表：读这篇论文要懂的术语和缩写，原文原样、译名、一句解释
+export function termsMessages(o: { title: string; context: string; lang: string }): ChatMsg[] {
+  return [
+    {
+      role: 'system',
+      content: [
+        `你帮读者读一篇论文，列出读懂它要知道的术语。只输出 JSON：{"terms": [{"term": "…", "zh": "…", "explain": "…"}]}。`,
+        '- 挑 12 到 20 个：这个领域的专业术语、方法和模型名、文中自己起的名字、缩写（缩写和全称各算一条，都要在文中出现过）。',
+        '- 人人都懂的学术用语不挑（paper、experiment、results、dataset 这类）。',
+        '- term 从正文里原样复制：大小写、单复数、连字符都不改，不加引号。',
+        `- zh 是它的${o.lang}译名（通行的说法；人名、模型名、缩写没有通行译名的照抄原文）。`,
+        `- explain 用${o.lang}写一句话，说它在这篇论文里指什么，不超过 40 字，不用破折号。`,
+        '- 按在文中第一次出现的先后排。'
+      ].join('\n')
+    },
+    { role: 'user', content: `论文标题：${o.title}\n\n${o.context}` }
+  ]
+}
+

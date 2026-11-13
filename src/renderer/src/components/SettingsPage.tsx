@@ -1,9 +1,10 @@
-import { Check, ChevronDown, Copy, Download, ExternalLink, FileText, Mail, Star, Users, Cloud, Eye, EyeOff, FolderOpen, HardDrive, Info, Languages, Layers, MessageCircleQuestion, Monitor, Moon, RefreshCw, Settings, SquareTerminal, Sun, Zap } from 'lucide-react'
+import { Check, ChevronDown, Copy, Download, ExternalLink, FileText, Mail, Star, Users, Cloud, Eye, EyeOff, FolderOpen, Globe, HardDrive, Info, Languages, Layers, MessageCircleQuestion, Monitor, Moon, RefreshCw, Settings, SquareTerminal, Sun, Zap } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { PROVIDERS, providerOf } from '@shared/providers'
 import type { LocalCliStatus, SettingsView, WordStatus } from '@shared/types'
 import { WORD_STYLES } from '@shared/wordCite'
 import { t, UI_LANG_NAMES, UI_LANGS, uiLocale } from '@shared/i18n'
+import { thinkMode } from '@shared/thinking'
 import { api, errText, type MemberStatus, type SyncStatus, type UpdateState } from '../api'
 import { AppLogo } from '../lib/member'
 import { PHASE_NAME, useMineruInstall } from './Onboarding'
@@ -19,7 +20,7 @@ export const logoOf = (icon?: string): string | null => (icon ? (LOGOS[`../asset
 export const TARGET_LANGS = ['简体中文', '繁體中文', 'English', '日本語', '한국어', 'Deutsch', 'Français', 'Español', 'Italiano']
 const LANGS = TARGET_LANGS
 
-type Sec = 'general' | 'ai' | 'member' | 'translate' | 'reflow' | 'storage' | 'sync' | 'word' | 'us' | 'about'
+type Sec = 'general' | 'ai' | 'member' | 'translate' | 'reflow' | 'storage' | 'sync' | 'browser' | 'word' | 'us' | 'about'
 const SECS: { id: Sec; name: string; icon: typeof Settings; color: string }[] = [
   { id: 'general', name: t('通用'), icon: Settings, color: 'var(--c-gray)' },
   { id: 'ai', name: t('AI 服务'), icon: MessageCircleQuestion, color: 'var(--c-indigo)' },
@@ -28,6 +29,7 @@ const SECS: { id: Sec; name: string; icon: typeof Settings; color: string }[] = 
   { id: 'reflow', name: t('重排'), icon: Layers, color: 'var(--c-teal)' },
   { id: 'storage', name: t('存储'), icon: HardDrive, color: 'var(--c-gray)' },
   { id: 'sync', name: t('同步'), icon: RefreshCw, color: 'var(--c-green)' },
+  { id: 'browser', name: t('浏览器插件'), icon: Globe, color: 'var(--c-orange)' },
   { id: 'word', name: t('Word 插件'), icon: FileText, color: 'var(--c-blue)' },
   { id: 'us', name: t('关于我们'), icon: Users, color: 'var(--c-pink)' },
   { id: 'about', name: t('关于'), icon: Info, color: 'var(--c-gray)' }
@@ -78,6 +80,7 @@ function Settings2() {
           {sec === 'reflow' && <Reflow s={s} setS={setS} />}
           {sec === 'storage' && <Storage s={s} set={set} />}
           {sec === 'sync' && <Sync s={s} set={set} />}
+          {sec === 'browser' && <BrowserPlugin />}
           {sec === 'word' && <WordPlugin s={s} set={set} />}
           {sec === 'us' && <AboutUs />}
           {sec === 'about' && <About s={s} set={set} />}
@@ -383,9 +386,15 @@ function Ai({ s, set, setS }: P & { setS: (v: SettingsView) => void }) {
         </Row>
       </FSec>
       <FSec title={t('回答')}>
-        <Row label={t('深度思考默认开')} hint={t('先想清楚再答，慢一些；问答输入框里也能临时开关')}>
-          <Switch on={s.thinking} onChange={(v) => set({ thinking: v })} label={t('深度思考默认开')} />
-        </Row>
+        {thinkMode(s.provider, s.textModel) === 'always' ? (
+          <Row label={t('深度思考')} hint={t('这个模型每次都会先想再答，不用开关')}>
+            <span />
+          </Row>
+        ) : (
+          <Row label={t('深度思考默认开')} hint={t('先想清楚再答，慢一些；问答输入框里也能临时开关')}>
+            <Switch on={s.thinking} onChange={(v) => set({ thinking: v })} label={t('深度思考默认开')} />
+          </Row>
+        )}
         <Row label={t('回答语言')}>
           <Pick value={s.aiLang || '__same'} options={[{ id: '__same', label: t('跟翻译目标语言一样') }, ...LANGS.map((l) => ({ id: l, label: l }))]} onChange={(v) => set({ aiLang: v === '__same' ? '' : v })} />
         </Row>
@@ -681,6 +690,62 @@ function AboutUs() {
 
 // 关于：版本、自动更新（正式版才有）、再走一遍引导
 // Word 引用插件：装 / 移除、默认引用格式、要不要格式检查
+// 浏览器插件：在论文页上点一下，PDF 和题名、作者、期刊、DOI 存进文献库。插件还没上架，从文件夹装进 Chrome / Edge
+function BrowserPlugin() {
+  const toast = useToast()
+  const [st, setSt] = useState<{ running: boolean; port: number; error: string; dir: string } | null>(null)
+  useEffect(() => {
+    void api.connectorStatus().then(setSt)
+  }, [])
+  return (
+    <>
+      <FSec title={t('浏览器插件')} desc={t('在 arXiv、各家出版社网站的论文页上点一下插件，PDF 和题名、作者、期刊、DOI 一起存进文献库。PDF 是浏览器带着你的登录下载的，学校订阅的也能下。')}>
+        <Row label={t('接收')} hint={st && !st.running ? t('没开起来：{0}', st.error || t('原因未知')) : t('插件把论文发到这台电脑上的 ParaRead，用的时候要开着本应用。')}>
+          {!st ? (
+            <span className="spin spin-12" />
+          ) : st.running ? (
+            <span className="ok-t">
+              <Check size={12} /> {t('开着')}
+            </span>
+          ) : (
+            <span className="err-t">{t('没开')}</span>
+          )}
+        </Row>
+      </FSec>
+      <FSec title={t('安装到 Chrome 或 Edge')} desc={t('插件还没上架商店，先从文件夹安装，三步：')}>
+        <Row label={t('第 1 步')} hint={t('打开浏览器的扩展页，把右上角的「开发者模式」打开。')}>
+          <button className="btn" onClick={() => void api.connectorOpenBrowser('Google Chrome')}>
+            {t('打开 Chrome 的扩展页')}
+          </button>
+          <button className="btn" onClick={() => void api.connectorOpenBrowser('Microsoft Edge')}>
+            {t('打开 Edge 的扩展页')}
+          </button>
+        </Row>
+        <Row label={t('第 2 步')} hint={t('把访达里选中的 browser-extension 文件夹拖到扩展页上。')}>
+          <button className="btn" onClick={() => void api.connectorReveal()}>
+            <FolderOpen size={14} />
+            {t('在访达里显示插件文件夹')}
+          </button>
+          <button
+            className="btn"
+            disabled={!st}
+            onClick={() => {
+              void navigator.clipboard.writeText(st!.dir)
+              toast(t('路径已复制'))
+            }}
+          >
+            <Copy size={14} />
+            {t('复制路径')}
+          </button>
+        </Row>
+        <Row label={t('第 3 步')} hint={t('装一次就行，ParaRead 更新时插件跟着更新。')}>
+          <span>{t('点浏览器工具栏的拼图图标，把 ParaRead Connector 固定出来。之后在论文页上点它就行。')}</span>
+        </Row>
+      </FSec>
+    </>
+  )
+}
+
 function WordPlugin({ s, set }: P) {
   const [st, setSt] = useState<WordStatus | null>(null)
   const [busy, setBusy] = useState(false)
