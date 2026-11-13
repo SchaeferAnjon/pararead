@@ -29,6 +29,21 @@ const covered = (w) =>
     return { free: Math.round(free), width: innerWidth, hits }
   })
 
+
+// 快捷键：Windows 上没有菜单栏，由窗口自己接（before-input-event）。按键从系统那条路送进去（webContents.sendInputEvent），
+// 同时记下窗口收到了什么，没反应时看得出是没收到还是没认出来
+await app.evaluate(({ BrowserWindow }) => {
+  globalThis.__keys = []
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.on('before-input-event', (_e, i) => globalThis.__keys.push(`${i.type}:${i.key}:${i.control ? 'C' : ''}${i.alt ? 'A' : ''}${i.shift ? 'S' : ''}`))
+})
+const press = (keyCode, modifiers) =>
+  app.evaluate(({ BrowserWindow }, [k, m]) => {
+    const w = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    w.webContents.sendInputEvent({ type: 'keyDown', keyCode: k, modifiers: m })
+    w.webContents.sendInputEvent({ type: 'char', keyCode: k, modifiers: m })
+    w.webContents.sendInputEvent({ type: 'keyUp', keyCode: k, modifiers: m })
+  }, [keyCode, modifiers])
+const keysSeen = () => app.evaluate(() => globalThis.__keys.splice(0).join(' '))
 try {
   const info = await app.evaluate(({ app }) => ({ packaged: app.isPackaged, version: app.getVersion(), platform: process.platform, userData: app.getPath('userData') }))
   ok('是 Windows 上打包后的正式版', info.packaged && info.platform === 'win32', `${info.version} · ${info.platform}`)
@@ -60,7 +75,18 @@ try {
   await win.keyboard.press('Escape')
   await sleep(300)
 
+  await win.bringToFront()
+  const side = await win.locator('.sb').count()
+  await press('S', ['control', 'alt'])
+  await sleep(600)
+  const side2 = await win.locator('.sb').count()
+  await press('S', ['control', 'alt'])
+  await sleep(600)
+  ok('Ctrl+Alt+S 收起、放出侧栏', side === 1 && side2 === 0 && (await win.locator('.sb').count()) === 1, `${side} → ${side2} → ${await win.locator('.sb').count()}｜收到 ${await keysSeen()}`)
+
   await win.dblclick(`[data-paper="${id}"]`)
+  await sleep(3000)
+  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][0]?.click())
   await sleep(3000)
   ok('打开论文：原文页画出来了', (await win.locator('canvas').count()) > 0)
   console.log(await shot(win, 'win-reader-pdf'))
@@ -72,25 +98,18 @@ try {
   ok('对照模式：重排的正文出来了', src > 5, `${src} 段`)
   console.log(await shot(win, 'win-reader-reflow'))
 
-  // 快捷键：Windows 上没有菜单栏，由窗口自己接
-  const side = await win.locator('.sb').count()
-  await win.keyboard.press('Control+Alt+S')
-  await sleep(600)
-  const side2 = await win.locator('.sb').count()
-  await win.keyboard.press('Control+Alt+S')
-  await sleep(600)
-  ok('Ctrl+Alt+S 收起、放出侧栏', side2 !== side && (await win.locator('.sb').count()) === side, `${side} → ${side2} → ${await win.locator('.sb').count()}`)
-  await win.keyboard.press('Control+,')
+  await press(',', ['control'])
   let sw = null
   for (let i = 0; i < 20 && !sw; i++) (await sleep(300)), (sw = app.windows().find((w) => w !== win) ?? null)
-  ok('Ctrl+, 打开设置', !!sw)
+  ok('Ctrl+, 打开设置', !!sw, sw ? '' : `收到 ${await keysSeen()}`)
   if (sw) {
     await sw.waitForLoadState('domcontentloaded')
     await sleep(1500)
     console.log(await shot(sw, 'win-settings'))
     const setCover = await covered(sw)
     ok('设置：右上角的窗口按钮没盖住按钮', setCover.hits.length === 0, JSON.stringify(setCover))
-    await sw.keyboard.press('Control+W')
+    await sw.bringToFront()
+    await press('W', ['control'])
     await sleep(800)
     ok('Ctrl+W 关掉设置', !app.windows().includes(sw))
   }

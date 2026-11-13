@@ -185,7 +185,9 @@ export class WordAddin {
         `Export-Certificate -Cert $c -FilePath $env:PR_CER | Out-Null`,
         `Remove-Item -Path ('Cert:\\CurrentUser\\My\\' + $c.Thumbprint)`
       ].join('; ')
-      made = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], 60_000, { ...process.env, PR_PFX: this.pfxFile, PR_CER: this.certFile, PR_PASS: pass })
+      // PSModulePath 不往下传：从 PowerShell 7 里启动的应用会把 7 的模块路径带给 Windows PowerShell 5.1，那样 Cert: 盘就没了
+      const { PSModulePath: _drop, ...env } = process.env
+      made = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], 60_000, { ...env, PR_PFX: this.pfxFile, PR_CER: this.certFile, PR_PASS: pass })
       if (made.ok) writeFileSync(this.passFile, pass)
     } else {
       made = await run('/usr/bin/openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', this.keyFile, '-out', this.certFile, '-days', '800', '-subj', `/CN=${CERT_CN}`, '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1', '-addext', 'basicConstraints=critical,CA:FALSE', '-addext', 'keyUsage=critical,digitalSignature,keyEncipherment', '-addext', 'extendedKeyUsage=serverAuth'], 60_000)

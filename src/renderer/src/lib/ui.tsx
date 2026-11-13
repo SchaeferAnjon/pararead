@@ -1,7 +1,7 @@
 import { uiLocale } from '@shared/i18n'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { t } from '@shared/i18n'
-import { kbd } from '@shared/kbd'
+import { kbd, ON_WIN } from '@shared/kbd'
 
 // 通用小组件：分段控件、开关、toast、骨架、空状态
 
@@ -70,7 +70,8 @@ export function Empty(props: { icon: ReactNode; title: string; text?: string; ac
 }
 
 export function Kbd(props: { children: ReactNode }) {
-  return <kbd className="kbd">{props.children}</kbd>
+  // Windows 上 ⌘ 写成 Ctrl
+  return <kbd className="kbd">{ON_WIN && props.children === '⌘' ? 'Ctrl' : props.children}</kbd>
 }
 
 interface ToastItem {

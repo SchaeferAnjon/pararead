@@ -189,3 +189,9 @@ svg.lucide { flex: none; }
 .platform-win { --wco-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)); }
 .platform-win .titlebar.left-bar { padding-left: 16px; }
 .platform-win .titlebar.mid-bar.no-left, .platform-win .hdr.side-hidden, .platform-win .np-bar.no-side { padding-left: 16px; }
+.platform-win .hdr, .platform-win .np-bar, .platform-win .titlebar.right-bar, .platform-win .titlebar.mid-bar.no-right { padding-right: calc(var(--wco-right) + 8px); }
+/* Windows 默认的滚动条又宽又灰：换成细的、跟着主题的 */
+.platform-win ::-webkit-scrollbar { width: 10px; height: 10px; }
+.platform-win ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 22%, transparent); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+.platform-win ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--text) 36%, transparent); }
+.platform-win ::-webkit-scrollbar-track, .platform-win ::-webkit-scrollbar-corner { background: transparent; }

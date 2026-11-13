@@ -664,7 +664,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
 
       {/* 中栏 */}
       <section className="col-mid">
-        <div className={'titlebar drag mid-bar' + (leftCollapsed ? ' no-left' : '')}>
+        <div className={'titlebar drag mid-bar' + (leftCollapsed ? ' no-left' : '') + (showRight ? '' : ' no-right')}>
           {leftCollapsed && (
             <button className="icon-btn" title={t('显示左栏 ⌃⌘S')} onClick={toggleLeft}>
               <PanelLeft size={16} />
