@@ -164,7 +164,8 @@ try {
 
   // 没对上（AI 出错）：那段旁边换成能点的重试图标，点了再要一次
   await ev(() => window.api.setApiKey('sk-wrong-key-for-test'))
-  await ev(() => { const sc = document.querySelector('.reflow-scroller'); sc.scrollTop = sc.scrollHeight * 0.55 })
+  // 跳到最后一段已经有译文、还没分意群的段落（意群要等译文；没译好的段落 Key 错了会先报翻译失败）
+  await ev(() => { const bs = [...document.querySelectorAll('.blk.paragraph:not(.senses)')].filter((b) => b.querySelector('.tr-text')); bs[bs.length - 1]?.scrollIntoView({ block: 'center' }) })
   let errs = 0
   for (let i = 0; i < 40 && !errs; i++) (await sleep(1000)), (errs = await win.locator('.blk .sg-wait.err').count())
   ok('AI 出错时那段旁边是重试图标', errs > 0, `${errs} 段`)
