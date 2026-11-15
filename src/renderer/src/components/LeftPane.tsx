@@ -44,6 +44,8 @@ type Props = {
   sectionForPage: (p: number | null) => string
   keys: MajorPoint[] | null
   keysBusy: boolean
+  focusKey: MajorPoint | null
+  onKey: (k: MajorPoint) => void
   density: Density
   onDensity: (d: Density) => void
   onLoadKeys: (force?: boolean) => void
@@ -420,7 +422,7 @@ function Keys(props: Props) {
         </div>
       ) : (
         props.keys.map((k, i) => (
-          <button key={i} className="key-item" onClick={() => props.onBlock(k.blockId)}>
+          <button key={i} className={`key-item mk-${k.type}` + (props.focusKey === k ? ' on' : '')} onClick={() => props.onKey(k)}>
             <span className="tag accent sm">{MAJOR_NAME[k.type]}</span>
             {k.text}
           </button>

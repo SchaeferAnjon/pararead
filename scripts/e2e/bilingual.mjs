@@ -1,5 +1,5 @@
 // 对照模式的两种排法：上下（译文跟在每段原文下面）和左右（原文在左、译文在右，按段对齐）。
-// 在显示设置里切、量每段的位置、左右排时划词高亮、换排法后还停在原来那段、窄窗口、重开还记得。
+// 在标题栏的模式切换里切（「上下对照」「左右对照」两格，2026-11-15 从显示设置挪出来）、量每段的位置、左右排时划词高亮、换排法后还停在原来那段、窄窗口、重开还记得。
 // DEEPSEEK_API_KEY=… node scripts/e2e/bilingual.mjs <新的数据目录>；E2E_PAPER=<一篇带公式和图的论文 PDF>
 import { close, launch, PAPER, shot, sleep } from './drive.mjs'
 
@@ -20,9 +20,16 @@ const measure = () =>
     const wide = art.querySelector('.blk.eq, .blk.img, .blk.table')
     return { side: art.classList.contains('lay-side'), inner: Math.round(inner), src: box(para?.querySelector('.src')), tr: box(para?.querySelector('.tr')), hsrc: box(head?.querySelector('.src')), htr: box(head?.querySelector('.tr')), wide: box(wide), wideKind: wide?.className }
   })
+// 上下、左右在标题栏的模式切换里；只看英文、双语在显示设置里
 const pick = async (label) => {
-  if (!(await win.locator('.aa-pop').count())) await win.locator('button[title="显示设置"]').click()
-  await win.locator('.aa-pop .seg-item', { hasText: label }).click()
+  if (label === '上下' || label === '左右') {
+    if (await win.locator('.aa-pop').count()) await win.keyboard.press('Escape')
+    // 窄窗口里这两格只留图标：按位置点（第 2 格上下、第 3 格左右）
+    await win.locator('.mid-bar .mode-seg .seg-item').nth(label === '上下' ? 1 : 2).click()
+  } else {
+    if (!(await win.locator('.aa-pop').count())) await win.locator('button[title="显示设置"]').click()
+    await win.locator('.aa-pop .seg-item', { hasText: label }).click()
+  }
   await sleep(500)
 }
 const topBlock = () => ev(() => { const sc = document.querySelector('.reflow-scroller'); const top = sc.getBoundingClientRect().top; return [...sc.querySelectorAll('[data-block]')].find((n) => n.getBoundingClientRect().bottom > top + 8)?.dataset.block })
@@ -89,11 +96,11 @@ try {
   const afterSide = await topBlock()
   ok('换排法后顶上还是同一段', before === afterStack && before === afterSide, `${before} → ${afterStack} → ${afterSide}`)
 
-  // 只看英文时没有「排列」这一行；切回双语又出来
+  // 只看英文时不分两栏、没有意群按钮；切回双语还是左右
   await pick('只看英文')
-  ok('只看英文时不出「排列」', (await win.locator('.aa-pop .aa-row', { hasText: '排列' }).count()) === 0 && !(await measure()).side)
+  ok('只看英文时不分两栏、没有意群按钮', (await win.locator('.sense-split').count()) === 0 && !(await measure()).side)
   await pick('双语')
-  ok('切回双语「排列」还是左右', (await win.locator('.aa-pop .aa-row', { hasText: '排列' }).count()) === 1 && (await measure()).side)
+  ok('切回双语还是左右', (await win.locator('.sense-split').count()) === 1 && (await measure()).side)
   await win.keyboard.press('Escape')
 
   // 窄窗口：正文列 580，两栏各 250 上下

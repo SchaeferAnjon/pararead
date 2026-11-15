@@ -2,6 +2,7 @@ import { chmodSync, existsSync, readFileSync, writeFileSync, renameSync } from '
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { providerOf } from '../shared/providers'
+import { legacyOnLevel, thinkKey } from '../shared/thinking'
 import type { Settings, SettingsView } from '../shared/types'
 import { venvExe } from './platform'
 
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   trStyle: 'text',
   trLayout: 'stack',
   senseGroups: false,
+  senseStyle: 'text',
   termMarks: true,
   leftW: 260,
   rightW: 380,
@@ -37,7 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   aiLang: '',
   chatSize: 14,
   chatFloat: false,
-  thinking: false,
+  thinkLevels: {},
   explainPrefetch: false,
   agentDir: '',
   syncEnabled: false,
@@ -57,13 +59,21 @@ export class SettingsStore {
   constructor(private file: string) {
     this.data = { ...DEFAULT_SETTINGS }
     if (existsSync(file)) {
-      const parsed = JSON.parse(readFileSync(file, 'utf8')) as Partial<Settings> & { apiKey?: string }
+      const parsed = JSON.parse(readFileSync(file, 'utf8')) as Partial<Settings> & { apiKey?: string; thinking?: boolean }
       // 0.1 只有智谱 Coding Plan 一家：旧的 apiKey 挪进 keys
       if (parsed.apiKey !== undefined && !parsed.provider) {
         parsed.provider = 'zhipu-coding'
         parsed.keys = { 'zhipu-coding': parsed.apiKey }
       }
       delete parsed.apiKey
+      // 0.1.2 的「深度思考默认开」打开着：当时的文本模型记成「高」（只能开关的是「开」）
+      if (parsed.thinking && !parsed.thinkLevels) {
+        const provider = parsed.provider ?? DEFAULT_SETTINGS.provider
+        const model = parsed.textModel ?? DEFAULT_SETTINGS.textModel
+        const on = legacyOnLevel(provider, model)
+        parsed.thinkLevels = on ? { [thinkKey(provider, model)]: on } : {}
+      }
+      delete parsed.thinking
       // 加首次引导之前就在用的：不再弹引导
       if (parsed.onboarded === undefined) parsed.onboarded = true
       this.data = { ...DEFAULT_SETTINGS, ...parsed }

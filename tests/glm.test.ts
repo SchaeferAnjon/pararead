@@ -134,7 +134,7 @@ describe('多家服务', () => {
     expect(r.url).toBe('https://api.deepseek.com/chat/completions')
     expect(r.body).toMatchObject({ thinking: { type: 'disabled' }, stream_options: { include_usage: true } })
     expect(r.body.reasoning_effort).toBeUndefined()
-    const t = buildRequest({ apiKey: 'k', model: 'deepseek-flash', baseUrl: 'https://api.deepseek.com', messages: [], thinking: true, headers: { 'X-Use-Id': 'u1' } })
+    const t = buildRequest({ apiKey: 'k', model: 'deepseek-flash', baseUrl: 'https://api.deepseek.com', messages: [], think: 'on', headers: { 'X-Use-Id': 'u1' } })
     expect(t.body.thinking).toEqual({ type: 'enabled' })
     expect((t.init.headers as Record<string, string>)['X-Use-Id']).toBe('u1')
   })
@@ -147,7 +147,7 @@ describe('多家服务', () => {
       ])) as unknown as typeof fetch
     const thought: string[] = []
     const full = await chatStream(
-      { apiKey: 'k', model: 'deepseek-flash', baseUrl: 'https://x', messages: [], fetchImpl, thinking: true, onReasoning: (t) => thought.push(t) },
+      { apiKey: 'k', model: 'deepseek-flash', baseUrl: 'https://x', messages: [], fetchImpl, think: 'on', onReasoning: (t) => thought.push(t) },
       () => {}
     )
     expect(full).toBe('答案')

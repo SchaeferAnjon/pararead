@@ -10,7 +10,8 @@ export interface MenuEntry {
   label?: ReactNode
   icon?: ReactNode
   hint?: ReactNode
-  type?: 'separator' | 'section'
+  desc?: ReactNode // 第二行说明（思考强度的每一档），有它的菜单放宽、能折行
+  type?: 'separator' | 'section' | 'note' // note：一段不能点的说明
   enabled?: boolean
   checked?: boolean // 有 checked 字段的项留出勾的位置
   danger?: boolean
@@ -86,6 +87,7 @@ function MenuPanel(props: { items: MenuEntry[]; at: At; onPick: (id: string | nu
   const [sub, setSub] = useState<{ i: number; el: Element } | null>(null)
   const items = props.items
   const usable = (i: number): boolean => !!items[i] && !items[i].type && items[i].enabled !== false
+  const wide = items.some((x) => x.desc)
   const hasTicks = items.some((x) => x.checked !== undefined)
 
   useLayoutEffect(() => {
@@ -126,7 +128,7 @@ function MenuPanel(props: { items: MenuEntry[]; at: At; onPick: (id: string | nu
     <>
       <div
         ref={ref}
-        className="pop menu"
+        className={'pop menu' + (wide ? ' wide' : '')}
         role="menu"
         style={{ zIndex: 81, left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}
         onMouseDown={(e) => e.stopPropagation()}
@@ -135,6 +137,7 @@ function MenuPanel(props: { items: MenuEntry[]; at: At; onPick: (id: string | nu
         {items.map((it, i) => {
           if (it.type === 'separator') return <div key={i} className="menu-sep" />
           if (it.type === 'section') return <div key={i} className="menu-sec">{it.label}</div>
+          if (it.type === 'note') return <div key={i} className="menu-note">{it.label}</div>
           const off = it.enabled === false
           return (
             <button
@@ -142,7 +145,7 @@ function MenuPanel(props: { items: MenuEntry[]; at: At; onPick: (id: string | nu
               data-mi
               role="menuitem"
               disabled={off}
-              className={'menu-item' + (hot === i ? ' hot' : '') + (it.danger ? ' danger' : '')}
+              className={'menu-item' + (it.desc ? ' two' : '') + (hot === i ? ' hot' : '') + (it.danger ? ' danger' : '')}
               onMouseEnter={(e) => {
                 setHot(off ? -1 : i)
                 setSub(it.submenu && !off ? { i, el: e.currentTarget } : null)
@@ -154,7 +157,14 @@ function MenuPanel(props: { items: MenuEntry[]; at: At; onPick: (id: string | nu
             >
               {hasTicks && <span className="tick">{it.checked && <Check size={14} />}</span>}
               {it.icon}
-              <span className="ellipsis">{it.label}</span>
+              {it.desc ? (
+                <span className="mi-t">
+                  <span className="mi-l">{it.label}</span>
+                  <span className="mi-desc">{it.desc}</span>
+                </span>
+              ) : (
+                <span className="ellipsis">{it.label}</span>
+              )}
               {it.submenu ? (
                 <span className="h">
                   <ChevronRight size={14} />

@@ -8,6 +8,7 @@ import { homedir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { GlmError, type ChatMsg, type ToolCall, type ToolDef } from './glm'
 import { t } from '../shared/i18n'
+import { ccEffort, type ThinkLevel } from '../shared/thinking'
 import type { LocalCliStatus } from '../shared/types'
 import { IS_WIN } from './platform'
 
@@ -166,7 +167,7 @@ export interface CcCall {
   model: string
   messages: ChatMsg[]
   tools?: ToolDef[]
-  thinking?: boolean
+  think?: ThinkLevel
   timeoutMs?: number
   signal?: AbortSignal
   onReasoning?: (text: string) => void
@@ -190,7 +191,7 @@ export async function ccStream(o: CcCall, onDelta?: (text: string) => void): Pro
   writeFileSync(sysFile, system || 'You are a helpful assistant.')
   // prettier-ignore
   const argv = ['-p', '--system-prompt-file', sysFile, '--tools', '', '--strict-mcp-config', '--setting-sources', '', '--disable-slash-commands', '--no-session-persistence',
-    '--model', o.model, '--effort', o.thinking ? 'high' : 'low', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages']
+    '--model', o.model, '--effort', ccEffort(o.think), '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages']
   return new Promise<string>((resolve, reject) => {
     const child = spawn(cli.path, argv, { cwd: o.dir, env: cli.env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
     let buf = ''

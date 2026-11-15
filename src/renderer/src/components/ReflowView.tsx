@@ -1,3 +1,4 @@
+import { shownTrStyle, type TrStyle } from '@shared/trStyles'
 import { BookOpen, Check, Copy, CornerDownRight, ExternalLink, Maximize2, MessageCircleQuestion, Minimize2, Plus } from 'lucide-react'
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { alignPosition } from '@shared/chunk'
@@ -6,7 +7,7 @@ import { CITE_RE, expandCite, findReferences, plain } from '@shared/refs'
 import { termOf, termRegex } from '@shared/terms'
 import { LABEL_NAME } from '@shared/annLabels'
 import { isOpen, isSettled, openCounts, STATUS_NAME, statusOf, summaryOf } from '@shared/explain'
-import { alignOffsets, counterpart, cut, needsMd, senseable, toMd, type SenseSentence, type Span } from '@shared/senses'
+import { alignOffsets, counterpart, cut, needsMd, pairedMarks, senseable, toMd, type SenseSentence, type Span } from '@shared/senses'
 import type { Annotation, Block, MajorPoint, Paper, ReadPosition, ReflowDoc, SettingsView, Term } from '@shared/types'
 import { api, errText, type ReflowProgress, type SearchHit } from '../api'
 import { Markdown } from '../lib/Markdown'
@@ -19,6 +20,7 @@ import { Lightbox } from './Lightbox'
 import type { Jump } from './Reader'
 import type { SelInfo } from './Selection'
 import { t } from '@shared/i18n'
+import { useJumpBack, type BackHandle } from './BackPill'
 
 type Tr = ReturnType<typeof useTranslations>
 
@@ -29,6 +31,7 @@ export function ReflowView(props: {
   prog: ReflowProgress | null
   anns: Annotation[]
   settings: SettingsView
+  trPreview?: TrStyle | null // 「显示」弹层里鼠标停在一种译文样式上：先换给你看，不存
   tr: Tr
   jump: Jump | null
   hoverAnn: string | null
@@ -42,6 +45,7 @@ export function ReflowView(props: {
   onAskImage: (image: string, context: string, prefill?: string) => void
   onOpenPaper: (id: string) => void
   onBlock: (blockId: string) => void
+  backHandle?: BackHandle
   onWalk: (annIds: string[]) => void // 节末「过一遍」：这一节还要处理的几处
   onReadPdf: () => void
   onRetry: () => void
@@ -50,6 +54,7 @@ export function ReflowView(props: {
   const { doc, tr, settings } = props
   const toast = useToast()
   const scroller = useRef<HTMLDivElement>(null)
+  const back = useJumpBack(scroller, props.backHandle)
   const article = useRef<HTMLElement>(null)
   const [now, setNow] = useState(Date.now())
   // 点图放大：弹出大图盖住整个窗口（Lightbox），这里记着要放大的那张图的地址
@@ -57,7 +62,7 @@ export function ReflowView(props: {
   const imgSrc = (blockId: string): string | null => scroller.current?.querySelector<HTMLImageElement>(`[data-block="${CSS.escape(blockId)}"] img`)?.src ?? null
   const [simpleBusy, setSimpleBusy] = useState(false)
   const [cite, setCite] = useState<{ ns: string[]; n: string; range: Range } | null>(null)
-  const [tags, setTags] = useState<{ top: number; left: number; label: string }[]>([])
+  const [tags, setTags] = useState<{ top: number; left: number; label: string; type: string }[]>([])
   const lastTier = useRef<string | null>(null)
   const posRef = useRef<{ blockHash: string; textPrefix: string; heading: string; offset: number } | null>(null)
 
@@ -205,6 +210,7 @@ export function ReflowView(props: {
 
   // 位置：顶部那块的哈希、文字前缀、所在标题
   const onScroll = (): void => {
+    back.onScroll()
     const el = scroller.current
     if (!el || !doc) return
     const top = el.getBoundingClientRect().top
@@ -359,14 +365,16 @@ export function ReflowView(props: {
     groups['cite'] = cites.map((c) => c.range)
     if (cite) groups['cite-on'] = [cite.range]
     // AI 重点句
-    const tagList: { top: number; left: number; label: string }[] = []
+    const tagList: { top: number; left: number; label: string; type: string }[] = []
     const wantAlign: { en: string; zh: string }[] = []
     const art = article.current?.getBoundingClientRect()
     for (const m of props.marks ?? []) {
       const el = root.querySelector(`[data-block="${CSS.escape(m.blockId)}"] .src`)
       const r = el && findText(el, m.text)
       if (!r) continue
-      ;(groups['ai-mark'] ??= []).push(r)
+      // 按类别分组上色（研究目标、方法、结论、创新点各一种底色）
+      const g = `ai-mark-${m.type}`
+      ;(groups[g] ??= []).push(r)
       // 译文里对应的那一句也圈上：用意群的那份对齐；这一段还没有对齐就先只圈原文，同时去要，到了再圈
       const blk = doc.blocks.find((x) => x.id === m.blockId)
       const trState = blk && tr.map[tr.keyOf(blk)]
@@ -380,16 +388,16 @@ export function ReflowView(props: {
           const zh = alignOffsets(pair.zh, trEl.textContent ?? '')
           for (const [a, b] of counterpart(st.data, 'en', toMd(en, off.start), toMd(en, off.end))) {
             const q = rangeAt(trEl, zh[a], zh[b])
-            if (q && !q.collapsed) groups['ai-mark'].push(q)
+            if (q && !q.collapsed) groups[g].push(q)
           }
         } else if (!st) wantAlign.push(pair)
       }
       const first = r.getClientRects()[0]
-      if (first && art) tagList.push({ top: first.top - art.top, left: el.getBoundingClientRect().left - art.left, label: MAJOR_NAME[m.type] })
+      if (first && art) tagList.push({ top: first.top - art.top, left: el.getBoundingClientRect().left - art.left, label: MAJOR_NAME[m.type], type: m.type })
     }
     setTags(tagList)
     if (wantAlign.length) void sn.request(wantAlign)
-    const names = ['yellow', 'green', 'blue', 'red'].flatMap((c) => [`hl-${c}`, `ul-${c}`, `hl-note-${c}`]).concat('hl-hover', 'cite', 'cite-on', 'ai-mark', 'term', 'lb-confused', 'lb-doubt', 'lb-confused-done', 'lb-doubt-done')
+    const names = ['yellow', 'green', 'blue', 'red'].flatMap((c) => [`hl-${c}`, `ul-${c}`, `hl-note-${c}`]).concat('hl-hover', 'cite', 'cite-on', 'ai-mark-objective', 'ai-mark-method', 'ai-mark-result', 'ai-mark-novelty', 'term', 'lb-confused', 'lb-doubt', 'lb-confused-done', 'lb-doubt-done')
     for (const nm of names) CSS.highlights.set(nm, new Highlight(...(groups[nm] ?? [])))
     return () => names.forEach((nm) => CSS.highlights.delete(nm))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -550,7 +558,7 @@ export function ReflowView(props: {
   return (
     <div className="reflow-scroller" ref={scroller} onScroll={onScroll} onMouseUp={onMouseUp} onMouseMove={preview.onMove} onMouseLeave={() => (preview.onLeave(), offHot())} onMouseOver={onOver}>
       {preview.node}
-      <article ref={article} className={`reflow display-${settings.display} tr-${settings.trStyle}${side ? ' lay-side' : ''}`}>
+      <article ref={article} className={`reflow display-${settings.display} tr-${shownTrStyle(props.trPreview ?? settings.trStyle, senseOn, settings.senseStyle)} sg-${settings.senseStyle}${side ? ' lay-side' : ''}`}>
         <h1 className="doc-title">{props.paper.title}</h1>
         <div className="doc-authors">
           {[authorsShort(props.paper.authors), [props.paper.venue, props.paper.year].filter(Boolean).join(' ')].filter(Boolean).join(' · ')}
@@ -567,7 +575,7 @@ export function ReflowView(props: {
           </div>
         )}
         {tags.map((t_, i) => (
-          <span key={i} className="aitag" style={{ top: t_.top, left: t_.left }}>
+          <span key={i} className={`aitag mk-${t_.type}`} style={{ top: t_.top, left: t_.left }}>
             {t_.label}
           </span>
         ))}
@@ -591,6 +599,7 @@ export function ReflowView(props: {
           return end ? [node, <SectionEnd key={`end-${doc.blocks[i].id}`} {...end} onWalk={() => props.onWalk(end.ids)} />] : [node]
         })}
       </article>
+      {back.node && <div className="back-dock">{back.node}</div>}
       {zoomed && <Lightbox src={zoomed} onClose={() => setZoomed(null)} />}
       {cite && (
         <CitePop
@@ -602,7 +611,10 @@ export function ReflowView(props: {
           onN={(n) => setCite({ ...cite, n })}
           onClose={() => setCite(null)}
           onOpenPaper={props.onOpenPaper}
-          onBlock={props.onBlock}
+          onBlock={(id) => {
+            back.remember(t('回到刚才读的地方'))
+            props.onBlock(id)
+          }}
         />
       )}
     </div>
@@ -919,7 +931,7 @@ const BlockView = memo(function BlockView(p: { b: Block; tr: TrState | undefined
         <div className="src" lang="en">
           {p.sense.map((s, i) => (
             <span key={i} className="sen" style={{ gridRow: p.side ? i + 1 : 2 * i + 1, gridColumn: 1 }}>
-              <Pieces text={src} range={s.en} marks={s.chunks.map((c, k) => ({ span: c.en, k: c.zh.length ? k : null }))} sen={i} />
+              <Pieces text={src} range={s.en} marks={pairedMarks(src, trText, s).en} sen={i} />
             </span>
           ))}
         </div>
@@ -927,7 +939,10 @@ const BlockView = memo(function BlockView(p: { b: Block; tr: TrState | undefined
           <div className="tr-text">
             {p.sense.map((s, i) => (
               <span key={i} className="sen" style={{ gridRow: p.side ? i + 1 : 2 * i + 2, gridColumn: p.side ? 2 : 1 }}>
-                <Pieces text={trText} range={s.zh} marks={s.chunks.flatMap((c, k) => c.zh.map((z) => ({ span: z, k })))} sen={i} />
+                {/* 再包一层行内的，译文样式的高亮、马克笔才能一行一行地涂 */}
+                <span className="sen-in">
+                  <Pieces text={trText} range={s.zh} marks={pairedMarks(src, trText, s).zh} sen={i} />
+                </span>
               </span>
             ))}
           </div>

@@ -4,6 +4,7 @@ import { ccStream, ccTools, claudeFound, type CcCall } from './claudeCode'
 import { chatOnce, chatStream, chatTools, type ChatMsg, type ToolDef } from './glm'
 import type { SettingsStore } from './settings'
 import { t } from '../shared/i18n'
+import type { ThinkLevel } from '../shared/thinking'
 
 export type AiKind = 'text' | 'vision'
 
@@ -12,7 +13,7 @@ export interface AiCall {
   json?: boolean
   timeoutMs?: number
   signal?: AbortSignal
-  thinking?: boolean
+  think?: ThinkLevel // 思考强度；不给是最省的一档
   maxTokens?: number
   useId?: string // 会员通道的用量号：同一个号下的请求只算一次
   onReasoning?: (t: string) => void
@@ -39,7 +40,7 @@ export class Ai {
   private local(messages: ChatMsg[], o: AiCall): CcCall | null {
     const c = this.conf(o.kind)
     if (!providerOf(c.provider).local) return null
-    return { dir: this.localDir, model: c.model, messages, thinking: o.thinking, timeoutMs: o.timeoutMs, signal: o.signal, onReasoning: o.onReasoning }
+    return { dir: this.localDir, model: c.model, messages, think: o.think, timeoutMs: o.timeoutMs, signal: o.signal, onReasoning: o.onReasoning }
   }
 
   conf(kind: AiKind = 'text'): AiConf {
@@ -79,7 +80,7 @@ export class Ai {
       jsonMode: o.json,
       timeoutMs: o.timeoutMs,
       signal: o.signal,
-      thinking: o.thinking,
+      think: o.think,
       maxTokens: o.maxTokens,
       onReasoning: o.onReasoning
     }

@@ -1,4 +1,4 @@
-// 对照模式的意群显示：在显示设置里打开，正文段变成一句原文配一句译文，对应的意群同色。
+// 对照模式的意群显示：标题栏的「意群」按钮打开（2026-11-15 从显示设置挪出来），正文段变成一句原文配一句译文，对应的意群同色。
 // 重点查：开关前后 .src / .tr-text 的文字一个字不变（高亮按字符偏移存）、之前画的高亮还在原来那几个字上、
 // 上下和左右两种排法、鼠标停在一块上两边一起亮、关掉回到原样。
 // DEEPSEEK_API_KEY=… node scripts/e2e/senses.mjs <新的数据目录>；E2E_PAPER=<一篇论文的 PDF>
@@ -8,14 +8,14 @@ const { app, win } = await launch(process.argv[2] ?? `${process.cwd()}/tmp/data-
 const ev = (fn, ...a) => win.evaluate(fn, ...a)
 const fails = []
 const ok = (name, pass, info = '') => (console.log(pass ? '通过' : '没过', name, info), pass || fails.push(name))
+// 上下、左右在标题栏的模式切换里
 const pick = async (label) => {
-  if (!(await win.locator('.aa-pop').count())) await win.locator('button[title="显示设置"]').click()
-  await win.locator('.aa-pop .seg-item', { hasText: label }).click()
+  if (await win.locator('.aa-pop').count()) await win.keyboard.press('Escape')
+  await win.locator('.mid-bar .mode-seg .seg-item').nth(label === '上下' ? 1 : 2).click()
   await sleep(500)
 }
 const toggleSense = async () => {
-  if (!(await win.locator('.aa-pop').count())) await win.locator('button[title="显示设置"]').click()
-  await win.locator('.aa-pop .aa-row', { hasText: '意群' }).locator('.switch').click()
+  await win.locator('.sense-split .btn').first().click()
   await sleep(300)
 }
 // 每个已有译文的正文段现在的文字（原文、译文）
@@ -64,6 +64,20 @@ try {
   await sleep(1500)
   const sgCount = await win.locator('.blk.senses').count()
   ok('打开后正文段变成一句一行', sgCount >= 3, `${sgCount} 段有了意群`)
+  // 每一句：原文用到的颜色块和译文用到的一一对上（一块只在一边有颜色就是对错了）
+  const pairs = await ev(() =>
+    [...document.querySelectorAll('.blk.senses')].flatMap((b) => {
+      const en = [...b.querySelectorAll('.src .sen')]
+      const zh = [...b.querySelectorAll('.tr .sen')]
+      return en.map((e, i) => {
+        const ks = (el) => [...new Set([...(el?.querySelectorAll('.sg') ?? [])].map((x) => x.dataset.k))].sort().join(',')
+        return { a: ks(e), b: ks(zh[i]), t: e.textContent.slice(0, 50) }
+      })
+    })
+  )
+  const bad = pairs.filter((p) => p.a !== p.b)
+  const colored = pairs.filter((p) => p.a.split(',').filter(Boolean).length >= 2).length
+  ok('每一句两边的颜色块一一对上', pairs.length > 5 && bad.length === 0, bad.length ? `${bad.length} 句对不上，例如 ${JSON.stringify(bad[0])}` : `${pairs.length} 句都对上，${colored} 句分了两块以上`)
   const on = await texts()
   const sgIds = await ev(() => [...document.querySelectorAll('.blk.senses')].map((b) => b.dataset.block))
   const diff = sgIds.filter((k) => off[k] && (off[k][0] !== on[k][0] || off[k][1] !== on[k][1]))

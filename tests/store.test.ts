@@ -108,6 +108,15 @@ describe('设置文件', () => {
     expect(s.apiKey()).toMatchObject({ key: 'old-key-9999', source: 'settings' })
     expect(s.get().textModel).toBe('glm-5.3-flash')
   })
+  it('0.1.2 打开着的「深度思考默认开」换成当时那个模型的「高」，旧键不留', () => {
+    const f = join(dir, 'think.json')
+    writeFileSync(f, '{"provider":"zhipu","textModel":"glm-5.3-flash","thinking":true}')
+    const s = new SettingsStore(f)
+    expect(s.get().thinkLevels).toEqual({ 'glm-5.3-flash': 'high' })
+    expect('thinking' in s.get()).toBe(false)
+    writeFileSync(f, '{"provider":"deepseek","textModel":"deepseek-flash","thinking":false}')
+    expect(new SettingsStore(f).get().thinkLevels).toEqual({})
+  })
   it('已有文件权限过宽时改回 0600', () => {
     const f = join(dir, 'loose.json')
     writeFileSync(f, '{"theme":"dark"}', { mode: 0o644 })

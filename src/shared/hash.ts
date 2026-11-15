@@ -29,5 +29,5 @@ export function translationKey(text: string, lang: string): string {
 
 /** 意群缓存的键：这一段原文和它现在的译文（译文重翻了就重新要一次）；版本号在切法改了的时候加一 */
 export function sensesKey(en: string, zh: string): string {
-  return cyrb53(`senses1\n${en}\n${zh}`)
+  return cyrb53(`senses2\n${en}\n${zh}`)
 }

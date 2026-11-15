@@ -296,3 +296,30 @@ export function counterpart(senses: SenseSentence[], side: 'en' | 'zh', a: numbe
   }
   return merged
 }
+
+/**
+ * 一句要画的两边标记：一块只有在原文、译文两边都真画得出来（切出来的片段带着它）时才上色，
+ * 一边画不出来（模型给的译文被前一块占了、切在成对记号中间而不上色）就两边都不上色，颜色不会一边有一边没有。
+ */
+export function pairedMarks(src: string, tr: string, s: SenseSentence): { en: { span: Span; k: number | null }[]; zh: { span: Span; k: number | null }[] } {
+  const en = s.chunks.map((c, k) => ({ span: c.en, k: c.zh.length ? k : null }))
+  const zh = s.chunks.flatMap((c, k) => c.zh.map((z) => ({ span: z, k: k as number | null })))
+  const seen = (text: string, range: Span, marks: { span: Span; k: number | null }[]): Set<number> => new Set(cut(text, range, marks).flatMap((p) => (p.k === null ? [] : [p.k])))
+  const a = seen(src, s.en, en)
+  const b = seen(tr, s.zh, zh)
+  const keep = (m: { span: Span; k: number | null }): { span: Span; k: number | null } => ({ span: m.span, k: m.k !== null && a.has(m.k) && b.has(m.k) ? m.k : null })
+  return { en: en.map(keep), zh: zh.map(keep) }
+}
+
+/** 对得全不全：几块原文没找到译文，译文里有多少字（不算空白和标点）落在某一块里。用来决定要不要再问一次 */
+export function senseGaps(data: SenseSentence[], tr: string): { missing: number; cover: number } {
+  const counted = (t: string): number => t.replace(/[\s\p{P}\p{S}]/gu, '').length
+  let missing = 0
+  let inChunks = 0
+  for (const s of data) {
+    missing += s.chunks.filter((c) => !c.zh.length).length
+    for (const c of s.chunks) for (const z of c.zh) inChunks += counted(tr.slice(z[0], z[1]))
+  }
+  const all = counted(tr)
+  return { missing, cover: all ? Math.min(1, inChunks / all) : 1 }
+}

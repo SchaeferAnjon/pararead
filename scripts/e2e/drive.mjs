@@ -34,6 +34,8 @@ export async function launch(dir, env = {}) {
   })
   const win = await app.firstWindow()
   await win.waitForLoadState('domcontentloaded')
+  // E2E_OFFSCREEN=1：测试窗口挪到屏幕外，不挡正在用这台电脑的人（截图照样能拍）
+  if (process.env.E2E_OFFSCREEN) await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((w) => w.setPosition(-3000, 60)))
   return { app, win }
 }
 

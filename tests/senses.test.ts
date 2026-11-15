@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { pageOfText } from '../src/shared/refs'
-import { alignOffsets, balanced, counterpart, cut, needsMd, parseSenses, senseable, toMd } from '../src/shared/senses'
+import { alignOffsets, balanced, counterpart, cut, needsMd, pairedMarks, parseSenses, senseable, senseGaps, toMd } from '../src/shared/senses'
+import { SenseQueue } from '../src/main/senses'
 
 const SRC = 'If you increase the learning rate too much, the loss will start to diverge [1]. Could you tell me why the new model converges faster on the small dataset?'
 const TR = '学习率调得太大，损失就会开始发散[1]。你能说说为什么新模型在小数据集上收敛更快吗？'
@@ -233,5 +234,44 @@ describe('对照模式的标注补页码', () => {
     expect(pageOfText(pages, '指导计算机体系结构设计师的一个基本假设')).toBeNull()
     expect(pageOfText(pages, 'the')).toBeNull()
     expect(pageOfText(pages, 'this sentence is not in the paper at all')).toBeNull()
+  })
+})
+
+describe('意群：两边颜色对得上，对不全再问一次', () => {
+  const en = 'This underscores the need for more direct and reliable measurement approaches.'
+  const zh = '这凸显了对更直接、更可靠测量方法的需求。'
+  // 模型把整句译文给了第一块，第二块的译文就找不到了
+  const swallowed = { sentences: [[{ en: 'This underscores the need for more direct and reliable', zh }, { en: 'measurement approaches.', zh: '测量方法' }]] }
+  const good = { sentences: [[{ en: 'This underscores the need', zh: '这凸显了' }, { en: 'for more direct and reliable measurement approaches.', zh: '对更直接、更可靠测量方法的需求。' }]] }
+
+  it('一块只在一边画得出来时两边都不上色', () => {
+    const [s] = parseSenses(swallowed, en, zh)
+    const m = pairedMarks(en, zh, s)
+    expect(m.en.map((x) => x.k)).toEqual([0, null])
+    expect(m.zh.map((x) => x.k)).toEqual([0])
+    expect(senseGaps([s], zh)).toEqual({ missing: 1, cover: 1 })
+    const [g] = parseSenses(good, en, zh)
+    expect(senseGaps([g], zh).missing).toBe(0)
+    expect(pairedMarks(en, zh, g).en.map((x) => x.k)).toEqual([0, 1])
+  })
+
+  it('对得不全时带上哪里没对上再问一次，留对得全的', async () => {
+    const calls: string[] = []
+    let res: unknown = null
+    const q = new SenseQueue({
+      getCached: () => null,
+      putCached: () => {},
+      call: async (msgs) => {
+        calls.push(String(msgs[msgs.length - 1].content))
+        return JSON.stringify(calls.length === 1 ? swallowed : good)
+      },
+      onResult: (r) => (res = r),
+      concurrency: () => 1
+    })
+    q.request('p', [{ en, zh }])
+    await new Promise((r) => setTimeout(r, 20))
+    expect(calls).toHaveLength(2)
+    expect(calls[1]).toContain('measurement approaches.')
+    expect((res as { data: { chunks: unknown[] }[] }).data[0].chunks).toHaveLength(2)
   })
 })

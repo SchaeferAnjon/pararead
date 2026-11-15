@@ -1,3 +1,4 @@
+import type { ThinkLevel } from '@shared/thinking'
 import type {
   Annotation,
   ChatMessage,
@@ -158,7 +159,7 @@ export interface Api {
   chatSend(
     reqId: string,
     paperId: string,
-    msg: { content: string; quote: string | null; image: string | null; context?: string | null; paperIds?: string[]; thinking?: boolean }
+    msg: { content: string; quote: string | null; image: string | null; context?: string | null; paperIds?: string[]; think?: ThinkLevel }
   ): Promise<ChatMessage>
   chatDelete(id: string): Promise<void>
   chatExport(paperId: string, onlyId?: string): Promise<string | null>

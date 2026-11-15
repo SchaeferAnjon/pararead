@@ -8,7 +8,8 @@ import { Markdown } from '../lib/Markdown'
 import { showMenu } from '../lib/menu'
 import { Dots, useToast } from '../lib/ui'
 import { t } from '@shared/i18n'
-import { thinkMode } from '@shared/thinking'
+import { levelName } from '@shared/thinking'
+import { ThinkChip, thinkState } from './ThinkPicker'
 
 export interface Attach {
   quote: string | null
@@ -28,11 +29,12 @@ const PRESETS = [
 interface Msg extends ChatMessage {
   streaming?: boolean
   thinking?: string
+  level?: string // 这条回答用的思考强度（只在这次会话里显示）
 }
 
 const short = (t_: string): string => (t_.length > 28 ? t_.slice(0, 28) + '…' : t_)
 
-// 右栏 AI 问答：本篇加其他文献一起问，深度思考可开关，回答下面一排动作和「接着问」
+// 右栏 AI 问答：本篇加其他文献一起问，思考强度按模型选，回答下面一排动作和「接着问」
 export function ChatPanel(props: {
   paper: Paper
   settings: SettingsView
@@ -48,7 +50,6 @@ export function ChatPanel(props: {
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState<{ id: string; stop: () => void } | null>(null)
   const [newBelow, setNewBelow] = useState(false)
-  const [thinking, setThinking] = useState(props.settings.thinking)
   const [others, setOthers] = useState<Paper[]>([])
   const [concepts, setConcepts] = useState<{ concepts: Concept[]; questions: string[] } | null>(null)
   const [conceptsBusy, setConceptsBusy] = useState(false)
@@ -102,7 +103,9 @@ export function ChatPanel(props: {
     const quote = a?.quote ? (a.prefill ? `${a.quote}\n\n${a.prefill}` : a.quote) : null
     const paperIds = others.map((p) => p.id)
     const tempUser: Msg = { id: 'u' + Date.now(), paperId: props.paper.id, role: 'user', content: content || t('解释这段'), quote, image: a?.image ?? null, createdAt: Date.now(), paperIds }
-    const tempAns: Msg = { id: 'a' + Date.now(), paperId: props.paper.id, role: 'assistant', content: '', quote: null, image: null, createdAt: Date.now() + 1, streaming: true }
+    const { level } = thinkState(props.settings)
+    const think = level && !a?.image ? level : undefined
+    const tempAns: Msg = { id: 'a' + Date.now(), paperId: props.paper.id, role: 'assistant', content: '', quote: null, image: null, createdAt: Date.now() + 1, streaming: true, level: think && levelName(think) }
     setMsgs((m) => [...m, tempUser, tempAns])
     setInput('')
     props.setAttach(null)
@@ -110,7 +113,7 @@ export function ChatPanel(props: {
     const t0 = Date.now()
     let t1: number | null = null
     const s = streamRequest(
-      (id) => api.chatSend(id, props.paper.id, { content: tempUser.content, quote, image: tempUser.image, context: a?.context ?? null, paperIds, thinking: thinking && !tempUser.image }),
+      (id) => api.chatSend(id, props.paper.id, { content: tempUser.content, quote, image: tempUser.image, context: a?.context ?? null, paperIds, think }),
       {
         reasoning: (full) => setMsgs((m) => m.map((x) => (x.id === tempAns.id ? { ...x, thinking: full } : x))),
         delta: (full) => {
@@ -121,7 +124,13 @@ export function ChatPanel(props: {
           setMsgs((m) => m.map((x) => (x.id === tempAns.id ? { ...x, content: full, streaming: false } : x)))
           setBusy(null)
           // 换成主进程存好的 id，删除和导出要用
-          void api.chatList(props.paper.id).then(setMsgs)
+          // 档位只在这次会话里记着：按内容带到存好的那条上
+          void api.chatList(props.paper.id).then((list) =>
+            setMsgs((prev) => {
+              const lv = new Map(prev.filter((x) => x.level).map((x) => [x.content, x.level]))
+              return list.map((x) => (lv.has(x.content) ? { ...x, level: lv.get(x.content) } : x))
+            })
+          )
         },
         error: (msg, partial) => {
           setMsgs((m) => m.map((x) => (x.id === tempAns.id ? { ...x, content: partial, streaming: false, error: msg } : x)))
@@ -248,7 +257,7 @@ export function ChatPanel(props: {
                       }
                     >
                       {m.streaming && !m.content ? <span className="spin spin-12" /> : openThink.has(m.id) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                      {m.streaming && !m.content ? t('正在深度思考…') : t('已深度思考{0}', m.thinkMs ? t('（用时 {0} 秒）', Math.max(1, Math.round(m.thinkMs / 1000))) : '')}
+                      {m.streaming && !m.content ? (m.level ? t('正在思考（{0}）…', m.level) : t('正在思考…')) : thinkDone(m)}
                     </button>
                     {openThink.has(m.id) && <div className="thinkbody">{m.reasoning || m.thinking}</div>}
                   </>
@@ -357,20 +366,7 @@ export function ChatPanel(props: {
         }
         tools={
           <>
-            {/* 总会先想的模型（Kimi K3、Claude）开关不起作用，不显示 */}
-            {thinkMode(props.settings.provider, props.settings.textModel) !== 'always' && (
-              <button
-                className={'tchip' + (thinking ? ' on' : '')}
-                title={t('深度思考：先想清楚再答，慢一些')}
-                onClick={() => {
-                  setThinking((v) => !v)
-                  void api.setSettings({ thinking: !thinking })
-                }}
-              >
-                <Brain size={14} />
-                {t('深度思考')}
-              </button>
-            )}
+            <ThinkChip settings={props.settings} />
             <button className="tchip" title={t('加一篇文献一起问')} onClick={(e) => void addPaperMenu(e.currentTarget)}>
               <AtSign size={14} />
               {t('文献')}
@@ -380,4 +376,11 @@ export function ChatPanel(props: {
       />
     </div>
   )
+}
+
+// 回答上面那行：已思考（高 · 用时 8 秒）；存下来的历史回答没有记档位
+function thinkDone(m: Msg): string {
+  const sec = m.thinkMs ? Math.max(1, Math.round(m.thinkMs / 1000)) : 0
+  if (m.level) return sec ? t('已思考（{0} · 用时 {1} 秒）', m.level, sec) : t('已思考（{0}）', m.level)
+  return sec ? t('已思考（用时 {0} 秒）', sec) : t('已思考')
 }

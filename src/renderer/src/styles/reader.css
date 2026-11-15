@@ -22,7 +22,7 @@ body.resizing .reader { transition: none; }
 ::highlight(find-cur) { background-color: var(--selection); text-decoration: underline 2px var(--accent); }
 
 /* 显示设置 */
-.aa-pop { position: absolute; top: calc(var(--titlebar-h) + 4px); right: 12px; width: 300px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.aa-pop { position: absolute; top: calc(var(--titlebar-h) + 4px); right: 12px; width: 352px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 .aa-row { display: flex; align-items: center; gap: 8px; }
 .aa-row > span { width: 56px; flex: none; font-size: var(--fs-sm); color: var(--text-2); }
 .aa-row > div { flex: 1; display: flex; align-items: center; gap: 8px; }
@@ -30,11 +30,50 @@ body.resizing .reader { transition: none; }
 .aa-val { flex: 1; text-align: center; }
 .aa-hint { font-size: var(--fs-sm); color: var(--text-2); min-width: 0; }
 /* 西文界面的行名比中文长得多：行名放到控件上面，面板宽一点 */
-:root:not(:lang(zh), :lang(ja), :lang(ko)) .aa-pop { width: 340px; }
+:root:not(:lang(zh), :lang(ja), :lang(ko)) .aa-pop { width: 380px; }
 :root:not(:lang(zh), :lang(ja), :lang(ko)) .aa-row { flex-direction: column; align-items: stretch; gap: 4px; }
 :root:not(:lang(zh), :lang(ja), :lang(ko)) .aa-row > span { width: auto; }
 :root:not(:lang(zh), :lang(ja), :lang(ko)) .aa-row > div { flex: none; }
 .btn.icon { width: 28px; padding: 0; }
+
+/* 标题栏：模式切换四格（上下对照、左右对照带小图标）、意群按钮（四色小条是记号，右边小箭头选样式）、带字的「显示」 */
+.mode-seg .seg-item svg { flex: none; }
+.sense-split { display: inline-flex; gap: 1px; flex: none; }
+.sense-split .btn { padding: 0 8px; }
+.sense-split .btn:first-child { border-radius: var(--r-sm) 0 0 var(--r-sm); }
+.sense-split .btn:last-child { border-radius: 0 var(--r-sm) var(--r-sm) 0; padding: 0 4px; }
+.sg-glyph { display: inline-flex; align-items: center; gap: 1.5px; }
+.sg-glyph i { width: 4px; height: 10px; border-radius: 1px; }
+.sg-glyph i:nth-child(1) { background: var(--sg-1); }
+.sg-glyph i:nth-child(2) { background: var(--sg-2); }
+.sg-glyph i:nth-child(3) { background: var(--sg-3); }
+.sg-glyph i:nth-child(4) { background: var(--sg-4); }
+.btn:not(.on) .sg-glyph { filter: saturate(.25); opacity: .7; }
+.sg-sample { font-size: var(--fs); white-space: nowrap; order: 9; margin-left: auto; padding-left: 12px; }
+.menu-item.two .sg-sample { margin-top: 1px; }
+.menu-item.hot .sg-sample .sg { --c: currentColor; }
+.show-btn { padding: 0 8px; }
+
+/* 「显示」弹层的译文样式格子 */
+.aa-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: var(--fs-sm); color: var(--text-2); }
+.aa-sub .r { color: var(--text-3); text-align: right; }
+.tr-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.tr-tiles.wide { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.tr-tile { display: flex; flex-direction: column; gap: 6px; padding: 8px 9px 7px; border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--stroke); text-align: left; background: var(--bg); min-width: 0; }
+.tr-tile:hover { background: var(--fill-1); }
+.tr-tile.on { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.tr-tile .lb { font-size: var(--fs-sm); color: var(--text-2); display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 4px; white-space: nowrap; }
+.tr-tile.on .lb { color: var(--text); }
+.tr-tile .tile-tag { color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
+.reflow.tr-sample { padding: 0; max-width: none; margin: 0; font-size: 13px; pointer-events: none; }
+.tr-sample .blk { margin-top: 0; }
+.tr-sample .src { font-size: 13px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tr-sample .tr { font-size: 13px; line-height: 1.6; margin-top: 1px; }
+.tr-sample.tr-fill .blk > .tr, .tr-sample.tr-dbox .blk > .tr, .tr-sample.tr-box .blk > .tr { padding: 0 6px; margin-left: -6px; margin-right: -6px; }
+.tr-sample.tr-line .blk > .tr { padding-top: 2px; margin-top: 3px; }
+.tr-sample.tr-blur .tr { filter: blur(3px); }
+.tr-sample.tr-fade .tr { opacity: .14; }
+.tr-tile:hover .tr-sample .tr { filter: none; opacity: 1; }
 
 /* 左栏 */
 .lp-head { padding: 0 18px 2px; flex: none; }
@@ -74,9 +113,19 @@ body.resizing .reader { transition: none; }
 .fig-cap { font-size: var(--fs-sm); color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.45; }
 .fig-cap b { font-weight: 500; color: var(--text); }
 .keys { padding-bottom: 8px; }
-.key-item { display: block; width: calc(100% - 20px); margin: 0 10px; padding: 9px 8px; border-bottom: 1px solid var(--stroke-soft); line-height: 1.55; text-align: left; border-radius: var(--r-sm); }
-.key-item:hover { background: var(--fill-1); }
-.key-item .tag { margin-right: 6px; vertical-align: 1px; }
+.key-item { display: block; width: calc(100% - 20px); margin: 0 10px 6px; padding: 9px 10px; line-height: 1.55; text-align: left; border-radius: var(--r-sm); background: var(--mk-bg, var(--fill-1)); color: var(--text); }
+.key-item:hover { filter: brightness(.97); }
+.key-item.on { box-shadow: inset 0 0 0 1.5px var(--mk-fg, var(--text-3)); }
+.key-item .tag { margin-right: 6px; vertical-align: 1px; color: var(--mk-fg); background: color-mix(in srgb, var(--mk-fg) 14%, transparent); }
+/* 四类重点各一种颜色（列表卡片、标签、正文里那一句、正文边上的小标签同一套） */
+.mk-objective { --mk-bg: var(--mk-objective-bg); --mk-fg: var(--mk-objective-fg); }
+.mk-method { --mk-bg: var(--mk-method-bg); --mk-fg: var(--mk-method-fg); }
+.mk-result { --mk-bg: var(--mk-result-bg); --mk-fg: var(--mk-result-fg); }
+.mk-novelty { --mk-bg: var(--mk-novelty-bg); --mk-fg: var(--mk-novelty-fg); }
+::highlight(ai-mark-objective) { background-color: var(--mk-objective-bg); }
+::highlight(ai-mark-method) { background-color: var(--mk-method-bg); }
+::highlight(ai-mark-result) { background-color: var(--mk-result-bg); }
+::highlight(ai-mark-novelty) { background-color: var(--mk-novelty-bg); }
 .terms { padding-bottom: 8px; }
 .term-item { display: flex; flex-direction: column; gap: 2px; width: calc(100% - 20px); margin: 0 10px; padding: 8px; border-bottom: 1px solid var(--stroke-soft); text-align: left; border-radius: var(--r-sm); }
 .term-item:hover:not(:disabled) { background: var(--fill-1); }
@@ -214,11 +263,40 @@ body.resizing .reader { transition: none; }
 .lay-side .blk.senses .sen:not(:first-child) { margin-top: .6em; }
 .lay-side .blk.senses .tr .sen:first-child { margin-top: 0; }
 .tr-fill .blk.senses .tr .sen { background: var(--fill-2); border-radius: var(--r-sm); padding: 4px 10px; margin-left: -10px; margin-right: -10px; }
-.sg[data-c="0"] { color: var(--sg-1); }
-.sg[data-c="1"] { color: var(--sg-2); }
-.sg[data-c="2"] { color: var(--sg-3); }
-.sg[data-c="3"] { color: var(--sg-4); }
-.sg.hot { background: color-mix(in srgb, currentColor 16%, transparent); border-radius: 3px; }
+/* 意群两种样式（2026-11-15 用户定：意群文字和下划线两种）：文字着色是字换成这一块的颜色；
+   下划线是字不变色、底下一条同色的线，块和块之间的空格和标点不画，看得出在哪断开 */
+.sg[data-c="0"] { --c: var(--sg-1); }
+.sg[data-c="1"] { --c: var(--sg-2); }
+.sg[data-c="2"] { --c: var(--sg-3); }
+.sg[data-c="3"] { --c: var(--sg-4); }
+.sg-text .sg { color: var(--c); }
+.sg-underline .sg { background-image: linear-gradient(var(--c), var(--c)); background-repeat: no-repeat; background-position: 0 100%; background-size: 100% 2px; padding-bottom: 1px; }
+.sg.hot { background-color: color-mix(in srgb, var(--c) 16%, transparent); border-radius: 3px; }
+.blk.senses .sen-in { display: inline; }
+
+/* 译文样式（2026-11-15 用户挑了方向 A，照沉浸式翻译）。线、框、底都用 --tr-mark（译文记号色）。
+   整段的样式套在译文块上（意群显示时套在每一句上），跟着行走的套在字上；标题的译名不套。
+   意群用下划线时，画在字底下的四种由 shared/trStyles.ts 的 shownTrStyle 换回浅色字，这里不用管 */
+.tr-dash .blk:not(.heading):not(.senses) .tr-text, .tr-dash .blk.senses .tr .sen { text-decoration: underline dashed var(--tr-mark) 1px; text-underline-offset: .34em; }
+.tr-solid .blk:not(.heading):not(.senses) .tr-text, .tr-solid .blk.senses .tr .sen { text-decoration: underline solid var(--tr-mark) 1px; text-underline-offset: .34em; }
+.tr-dot .blk:not(.heading):not(.senses) .tr-text, .tr-dot .blk.senses .tr .sen { text-decoration: underline dotted var(--tr-mark) 2px; text-underline-offset: .32em; }
+.tr-hl .blk:not(.heading):not(.senses) .tr-text > p, .tr-hl .blk.senses .tr .sen-in { background: color-mix(in srgb, var(--tr-mark) 15%, transparent); border-radius: 2px; padding: 1px 0; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.tr-marker .blk:not(.heading):not(.senses) .tr-text > p, .tr-marker .blk.senses .tr .sen-in { background: linear-gradient(transparent 58%, color-mix(in srgb, var(--tr-mark) 32%, transparent) 58%, color-mix(in srgb, var(--tr-mark) 32%, transparent) 92%, transparent 92%); -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+/* 高亮、马克笔要一行一行地涂：段落改成行内，段和段之间照样换行 */
+.tr-hl .blk:not(.heading):not(.senses) .tr-text > p, .tr-marker .blk:not(.heading):not(.senses) .tr-text > p { display: inline; }
+.tr-hl .blk:not(.heading):not(.senses) .tr-text > p + p::before, .tr-marker .blk:not(.heading):not(.senses) .tr-text > p + p::before { content: "\A"; white-space: pre; }
+.tr-dbox .blk:not(.heading):not(.senses) > .tr:not(.tr-skel):not(.tr-err), .tr-dbox .blk.senses .tr .sen,
+.tr-box .blk:not(.heading):not(.senses) > .tr:not(.tr-skel):not(.tr-err), .tr-box .blk.senses .tr .sen { border: 1px dashed var(--tr-mark); border-radius: var(--r-sm); padding: 5px 9px; margin-left: -10px; margin-right: -10px; }
+.tr-box .blk:not(.heading):not(.senses) > .tr:not(.tr-skel):not(.tr-err), .tr-box .blk.senses .tr .sen { border-style: solid; border-color: color-mix(in srgb, var(--tr-mark) 70%, transparent); }
+.tr-line .blk:not(.heading):not(.senses) > .tr:not(.tr-skel):not(.tr-err), .tr-line .blk.senses .tr .sen { border-top: 1px dashed var(--tr-mark); padding-top: 6px; margin-top: 8px; }
+/* 左右排：框不往左右伸，分割线换成两栏中间一条竖线 */
+.lay-side.tr-dbox .blk:not(.heading) > .tr:not(.tr-skel):not(.tr-err), .lay-side.tr-dbox .blk.senses .tr .sen,
+.lay-side.tr-box .blk:not(.heading) > .tr:not(.tr-skel):not(.tr-err), .lay-side.tr-box .blk.senses .tr .sen { margin-left: 0; margin-right: 0; }
+.lay-side.tr-line .blk:not(.heading) > .tr:not(.tr-skel):not(.tr-err), .lay-side.tr-line .blk.senses .tr .sen { border-top: 0; padding-top: 0; margin-top: 0; border-left: 1px dashed var(--tr-mark); padding-left: calc(var(--sp-6) / 2 - 1px); margin-left: calc(var(--sp-6) / -2); }
+/* 学习用：译文糊掉或几乎看不见，鼠标移到这一段上才看清（只在双语时） */
+.display-both.tr-blur .blk:not(.heading):not(:hover) > .tr:not(.tr-skel), .display-both.tr-blur .blk.senses:not(:hover) .tr .sen { filter: blur(5px); }
+.display-both.tr-fade .blk:not(.heading):not(:hover) > .tr:not(.tr-skel), .display-both.tr-fade .blk.senses:not(:hover) .tr .sen { opacity: .14; }
+.display-both.tr-blur .blk > .tr, .display-both.tr-blur .blk.senses .tr .sen, .display-both.tr-fade .blk > .tr, .display-both.tr-fade .blk.senses .tr .sen { transition: filter 160ms var(--ease), opacity 160ms var(--ease); }
 .blk.eq { margin: 1em 0; }
 .blk.eq .src { text-align: center; overflow-x: auto; }
 .blk.eq .katex-display .tag { font-size: var(--fs); color: var(--text-2); }
@@ -276,6 +354,8 @@ body.resizing .reader { transition: none; }
 ::highlight(sel-link) { background-color: var(--selection); }
 .aitag { position: absolute; transform: translate(calc(-100% - 8px), .25em); display: inline-flex; align-items: center; height: 17px; padding: 0 5px; border-radius: var(--r-xs);
   background: var(--accent-soft); font: 500 11px/1 var(--font-sans); color: var(--accent-text); white-space: nowrap; pointer-events: none; box-shadow: inset 0 0 0 1px var(--stroke); }
+/* 正文边上的类别小标签跟着类别色；中文不小于 12 */
+.aitag[class*="mk-"] { background: var(--mk-bg); color: var(--mk-fg); box-shadow: none; font-size: 12px; height: 18px; }
 @container (max-width: 640px) { .aitag { display: none; } }
 /* 引文弹层 */
 .citepop { position: absolute; z-index: 25; width: 380px; border-radius: var(--r-xl); background: var(--bg-elevated); box-shadow: var(--shadow-pop); padding: 14px 16px; font-size: var(--fs); animation: pop-in-menu 90ms var(--ease); }
@@ -387,3 +467,17 @@ button.think { width: 100%; text-align: left; }
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; pointer-events: none; }
 .reflow a { color: var(--accent-text); text-underline-offset: 3px; }
 .blk .src small, .tr small { font-size: .85em; color: var(--text-2); }
+
+/* PDF 自己的链接（引用角标、图表编号、网址）：盖在文字层上面，只接点击；框选、手写时不挡 */
+.link-layer { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.pdf-link { position: absolute; pointer-events: auto; cursor: pointer; border-radius: 2px; }
+.pdf-link:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.box-mode .pdf-link, .ink-mode .pdf-link { pointer-events: none; }
+
+/* 跳走以后回来：阅读区底部正中，滚动时一直在（原文模式在页码小条上面） */
+.back-dock { position: sticky; bottom: 18px; height: 0; display: flex; justify-content: center; z-index: 6; pointer-events: none; }
+.pdf-scroller .back-dock { bottom: 54px; }
+.back-pill { transform: translateY(-100%); pointer-events: auto; display: flex; align-items: center; gap: 2px; height: 36px; padding: 0 4px 0 3px; border-radius: var(--r-md); background: var(--bg-elevated); box-shadow: var(--shadow-pop); animation: pop-in-menu 120ms var(--ease); }
+.bp-go { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: var(--r-sm); font-size: var(--fs); color: var(--text); white-space: nowrap; }
+.bp-go:hover { background: var(--btn-bg-hover); }
+.bp-go .kbd { margin-left: 4px; }

@@ -50,3 +50,16 @@
 .wr-btns { display: flex; gap: 6px; padding: 8px; }
 .wr-btns span { padding: 3px 6px; border-radius: 4px; background: var(--fill-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .wr-btns .on { background: var(--fill-3); font-weight: 500; }
+/* 思考强度：和问答输入框同一个菜单；下面能展开各家模型能选的档 */
+.think-pick { min-width: 140px; justify-content: flex-start; }
+.think-pick > svg:last-child { margin-left: auto; }
+.disc { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; height: 22px; font-size: var(--fs-sm); color: var(--text-2); }
+.disc:hover { color: var(--text); }
+.vtable { border-collapse: collapse; font-size: var(--fs-sm); width: 100%; }
+.vtable td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--stroke-soft); vertical-align: top; line-height: 1.5; }
+.vtable td:first-child { color: var(--text-2); width: 46%; }
+/* 翻译 › 译文样式：十二格和下面的预览 */
+.tr-preview { margin-top: 8px; background: var(--bg-inset); border-radius: var(--r-lg); padding: 12px 18px 18px; box-shadow: inset 0 0 0 1px var(--stroke-soft); --read-size: 15px; }
+.tp-head { display: flex; align-items: center; justify-content: space-between; font-size: var(--fs-sm); color: var(--text-2); }
+.tr-preview .reflow { padding: 0; max-width: none; margin: 0; }
+.tr-preview .reflow.lay-side { max-width: none; }

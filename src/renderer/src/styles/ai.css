@@ -14,6 +14,14 @@
 .tchip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: var(--r-sm); font-size: var(--fs-sm); color: var(--text-2); }
 .tchip:hover { background: var(--fill-2); }
 .tchip.on { color: var(--accent-text); background: var(--accent-soft); }
+/* 思考强度的格子图：一格一档，亮到第几格就是第几档 */
+.meter { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 12px; flex: none; color: currentColor; }
+.meter i { width: 3px; border-radius: 1px; background: var(--fill-4); }
+.meter i.f { background: currentColor; }
+.meter.always i { background: currentColor; opacity: .55; }
+.menu-item .meter { color: var(--text); }
+.menu-item.hot .meter { color: inherit; }
+.menu-item.hot .meter i:not(.f) { background: color-mix(in srgb, currentColor 30%, transparent); }
 
 /* 对话 */
 .ubub { align-self: flex-end; max-width: 85%; background: var(--fill-3); border-radius: 12px 12px 4px 12px; padding: 8px 12px; line-height: 1.55; white-space: pre-wrap; font-size: var(--chat-size); }

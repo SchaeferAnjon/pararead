@@ -1,7 +1,7 @@
 // 意群显示要的数据：一段原文加它的译文，问一次 AI 拿到每句、每块怎么对（shared/senses.ts 里定位），按内容缓存。
 // 一段一个请求，并发跟翻译一样；后来的请求排在前面（刚滚到的那几段先出）。
 import { sensesKey } from '../shared/hash'
-import { parseSenses, type SenseSentence } from '../shared/senses'
+import { parseSenses, senseGaps, type SenseSentence } from '../shared/senses'
 import { t } from '../shared/i18n'
 import { parseJsonLoose, type ChatMsg } from './glm'
 import { sensesMessages } from './prompts'
@@ -19,6 +19,31 @@ export interface SenseQueueOptions {
   call: (messages: ChatMsg[]) => Promise<string>
   onResult: (r: { paperId: string; key: string; data?: SenseSentence[]; error?: string }) => void
   concurrency: () => number
+}
+
+const better = (a: { missing: number; cover: number }, b: { missing: number; cover: number }): boolean => a.missing < b.missing || (a.missing === b.missing && a.cover > b.cover)
+
+// 再问一次时说清上次哪里没对上：哪几块原文没给出译文里找得到的片段，译文里哪些字没分给任何一块
+function retryNote(data: SenseSentence[], en: string, zh: string): string {
+  const lost = data.flatMap((s) => s.chunks.filter((c) => !c.zh.length).map((c) => `「${en.slice(c.en[0], c.en[1])}」`))
+  const used = data.flatMap((s) => s.chunks.flatMap((c) => c.zh))
+  const left: string[] = []
+  let run = ''
+  for (let i = 0; i < zh.length; i++) {
+    if (used.some(([a, b]) => i >= a && i < b)) {
+      if (run.trim().replace(/[\s\p{P}]/gu, '')) left.push(`「${run.trim()}」`)
+      run = ''
+    } else run += zh[i]
+  }
+  if (run.trim().replace(/[\s\p{P}]/gu, '')) left.push(`「${run.trim()}」`)
+  return [
+    '上次的对齐不完整。',
+    lost.length ? `这几块原文没有给出能在译文里原样找到的 zh：${lost.join('、')}。` : '',
+    left.length ? `译文里这些字没有分给任何一块：${left.slice(0, 8).join('、')}。` : '',
+    '每块的 zh 必须是译文里原样的连续片段（被隔开就给数组），各块互不重叠，所有块的 zh 合起来覆盖整句译文。重新输出完整的 JSON。'
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 export class SenseQueue {
@@ -69,9 +94,20 @@ export class SenseQueue {
 
   private async run(it: Item): Promise<void> {
     try {
-      const out = await this.o.call(sensesMessages(it.en, it.zh))
+      const msgs = sensesMessages(it.en, it.zh)
+      const out = await this.o.call(msgs)
       if (this.stopped) return
-      const data = parseSenses(parseJsonLoose(out), it.en, it.zh)
+      let data = parseSenses(parseJsonLoose(out), it.en, it.zh)
+      // 对得不全（有原文块没找到译文，或者译文有一成以上没落在任何一块里）：把问题告诉模型，再问一次，留对得全的那份
+      const gaps = senseGaps(data, it.zh)
+      if (!data.length || gaps.missing > 0 || gaps.cover < 0.9) {
+        const retry = await this.o
+          .call([...msgs, { role: 'assistant', content: out }, { role: 'user', content: retryNote(data, it.en, it.zh) }])
+          .then((o2) => parseSenses(parseJsonLoose(o2), it.en, it.zh))
+          .catch(() => [] as SenseSentence[])
+        if (this.stopped) return
+        if (retry.length && (!data.length || better(senseGaps(retry, it.zh), gaps))) data = retry
+      }
       if (!data.length) throw new Error(t('模型给的意群在原文里对不上'))
       this.o.putCached(it.key, JSON.stringify(data))
       this.o.onResult({ paperId: it.paperId, key: it.key, data })

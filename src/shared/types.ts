@@ -1,3 +1,5 @@
+import type { ThinkLevel } from './thinking'
+import type { SenseStyle, TrStyle } from './trStyles'
 export type ReadMode = 'pdf' | 'reflow' | 'glance'
 export type HlColor = 'yellow' | 'green' | 'blue' | 'red'
 export const HL_COLORS: HlColor[] = ['yellow', 'green', 'blue', 'red']
@@ -203,10 +205,11 @@ export interface Settings {
   readSize: number
   srcFont: 'serif' | 'sans'
   display: 'src' | 'both' | 'tr'
-  trStyle: 'text' | 'fill'
+  trStyle: TrStyle // 译文样式，十二种（shared/trStyles.ts）
   trLayout: 'stack' | 'side' // 双语的排法：译文跟在原文下面，或者原文在左、译文在右
   termMarks: boolean // 正文里给术语画虚线、悬停看解释
   senseGroups: boolean // 双语时的意群显示：一句原文配一句译文，原文的一块和译文里对它的那几段同色
+  senseStyle: SenseStyle // 意群怎么上色：字换成这一块的颜色，或者字不变色、底下画同色的线
   leftW: number
   rightW: number
   leftCollapsed: boolean
@@ -223,7 +226,7 @@ export interface Settings {
   aiLang: string // AI 回答用的语言，空就跟翻译目标语言
   chatSize: number // AI 回答字号
   chatFloat: boolean // AI 问答用悬浮窗
-  thinking: boolean // AI 问答默认开深度思考
+  thinkLevels: Record<string, ThinkLevel> // AI 问答的思考强度，每个模型记一份（键是 shared/thinking.ts 的 thinkKey）；没记过的用最省的一档
   explainPrefetch: boolean // 打了「看不懂」「有质疑」以后在后台先备好讲解（默认关：不自动花额度）
   agentDir: string // 研究项目放在哪，空是 文稿/ParaRead 项目
   syncEnabled: boolean // 多设备同步（iCloud 云盘）

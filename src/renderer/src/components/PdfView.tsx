@@ -9,6 +9,7 @@ import { useNotePreview } from '../lib/ui'
 import type { Jump } from './Reader'
 import type { SelInfo } from './Selection'
 import { t } from '@shared/i18n'
+import { useJumpBack, type BackHandle } from './BackPill'
 
 interface Size {
   w: number
@@ -40,9 +41,11 @@ export function PdfView(props: {
   inks: Ink[]
   onInkAdd: (k: { page: number; points: [number, number][] }) => void
   onInkErase: (id: string) => void
+  backHandle?: BackHandle
 }) {
   const { pdf } = props
   const scroller = useRef<HTMLDivElement>(null)
+  const back = useJumpBack(scroller, props.backHandle)
   const [sizes, setSizes] = useState<Size[] | null>(null)
   const [width, setWidth] = useState(0)
   const [visible, setVisible] = useState<Set<number>>(new Set([1, 2]))
@@ -131,6 +134,7 @@ export function PdfView(props: {
   }, [sizes, width])
 
   const onScroll = (): void => {
+    back.onScroll()
     const el = scroller.current
     if (!el || !sizes) return
     const st = el.scrollTop
@@ -331,7 +335,27 @@ export function PdfView(props: {
 
   const jumpTo = (n: number): void => {
     if (!sizes || !scroller.current) return
+    back.remember(t('回到第 {0} 页', page))
     scroller.current.scrollTop = pageTop(Math.min(Math.max(1, n), sizes.length))
+  }
+
+  // PDF 自己的内部链接（引用角标、图表编号）：跳到它指的那一页那一处，跳之前记下位置
+  const followLink = async (dest: unknown, from: number): Promise<void> => {
+    if (!sizes || !scroller.current) return
+    const d = typeof dest === 'string' ? await pdf.getDestination(dest) : dest
+    if (!Array.isArray(d) || d[0] == null) return
+    const index = typeof d[0] === 'number' ? d[0] : await pdf.getPageIndex(d[0] as never).catch(() => -1)
+    if (index < 0 || index >= sizes.length) return
+    const n = index + 1
+    const kind = (d[1] as { name?: string } | undefined)?.name
+    const y = kind === 'XYZ' ? d[3] : kind === 'FitH' || kind === 'FitBH' ? d[2] : null
+    let frac = 0
+    if (typeof y === 'number') {
+      const vp = (await pdf.getPage(n)).getViewport({ scale: 1 })
+      frac = Math.min(1, Math.max(0, vp.convertToViewportPoint(0, y)[1] / vp.height))
+    }
+    back.remember(t('回到第 {0} 页', from))
+    scroller.current.scrollTop = pageTop(n) + Math.max(0, frac * sizes[index].h * scale - 40)
   }
 
   return (
@@ -367,8 +391,10 @@ export function PdfView(props: {
             shot={props.shot && props.shot.page === i + 1 ? props.shot.frac : null}
             inks={props.inks.filter((k) => k.page === i + 1)}
             drawing={drawing && drawing.page === i + 1 && props.inkTool?.kind === 'pen' ? { points: drawing.points, color: props.inkTool.color } : null}
+            onLink={(dest) => void followLink(dest, i + 1)}
           />
         ))}
+        {back.node && <div className="back-dock">{back.node}</div>}
       </div>
       {sizes && (chip || chipEdit) && (
         <div className="page-chip num" onMouseEnter={() => setChip(true)}>
@@ -436,10 +462,13 @@ const PageView = memo(function PageView(p: {
   shot: [number, number, number, number] | null
   inks: Ink[]
   drawing: { points: [number, number][]; color: string } | null
+  onLink: (dest: unknown) => void
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const textRef = useRef<HTMLDivElement>(null)
   const [textReady, setTextReady] = useState(0)
+  // 这一页上的链接：页内比例坐标；dest 是 PDF 内部的目标，url 是外部网址
+  const [links, setLinks] = useState<{ r: [number, number, number, number]; dest?: unknown; url?: string }[]>([])
 
   useEffect(() => {
     if (!p.render) return
@@ -465,6 +494,18 @@ const PageView = memo(function PageView(p: {
       tl = new pdfjs.TextLayer({ textContentSource: page.streamTextContent(), container: textRef.current, viewport: vp })
       await tl.render().catch(() => {})
       if (!cancelled) setTextReady((x) => x + 1)
+      const vp1 = page.getViewport({ scale: 1 })
+      const annots = (await page.getAnnotations({ intent: 'display' }).catch(() => [])) as { subtype?: string; rect?: number[]; dest?: unknown; url?: string }[]
+      if (cancelled) return
+      setLinks(
+        annots
+          .filter((a) => a.subtype === 'Link' && a.rect && (a.dest || a.url))
+          .map((a) => {
+            const [x1, y1] = vp1.convertToViewportPoint(a.rect![0], a.rect![1]) as number[]
+            const [x2, y2] = vp1.convertToViewportPoint(a.rect![2], a.rect![3]) as number[]
+            return { r: [Math.min(x1, x2) / vp1.width, Math.min(y1, y2) / vp1.height, Math.abs(x2 - x1) / vp1.width, Math.abs(y2 - y1) / vp1.height] as [number, number, number, number], dest: a.dest, url: a.url }
+          })
+      )
     })()
     return () => {
       cancelled = true
@@ -505,6 +546,26 @@ const PageView = memo(function PageView(p: {
         )}
       </div>
       <div className="textLayer" ref={textRef} />
+      {links.length > 0 && (
+        <div className="link-layer">
+          {links.map((l, i) => (
+            <a
+              key={i}
+              className="pdf-link"
+              href={l.url}
+              target={l.url ? '_blank' : undefined}
+              rel="noreferrer"
+              title={l.url ?? undefined}
+              style={{ left: `${l.r[0] * 100}%`, top: `${l.r[1] * 100}%`, width: `${l.r[2] * 100}%`, height: `${l.r[3] * 100}%` }}
+              onClick={(e) => {
+                if (l.url) return
+                e.preventDefault()
+                p.onLink(l.dest)
+              }}
+            />
+          ))}
+        </div>
+      )}
       {(p.inks.length > 0 || p.drawing) && (
         <svg className="ink-layer" viewBox="0 0 1 1" preserveAspectRatio="none">
           {p.inks.map((k) => (

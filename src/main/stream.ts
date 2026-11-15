@@ -1,4 +1,5 @@
 import type { WebContents } from 'electron'
+import { showsThinking, type ThinkLevel } from '../shared/thinking'
 import type { StreamEvent } from '../shared/types'
 import type { Ai, AiKind } from './ai'
 import { putAiCache, type DB } from './db'
@@ -7,7 +8,7 @@ import type { ChatMsg } from './glm'
 export interface StreamOpts {
   kind?: AiKind
   cacheKey?: string | null
-  thinking?: boolean
+  think?: ThinkLevel
   useId?: string
   maxTokens?: number
   onFinish?: (full: string, info: { reasoning: string; thinkMs: number | null }) => void
@@ -35,12 +36,12 @@ export function makeStreamer(ai: Ai, db: DB, log: (m: string) => void) {
       {
         kind: o.kind ?? 'text',
         signal: ctl.signal,
-        thinking: o.thinking,
+        think: o.think,
         useId: o.useId,
         maxTokens: o.maxTokens,
-        // 关着深度思考时不给界面看思考：GLM-5.3、Gemini 3 关不掉，只是压到最浅
+        // 思考强度是「关」或没给（翻译这类请求）时不给界面看思考：GLM-5.3、Gemini 3 关不掉，只是压到最浅
         onReasoning: (r) => {
-          if (!o.thinking) return
+          if (!showsThinking(o.think)) return
           reasoning += r
           send({ reqId, reasoning: r })
         }

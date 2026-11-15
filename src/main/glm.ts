@@ -1,4 +1,4 @@
-import { thinkParams } from '../shared/thinking'
+import { thinkParams, type ThinkLevel } from '../shared/thinking'
 import { t } from '../shared/i18n'
 // OpenAI 兼容的 chat/completions 客户端，支持 SSE 流式。默认端点是智谱 Coding Plan（/api/coding/paas/v4）；
 // 别家服务（DeepSeek、通义、OpenAI 等，见 shared/providers.ts）传 baseUrl。各家的特殊参数在 buildRequest 里按模型加。
@@ -40,7 +40,7 @@ export interface ChatOptions {
   retryDelays?: number[] // 429 限流时的等待间隔
   baseUrl?: string // 不给就是智谱 Coding Plan
   headers?: Record<string, string> // 会员通道的设备令牌、用量号
-  thinking?: boolean // 深度思考：思考内容走 onReasoning
+  think?: ThinkLevel // 思考强度（shared/thinking.ts），不给是这个模型最省的一档；思考内容走 onReasoning
   maxTokens?: number
   serial?: boolean // 账号把请求串行化（智谱 Coding Plan）：发起间隔至少 1.1 秒
   onReasoning?: (text: string) => void
@@ -63,8 +63,8 @@ export function buildRequest(o: ChatOptions): { url: string; init: RequestInit; 
     messages: o.messages,
     stream: !!o.stream
   }
-  // 深度思考按各家自己的参数开关（shared/thinking.ts）
-  Object.assign(body, thinkParams(o.model, o.baseUrl ?? GLM_BASE, !!o.thinking))
+  // 思考强度按各家自己的参数（shared/thinking.ts）
+  Object.assign(body, thinkParams(o.model, o.baseUrl ?? GLM_BASE, o.think))
   if (o.stream) body.stream_options = { include_usage: true }
   if (o.temperature !== undefined) body.temperature = o.temperature
   if (o.maxTokens) body.max_tokens = o.maxTokens

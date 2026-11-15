@@ -139,7 +139,17 @@ svg.lucide { flex: none; }
 .menu-item:disabled { color: var(--text-3); }
 .menu-item:disabled svg { color: var(--text-3); }
 .menu-sep { height: 1px; background: var(--stroke); margin: 4px 6px; }
-.menu-sec { padding: 6px 8px 2px; font-size: var(--fs-sm); font-weight: 500; color: var(--text-2); }
+.menu-sec { padding: 6px 8px 2px; font-size: var(--fs-sm); font-weight: 500; color: var(--text-2); display: flex; align-items: baseline; gap: 12px; }
+.menu-sec .r { margin-left: auto; font-weight: 400; color: var(--text-3); }
+/* 两行的菜单项（思考强度）：名字一行，下面一句说明，菜单放宽、说明能折行 */
+.menu.wide { width: 320px; }
+.menu-item.two { height: auto; min-height: 28px; padding: 6px 8px; align-items: flex-start; white-space: normal; }
+.menu-item.two .tick, .menu-item.two > .meter { margin-top: 3px; }
+.mi-t { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mi-l { font-weight: 500; }
+.mi-desc { font-size: var(--fs-sm); color: var(--text-2); line-height: 1.45; }
+.menu-item.hot .mi-desc { color: inherit; opacity: .75; }
+.menu-note { padding: 4px 8px; font-size: var(--fs-sm); color: var(--text-2); line-height: 1.5; white-space: normal; }
 
 /* 弹窗 */
 .backdrop { position: fixed; inset: 0; z-index: 60; background: var(--bg-backdrop); display: flex; align-items: center; justify-content: center; animation: fade-in var(--dur-1) var(--ease); }

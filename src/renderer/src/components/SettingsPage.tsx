@@ -1,10 +1,13 @@
-import { Check, ChevronDown, Copy, Download, ExternalLink, FileText, Mail, Star, Users, Cloud, Eye, EyeOff, FolderOpen, Globe, HardDrive, Info, Languages, Layers, MessageCircleQuestion, Monitor, Moon, RefreshCw, Settings, SquareTerminal, Sun, Zap } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Copy, Download, ExternalLink, FileText, Mail, Star, Users, Cloud, Eye, EyeOff, FolderOpen, Globe, HardDrive, Info, Languages, Layers, MessageCircleQuestion, Monitor, Moon, RefreshCw, Settings, SquareTerminal, Sun, Zap } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { PROVIDERS, providerOf } from '@shared/providers'
 import type { LocalCliStatus, SettingsView, WordStatus } from '@shared/types'
 import { WORD_STYLES } from '@shared/wordCite'
 import { t, UI_LANG_NAMES, UI_LANGS, uiLocale } from '@shared/i18n'
-import { thinkMode } from '@shared/thinking'
+import { levelHint, levelName } from '@shared/thinking'
+import { Meter, pickThink, thinkState } from './ThinkPicker'
+import { TrPreview, TrStyleTiles } from './TrStyles'
+import { trStyleName, trStyleYields, type TrStyle } from '@shared/trStyles'
 import { api, errText, type BibStatus, type MemberStatus, type SyncStatus, type UpdateState } from '../api'
 import { AppLogo } from '../lib/member'
 import { PHASE_NAME, useMineruInstall } from './Onboarding'
@@ -386,15 +389,7 @@ function Ai({ s, set, setS }: P & { setS: (v: SettingsView) => void }) {
         </Row>
       </FSec>
       <FSec title={t('回答')}>
-        {thinkMode(s.provider, s.textModel) === 'always' ? (
-          <Row label={t('深度思考')} hint={t('这个模型每次都会先想再答，不用开关')}>
-            <span />
-          </Row>
-        ) : (
-          <Row label={t('深度思考默认开')} hint={t('先想清楚再答，慢一些；问答输入框里也能临时开关')}>
-            <Switch on={s.thinking} onChange={(v) => set({ thinking: v })} label={t('深度思考默认开')} />
-          </Row>
-        )}
+        <ThinkRow s={s} />
         <Row label={t('标签讲解')} hint={t('打了「看不懂」「有质疑」以后在后台先讲好，点开不用等；每处问一次 AI。关着时点「过一遍」才讲')}>
           <Switch on={s.explainPrefetch} onChange={(v) => set({ explainPrefetch: v })} label={t('打标签后在后台先备好讲解')} />
         </Row>
@@ -403,6 +398,87 @@ function Ai({ s, set, setS }: P & { setS: (v: SettingsView) => void }) {
         </Row>
       </FSec>
     </>
+  )
+}
+
+// 思考强度的默认档：和问答输入框里是同一个值，每个模型记一份
+function ThinkRow({ s }: { s: SettingsView }) {
+  const [table, setTable] = useState(false)
+  const { spec, level } = thinkState(s)
+  if (spec.kind === 'unknown') return null
+  const rows: [string, string][] = [
+    [t('OpenAI GPT-5 系列'), t('关 / 低 / 中 / 高 / 很高')],
+    [t('Gemini 3、OpenAI o 系列'), t('低 / 中 / 高（关不掉）')],
+    [t('智谱 GLM-5.3、Kimi K3.1 Pro'), t('低 / 高 / 最高（关不掉）')],
+    [t('本机 Claude Code'), t('低 / 中 / 高 / 很高 / 最高')],
+    [t('DeepSeek、豆包、通义、Kimi K2.5 / K2.6、智谱 GLM-4.5 起'), t('关 / 开')],
+    [t('Kimi K3、Claude（API）'), t('总会先想，没有档位')],
+    [t('认不出的模型'), t('不加思考参数，这一项不出现')]
+  ]
+  return (
+    <div className="frow">
+      <div className="fl">{t('思考强度')}</div>
+      <div className="fc">
+        {spec.kind === 'always' ? (
+          <>
+            <div className="line">
+              <Meter spec={spec} level={null} />
+              {t('总会先想')}
+            </div>
+            <div className="hint">{t('{0} 每次都会先想再答，接口没有档位可选，也关不掉', s.textModel)}</div>
+          </>
+        ) : (
+          <>
+            <div className="line">
+              <button className="btn think-pick" onClick={(e) => void pickThink(s, e.currentTarget, { settingsLink: false })}>
+                <Meter spec={spec} level={level} />
+                <span>{levelName(level!)}</span>
+                <ChevronDown size={14} />
+              </button>
+            </div>
+            <div className="hint">
+              {levelHint(level!)}
+              <br />
+              {t('问答输入框里改了，这里跟着变。每个模型记住自己的档，第一次用的模型从最省的一档开始。')}
+            </div>
+          </>
+        )}
+        <button className="disc" onClick={() => setTable((v) => !v)}>
+          {table ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          {t('各家模型能选的档')}
+        </button>
+        {table && (
+          <table className="vtable">
+            <tbody>
+              {rows.map(([a, b]) => (
+                <tr key={a}>
+                  <td>{a}</td>
+                  <td>{b}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// 译文样式：十二格（和阅读页「显示」里同一套），鼠标停在一格上下面的预览先换
+function TrStyleRow({ s, set }: P) {
+  const [preview, setPreview] = useState<TrStyle | null>(null)
+  const yields = trStyleYields(s.trStyle, s.senseGroups, s.senseStyle)
+  return (
+    <div className="frow">
+      <div className="fl">{t('译文样式')}</div>
+      <div className="fc">
+        <TrStyleTiles settings={s} wide bare onPick={(v) => set({ trStyle: v })} onPreview={setPreview} />
+        <div className="hint">
+          {yields ? t('意群下划线开着时，「{0}」先不画，免得字底下两条线；意群换成文字着色或关掉就回来。', trStyleName(s.trStyle)) : t('默认「浅色字」；「模糊」「透明」是学习用的，鼠标移到那一段上才看清。')}
+        </div>
+        <TrPreview settings={s} preview={preview} />
+      </div>
+    </div>
   )
 }
 
@@ -427,17 +503,30 @@ function Translate({ s, set }: P) {
             ]}
           />
         </Row>
-        <Row label={t('译文样式')}>
+        <Row label={t('排法')}>
           <Segmented
             className="sm"
-            value={s.trStyle}
-            onChange={(v) => set({ trStyle: v })}
+            value={s.trLayout}
+            onChange={(v) => set({ trLayout: v })}
             options={[
-              { value: 'text', label: t('浅色字') },
-              { value: 'fill', label: t('浅底色') }
+              { value: 'stack', label: t('上下') },
+              { value: 'side', label: t('左右') }
             ]}
           />
         </Row>
+        <Row label={t('意群')} hint={t('一句原文配一句译文，原文的一块和译文里对它的那几段同色')}>
+          <Segmented
+            className="sm"
+            value={s.senseGroups ? s.senseStyle : 'off'}
+            onChange={(v) => set(v === 'off' ? { senseGroups: false } : { senseGroups: true, senseStyle: v })}
+            options={[
+              { value: 'off', label: t('关') },
+              { value: 'text', label: t('文字着色') },
+              { value: 'underline', label: t('下划线') }
+            ]}
+          />
+        </Row>
+        <TrStyleRow s={s} set={set} />
         <Row label={t('英文字体')}>
           <Segmented
             className="sm"

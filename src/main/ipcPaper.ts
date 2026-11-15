@@ -2,6 +2,7 @@ import { dialog, ipcMain } from 'electron'
 import { writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { thinkKey, thinkLevel, type ThinkLevel } from '../shared/thinking'
 import { cyrb53 } from '../shared/hash'
 import { plain } from '../shared/refs'
 import type { ChatMessage, Concept, MajorPoint, MajorType, Term, Tier } from '../shared/types'
@@ -22,7 +23,7 @@ export function registerPaper(c: Ctx): void {
 
   ipcMain.handle(
     'chat:send',
-    (e, reqId: string, paperId: string, msg: { content: string; quote: string | null; image: string | null; context?: string | null; paperIds?: string[]; thinking?: boolean }) => {
+    (e, reqId: string, paperId: string, msg: { content: string; quote: string | null; image: string | null; context?: string | null; paperIds?: string[]; think?: ThinkLevel }) => {
       const paper = getPaper(db, paperId)
       if (!paper) throw new Error(t('论文不存在'))
       const s = settings.get()
@@ -69,9 +70,14 @@ export function registerPaper(c: Ctx): void {
         ]
         messages.splice(0, messages.length, { role: 'user', content: parts })
       } else messages.push({ role: 'user', content: text + FOLLOWUP_HINT })
+      // 思考强度：界面给的档这个模型得有，没有就用最省的一档；看图不思考
+      const thinkOf = (want: ThinkLevel | undefined): ThinkLevel | undefined => {
+        const { provider, model } = ai.conf()
+        return thinkLevel(want ? { [thinkKey(provider, model)]: want } : {}, provider, model) ?? undefined
+      }
       c.streamer.streamTo(e.sender, reqId, messages, {
         kind,
-        thinking: !!msg.thinking,
+        think: kind === 'text' ? thinkOf(msg.think) : undefined,
         onFinish: (full, info) =>
           addChat(db, { id: newId(), paperId, role: 'assistant', content: full, quote: null, image: null, createdAt: Date.now(), reasoning: info.reasoning || null, thinkMs: info.thinkMs })
       })

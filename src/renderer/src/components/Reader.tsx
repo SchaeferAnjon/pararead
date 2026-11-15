@@ -1,4 +1,4 @@
-import { ALargeSmall, Check, ChevronDown, ChevronLeft, ChevronUp, Cloud, FileOutput, GripVertical, Highlighter, Info, Languages, Minimize2, PanelLeft, PanelRight, PictureInPicture2, RefreshCw, ScanText, Search, SquarePen, X, Zap, Eraser, Pencil } from 'lucide-react'
+import { ALargeSmall, Check, ChevronDown, Columns2, Rows2, ChevronLeft, ChevronUp, Cloud, FileOutput, GripVertical, Highlighter, Info, Languages, Minimize2, PanelLeft, PanelRight, PictureInPicture2, RefreshCw, ScanText, Search, SquarePen, X, Zap, Eraser, Pencil } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type * as PdfJs from 'pdfjs-dist'
 import { sectionsOf, squash } from '@shared/chunk'
@@ -8,6 +8,8 @@ import { showMenu } from '../lib/menu'
 import { loadPdf } from '../lib/pdf'
 import { useTranslations } from '../lib/translations'
 import { Segmented, Switch, useDebounced, useEvent, useToast } from '../lib/ui'
+import type { TrStyle } from '@shared/trStyles'
+import { TrStyleTiles } from './TrStyles'
 import { ChatPanel, type Attach } from './ChatPanel'
 import { QBadge, QuestionsPane, type WalkRequest } from './QuestionsPane'
 import { ExportDialog } from './ExportDialog'
@@ -20,6 +22,7 @@ import { RegionEditor } from './RegionEditor'
 import { SelectionLayer, type SelInfo } from './Selection'
 import { ShotLayer } from './ShotLayer'
 import { t } from '@shared/i18n'
+import type { BackHandle } from './BackPill'
 
 export type Jump = { nonce: number; kind: 'block'; blockId: string; annId?: string } | { nonce: number; kind: 'page'; page: number; annId?: string; frac?: number }
 export type Density = 'less' | 'default' | 'more'
@@ -48,6 +51,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
   const [leftW, setLeftW] = useState(settings.leftW)
   const [rightW, setRightW] = useState(settings.rightW)
   const [jump, setJump] = useState<Jump | null>(null)
+  const backHandle: BackHandle = useRef(null)
   const [sel, setSel] = useState<SelInfo | null>(null)
   const [attach, setAttach] = useState<Attach | null>(null)
   const [focusChat, setFocusChat] = useState(0)
@@ -74,6 +78,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
   const [shot, setShot] = useState<{ page: number; frac: [number, number, number, number] } | null>(null)
   const [zoom, setZoom] = useState(1)
   const [aaOpen, setAaOpen] = useState(false)
+  const [trPreview, setTrPreview] = useState<TrStyle | null>(null)
   const [trAll, setTrAll] = useState(false)
   const [findOpen, setFindOpen] = useState(false)
   const [clearSignal, setClearSignal] = useState(0)
@@ -87,6 +92,8 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
   const [walkFocus, setWalkFocus] = useState<string | null>(null)
   const [keysOn, setKeysOn] = useState(false)
   const [keys, setKeys] = useState<MajorPoint[] | null>(null)
+  // 从左栏「重点」点进来的那一条：正文里用它的类别色标出来（「AI 重点高亮」没开时也标这一条）
+  const [focusKey, setFocusKey] = useState<MajorPoint | null>(null)
   const [terms, setTerms] = useState<Term[] | null>(null)
   const [termsBusy, setTermsBusy] = useState(false)
   const termHop = useRef<{ key: string; i: number }>({ key: '', i: -1 })
@@ -193,6 +200,15 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     setInkTool(null)
     void api.updatePaper(paperId, { lastMode: m })
   })
+
+  // 模式切换四格：上下对照、左右对照都是对照模式，换的是排法；点了就是要看双语
+  const pickMode = useEvent((v: ReadMode | 'stack' | 'side') => {
+    if (v !== 'stack' && v !== 'side') return switchMode(v)
+    if (settings.trLayout !== v || settings.display !== 'both') void api.setSettings({ trLayout: v, display: 'both' })
+    if (mode !== 'reflow') switchMode('reflow')
+  })
+  // ⌘2 进对照（按上次的排法），已经在对照里再按一次在上下和左右之间换
+  const reflowCmd = useEvent(() => (mode === 'reflow' ? pickMode(settings.trLayout === 'side' ? 'stack' : 'side') : switchMode('reflow')))
 
   const sections = useMemo(() => (doc ? sectionsOf(doc.blocks) : new Map<string, string>()), [doc])
   const headings = useMemo(() => (doc ? doc.blocks.filter((b) => b.type === 'heading') : []), [doc])
@@ -409,6 +425,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     setKeysBusy(true)
     try {
       setKeys(await api.majorPoints(paperId, d ?? density, !!force))
+      setFocusKey(null)
     } catch (e) {
       toast(t('标重点失败：{0}', errText(e)))
     } finally {
@@ -450,9 +467,12 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     () =>
       api.onCommand((cmd) => {
         if (dialog) return
-        if (cmd === 'back') props.onBack()
+        // ⌘[：刚跳走过（点引用、链接、跳页）先回到刚才读的地方，否则回文献库
+        if (cmd === 'back') {
+          if (!backHandle.current?.()) props.onBack()
+        }
         if (cmd === 'mode-pdf') switchMode('pdf')
-        if (cmd === 'mode-reflow') switchMode('reflow')
+        if (cmd === 'mode-reflow') reflowCmd()
         if (cmd === 'mode-glance') switchMode('glance')
         if (cmd === 'toggle-left') toggleLeft()
         if (cmd === 'toggle-right') toggleRight()
@@ -722,6 +742,11 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
             sectionForPage={sectionForPage}
             keys={keys}
             keysBusy={keysBusy}
+            focusKey={focusKey}
+            onKey={(k) => {
+              setFocusKey(k)
+              goBlock(k.blockId)
+            }}
             terms={terms}
             termsBusy={termsBusy}
             termMarks={settings.termMarks}
@@ -762,15 +787,39 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
           <button className="icon-btn" title={t('回文献库 ⌘[')} onClick={props.onBack}>
             <ChevronLeft size={16} />
           </button>
+          {/* 2026-11-15 用户挑了方向 A：上下对照、左右对照直接放进模式切换，旁边一个意群按钮 */}
           <Segmented
-            value={mode}
-            onChange={switchMode}
+            className="mode-seg"
+            value={mode === 'reflow' ? settings.trLayout : mode}
+            onChange={pickMode}
             options={[
               { value: 'pdf', label: t('原文'), title: '⌘1' },
-              { value: 'reflow', label: t('对照'), busy: reflowBusy, title: '⌘2' },
+              {
+                value: 'stack',
+                label: (
+                  <>
+                    <Rows2 size={14} />
+                    {!compact && <span className="seg-t">{t('上下对照')}</span>}
+                  </>
+                ),
+                busy: reflowBusy && settings.trLayout === 'stack',
+                title: compact ? t('上下对照：⌘2，再按一次换左右') : t('⌘2，再按一次换左右')
+              },
+              {
+                value: 'side',
+                label: (
+                  <>
+                    <Columns2 size={14} />
+                    {!compact && <span className="seg-t">{t('左右对照')}</span>}
+                  </>
+                ),
+                busy: reflowBusy && settings.trLayout === 'side',
+                title: compact ? t('左右对照：⌘2，再按一次换上下') : t('⌘2，再按一次换上下')
+              },
               { value: 'glance', label: t('速览'), title: '⌘3' }
             ]}
           />
+          {mode === 'reflow' && doc && settings.display === 'both' && <SenseButton settings={settings} compact={compact} />}
           {findOpen && <FindBar scroller={midRef} onClose={() => setFindOpen(false)} />}
           <div className="spacer" />
           <div className="bar-tools">
@@ -871,8 +920,9 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
           <button className={'icon-btn' + (findOpen ? ' active' : '')} title={t('搜索 ⌘F')} onClick={() => setFindOpen((v) => !v)}>
             <Search size={16} />
           </button>
-          <button className={'icon-btn' + (aaOpen ? ' active' : '')} title={t('显示设置')} onClick={() => setAaOpen((v) => !v)}>
+          <button className={'btn ghost show-btn' + (aaOpen ? ' on' : '')} title={t('显示设置')} onClick={() => setAaOpen((v) => !v)}>
             <ALargeSmall size={16} />
+            {!compact && t('显示')}
           </button>
           {(rightCollapsed || floating) && (
             <button className={'icon-btn' + (floating && !rightCollapsed ? ' active' : '')} title={floating ? t('AI 悬浮窗 ⌃⌘I') : t('显示 AI 问答 ⌃⌘I')} onClick={toggleRight}>
@@ -880,11 +930,12 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
             </button>
           )}
         </div>
-        {aaOpen && <AaPanel mode={mode} settings={settings} zoom={zoom} onZoom={setZoomTo} onClose={() => setAaOpen(false)} />}
+        {aaOpen && <AaPanel mode={mode} settings={settings} zoom={zoom} onZoom={setZoomTo} onPreview={setTrPreview} onClose={() => (setAaOpen(false), setTrPreview(null))} />}
         <div className="mid-body" ref={midRef}>
           {mode === 'pdf' &&
             (pdf ? (
               <PdfView
+                backHandle={backHandle}
                 pdf={pdf}
                 paper={paper}
                 anns={anns}
@@ -939,17 +990,19 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
             ))}
           {mode === 'reflow' && (
             <ReflowView
+              backHandle={backHandle}
               paper={paper}
               doc={doc}
               prog={prog}
               anns={anns}
               settings={settings}
+              trPreview={trPreview}
               tr={tr}
               jump={jump}
               hoverAnn={hoverAnn ?? walkFocus}
               sections={sections}
               onWalk={(ids) => openQuestions({ ids, auto: true })}
-              marks={keysOn ? keys : null}
+              marks={keysOn ? keys : focusKey ? [focusKey] : null}
               terms={settings.termMarks ? terms : null}
               initial={posRef.current}
               onPosition={(p, progress) => {
@@ -1072,7 +1125,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
   )
 }
 
-function AaPanel(props: { mode: ReadMode; settings: SettingsView; zoom: number; onZoom: (z: number) => void; onClose: () => void }) {
+function AaPanel(props: { mode: ReadMode; settings: SettingsView; zoom: number; onZoom: (z: number) => void; onPreview: (s: TrStyle | null) => void; onClose: () => void }) {
   const s = props.settings
   const set = (p: Parameters<typeof api.setSettings>[0]): void => void api.setSettings(p)
   const dark = document.documentElement.getAttribute('data-theme') === 'dark'
@@ -1153,37 +1206,18 @@ function AaPanel(props: { mode: ReadMode; settings: SettingsView; zoom: number; 
                 )}
                 {s.display === 'both' &&
                   row(
-                    t('排列'),
+                    t('意群样式'),
                     <Segmented
                       className="sm block"
-                      value={s.trLayout}
-                      onChange={(v) => set({ trLayout: v })}
+                      value={s.senseStyle}
+                      onChange={(v) => set({ senseStyle: v, senseGroups: true })}
                       options={[
-                        { value: 'stack', label: t('上下') },
-                        { value: 'side', label: t('左右') }
+                        { value: 'text', label: t('文字着色') },
+                        { value: 'underline', label: t('下划线') }
                       ]}
                     />
                   )}
-                {s.display === 'both' &&
-                  row(
-                    t('意群'),
-                    <>
-                      <Switch on={s.senseGroups} onChange={(v) => set({ senseGroups: v })} label={t('意群')} />
-                      <span className="aa-hint">{t('一句一行，对应的意群同色')}</span>
-                    </>
-                  )}
-                {row(
-                  t('译文样式'),
-                  <Segmented
-                    className="sm block"
-                    value={s.trStyle}
-                    onChange={(v) => set({ trStyle: v })}
-                    options={[
-                      { value: 'text', label: t('浅色字') },
-                      { value: 'fill', label: t('浅底色') }
-                    ]}
-                  />
-                )}
+                <TrStyleTiles settings={s} onPick={(v) => set({ trStyle: v })} onPreview={props.onPreview} />
               </>
             )}
           </>
@@ -1266,5 +1300,55 @@ function FindBar(props: { scroller: React.RefObject<HTMLDivElement | null>; onCl
         <X size={16} />
       </button>
     </div>
+  )
+}
+
+// 标题栏的意群按钮：点一下开关，右边小箭头选「文字着色」或「下划线」（2026-11-15 用户定：意群文字和下划线两种）
+function SenseButton(props: { settings: SettingsView; compact: boolean }) {
+  const s = props.settings
+  const on = s.senseGroups
+  const sample = (style: string) => (
+    <span className={`sg-${style} sg-sample`}>
+      <span className="sg" data-c="0">
+        数据由
+      </span>
+      <span className="sg" data-c="1">
+        处理器处理
+      </span>
+    </span>
+  )
+  const menu = async (el: Element): Promise<void> => {
+    const id = await showMenu(
+      [
+        { type: 'section', label: t('意群样式') },
+        { id: 'text', label: t('文字着色'), desc: t('字换成这一块的颜色'), icon: sample('text'), checked: on && s.senseStyle === 'text' },
+        { id: 'underline', label: t('下划线'), desc: t('字不变色，底下画同色的线'), icon: sample('underline'), checked: on && s.senseStyle === 'underline' },
+        { type: 'separator' },
+        { id: 'off', label: t('不显示意群'), checked: !on }
+      ],
+      { el, align: 'left' }
+    )
+    if (id === 'off') void api.setSettings({ senseGroups: false })
+    else if (id === 'text' || id === 'underline') void api.setSettings({ senseGroups: true, senseStyle: id })
+  }
+  return (
+    <span className="sense-split" data-part="意群开关">
+      <button
+        className={'btn ghost' + (on ? ' on' : '')}
+        title={on ? t('意群开着（{0}），点一下关掉', s.senseStyle === 'underline' ? t('下划线') : t('文字着色')) : t('意群：一句一句对着看，对应的意群同色')}
+        onClick={() => void api.setSettings({ senseGroups: !on })}
+      >
+        <span className="sg-glyph" aria-hidden>
+          <i />
+          <i />
+          <i />
+          <i />
+        </span>
+        {!props.compact && t('意群')}
+      </button>
+      <button className={'btn ghost' + (on ? ' on' : '')} title={t('意群样式')} onClick={(e) => void menu(e.currentTarget)}>
+        <ChevronDown size={12} />
+      </button>
+    </span>
   )
 }
