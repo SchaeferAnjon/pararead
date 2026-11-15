@@ -9,12 +9,13 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { bibKeys } from '../shared/bib'
 import { formatCitation, splitName } from '../shared/cite'
-import { cleanOutline, cleanSentences, fillOutline, plainText, ruleCheck, toLatex, wordSegments } from '../shared/draft'
+import { cleanOutline, cleanSentences, fillOutline, plainText, quotePages, ruleCheck, toLatex, wordSegments } from '../shared/draft'
 import { t } from '../shared/i18n'
 import {
   BASE_COLS,
   cellId,
   findQuote,
+  isIdea,
   isRel,
   mentions,
   NOTE_COL,
@@ -35,10 +36,11 @@ import {
   type RelKind,
   type SentenceCheck
 } from '../shared/matrix'
-import type { Paper, Term } from '../shared/types'
+import type { Idea, Paper, Term } from '../shared/types'
 import type { BibStatus } from './bibExport'
 import type { Ctx } from './ctx'
 import { getGlance, getPaper, getPaperCache, listAnnotations, listPapers } from './db'
+import { getIdea, listIdeas } from './ideasDb'
 import { safeFileName } from './exporter'
 import { parseJsonLoose } from './glm'
 import { newId } from './library'
@@ -63,6 +65,7 @@ export interface MatrixView {
   state: MatrixState
   papers: { id: string; title: string; name: string; short: string; authors: string[]; year: number | null; venue: string | null; kind: Paper['kind'] }[]
   notes: Record<string, NoteItem[]>
+  ideas: Idea[] // 表里这几篇收进灵感库的句子（「写一段」能加进素材）
   keys: Record<string, string>
   lang: string
 }
@@ -108,6 +111,7 @@ export function registerMatrix(c: Ctx, o: { word: () => WordAddin; bib: () => Bi
       state: st,
       papers: ps.map((p) => ({ id: p.id, title: p.title, name: nameOf(p), short: short(p), authors: p.authors, year: p.year, venue: p.venue, kind: p.kind })),
       notes: Object.fromEntries(ps.map((p) => [p.id, notesOf(p.id)])),
+      ideas: ps.flatMap((p) => listIdeas(db, p.id)),
       keys: Object.fromEntries(ps.map((p) => [p.id, keys.get(p.id) ?? ''])),
       lang: lang()
     }
@@ -463,6 +467,17 @@ export function registerMatrix(c: Ctx, o: { word: () => WordAddin; bib: () => Bi
         lines.push(`[${a}] 关系：论文 ${num(rel.from)} ${kind}论文 ${num(rel.to)}（${rel.label}）。论文 ${num(rel.from)} 原文：${rel.a.quote}${rel.b.quote ? `；论文 ${num(rel.to)} 原文：${rel.b.quote}` : ''}`)
         continue
       }
+      if (isIdea(id)) {
+        const i = getIdea(db, id.slice(5))
+        const n = i ? num(i.paperId) : 0
+        if (!i || !n) continue
+        const a = `I${++rn}`
+        alias.set(id, a)
+        back.set(a.toLowerCase(), id)
+        const how = i.how === 'quote' ? '用户要直接引用：这句原样放进段落、加引号，不改字' : '用户要转述：换成自己的话，意思不变'
+        lines.push(`[${a}] 灵感 · 论文 ${n} 第 ${i.page ?? '?'} 页的原句：「${i.text}」。${how}${i.use ? `；用户想这样用：${i.use}` : ''}`)
+        continue
+      }
       const { paperId, col } = splitCell(id)
       const n = num(paperId)
       const p = ps.find((x) => x.id === paperId)
@@ -514,6 +529,10 @@ export function registerMatrix(c: Ctx, o: { word: () => WordAddin; bib: () => Bi
     const ps = papersOf(sid)
     const st2 = load(sid)
     const papersOfCell = (id: string): string[] => {
+      if (isIdea(id)) {
+        const i = getIdea(db, id.slice(5))
+        return i ? [i.paperId] : []
+      }
       if (!isRel(id)) return [splitCell(id).paperId]
       const r = st2.relations?.find((x) => relCellId(x.id) === id)
       return r ? [r.from, r.to] : []
@@ -555,6 +574,7 @@ export function registerMatrix(c: Ctx, o: { word: () => WordAddin; bib: () => Bi
             `- 只能引用论文 1 到 ${n}，cites 写论文编号。素材里没有的说法不要写成有出处；确实需要的过渡、概括或你自己的判断，cites 和 src 都留空。`,
             '- 每句的 src 列出真正撑得住这句话的素材编号（比如 2m、R1）：句子讲的是哪篇论文的哪件事，就写那篇论文那一格；关系素材只用来写两篇之间的关系。',
             '- 句子里不要写 [1] 这种引用号，界面会加。',
+            '- 灵感素材（I1、I2）：写着「直接引用」的放进引号里当引文（英文段落一字不改照抄原句；中文段落译成中文，意思不变），前面可以加一句引出它的话，src 写它的编号，cites 写它的论文；写着「转述」的换成自己的话。',
             d.lang === 'zh' ? glossary(sid) : '',
             '只输出 JSON：{"s": [{"t": "一句，带句末标点", "cites": [1], "src": ["1m"]}]}',
             // 素材是中文的时候模型容易跟着写中文：英文要说死
@@ -574,8 +594,10 @@ export function registerMatrix(c: Ctx, o: { word: () => WordAddin; bib: () => Bi
       new Set(used)
     )
     if (!sentences.length) throw new Error(t('AI 没写出句子，再试一次'))
+    // 直接引的灵感原样放进了句子：这句的引用带上页码
+    const quotes = used.filter(isIdea).map((id) => ({ id, i: getIdea(db, id.slice(5)) })).filter((x) => x.i?.how === 'quote').map((x) => ({ cellId: x.id, paperId: x.i!.paperId, page: x.i!.page }))
     const cur = load(sid)
-    cur.draft = { ...d, sentences, checks: null }
+    cur.draft = { ...d, sentences: quotePages(sentences, quotes), checks: null }
     save(sid, cur)
     return cur.draft
   })
@@ -585,7 +607,8 @@ export function registerMatrix(c: Ctx, o: { word: () => WordAddin; bib: () => Bi
     const st = load(sid)
     const d = st.draft
     if (!d?.sentences) throw new Error(t('先写成段落'))
-    const checks: (SentenceCheck | null)[] = d.sentences.map(ruleCheck)
+    const ideaPaper = (cid: string): string | null => getIdea(db, cid.slice(5))?.paperId ?? null
+    const checks: (SentenceCheck | null)[] = d.sentences.map((x) => ruleCheck(x, ideaPaper))
     const ask = d.sentences.map((s, i) => ({ s, i })).filter((x) => !checks[x.i])
     if (ask.length) {
       const m = materials(sid, [...new Set(ask.flatMap((x) => x.s.src))])
@@ -689,4 +712,3 @@ export function registerMatrix(c: Ctx, o: { word: () => WordAddin; bib: () => Bi
     return { paneOpen: word.paneOpen(), cites: d.sentences.filter((s) => s.cites.length).length }
   })
 }
-

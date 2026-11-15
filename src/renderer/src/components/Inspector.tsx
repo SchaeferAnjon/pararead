@@ -1,10 +1,10 @@
-import { BookOpen, Ellipsis, FileText, Info, Languages, MessagesSquare, MousePointerClick, RefreshCw, Sheet, Sparkles } from 'lucide-react'
+import { BookOpen, Ellipsis, ExternalLink, FilePlus2, FileText, Info, Languages, MessagesSquare, MousePointerClick, RefreshCw, Sheet, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { translationKey } from '@shared/hash'
 import type { Annotation, Folder, Glance, Paper, ReadMode, SettingsView } from '@shared/types'
 import { api, errText } from '../api'
 import { Markdown } from '../lib/Markdown'
-import { authorsShort, Empty, Segmented, Skeleton } from '../lib/ui'
+import { authorsShort, Empty, Segmented, Skeleton, useToast } from '../lib/ui'
 import { Thumb } from './Library'
 import { folderPath } from './PaperInfo'
 import { t } from '@shared/i18n'
@@ -41,6 +41,23 @@ function One(props: { paper: Paper; settings: SettingsView; folders: Folder[]; o
   const [err, setErr] = useState<string | null>(null)
   const [notes, setNotes] = useState<Annotation[]>([])
   const [stats, setStats] = useState<{ total: number } | null>(null)
+  const toast = useToast()
+  const [attaching, setAttaching] = useState(false)
+  const [dropOver, setDropOver] = useState(false)
+  // 「仅链接」的论文补上 PDF：选文件，或者把 PDF 拖到这个面板上
+  const attach = async (path?: string): Promise<void> => {
+    setAttaching(true)
+    try {
+      const r = await api.attachPdf(p.id, path)
+      if (r) toast(t('补上了 PDF，正在重排'))
+    } catch (e) {
+      toast(t('没补上：{0}', errText(e)))
+    } finally {
+      setAttaching(false)
+    }
+  }
+  const isLink = p.kind === 'link'
+  const landing = p.url || (p.doi ? `https://doi.org/${p.doi}` : null)
 
   useEffect(() => {
     void api.glanceGet(p.id).then((x) => setG(x))
@@ -69,7 +86,19 @@ function One(props: { paper: Paper; settings: SettingsView; folders: Folder[]; o
   const meta = [p.venue, p.year, p.progress >= 1 ? t('读完') : p.progress > 0 ? t('读到 {0}%', Math.round(p.progress * 100)) : p.lastOpened ? '' : t('未读')].filter(Boolean).join(' · ')
 
   return (
-    <aside className="insp">
+    <aside className="insp" onDragOver={(e) => {
+        if (!isLink || !e.dataTransfer.types.includes('Files')) return
+        e.preventDefault()
+        setDropOver(true)
+      }} onDragLeave={() => setDropOver(false)} onDrop={(e) => {
+        if (!isLink) return
+        e.preventDefault()
+        setDropOver(false)
+        const f = [...e.dataTransfer.files].find((x) => /\.pdf$/i.test(x.name))
+        const path = f ? api.filePath(f) : ''
+        if (path) void attach(path)
+        else toast(t('拖进来的不是 PDF'))
+      }} data-drop={dropOver ? 'on' : undefined}>
       <div className="insp-bd">
         <div className="insp-head">
           <Thumb p={p} width={96} />
@@ -148,11 +177,31 @@ function One(props: { paper: Paper; settings: SettingsView; folders: Folder[]; o
           </dl>
         )}
       </div>
+      {isLink && (
+        <div className="insp-link">
+          <div className="il-t">{t('这篇只存了信息，还没有 PDF')}</div>
+          <div className="il-d">{t('多半是要订阅才能下载的论文。在学校网络里，或者用学校账号登录出版社页面，就能下 PDF；下好以后补上，或者直接把 PDF 拖到这里。用浏览器插件在出版社页面点一下，也会补进这一条。')}</div>
+          <div className="il-b">
+            {landing && (
+              <a className="btn" href={landing} target="_blank" rel="noreferrer">
+                <ExternalLink size={15} />
+                {t('去出版社页面下载')}
+              </a>
+            )}
+            <button className="btn primary" disabled={attaching} onClick={() => void attach()}>
+              {attaching ? <span className="spin spin-12" /> : <FilePlus2 size={15} />}
+              {t('补上 PDF')}
+            </button>
+          </div>
+        </div>
+      )}
       <div className="insp-ft">
-        <button className="btn" onClick={() => props.onOpen(p.id)}>
-          <BookOpen size={16} />
-          <span className="ellipsis">{p.progress > 0 && p.progress < 1 ? t('继续阅读') : t('打开阅读')}</span>
-        </button>
+        {!isLink && (
+          <button className="btn" onClick={() => props.onOpen(p.id)}>
+            <BookOpen size={16} />
+            <span className="ellipsis">{p.progress > 0 && p.progress < 1 ? t('继续阅读') : t('打开阅读')}</span>
+          </button>
+        )}
         {p.kind === 'pdf' && (
           <button className="btn ghost" onClick={() => props.onOpen(p.id, 'pdf')}>
             <FileText size={16} />

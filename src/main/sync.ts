@@ -6,9 +6,10 @@ import { execFile } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
 import { basename, dirname, join } from 'node:path'
-import type { Annotation, Glance, ReadMode, ReadPosition } from '../shared/types'
+import type { Annotation, Glance, Idea, ReadMode, ReadPosition } from '../shared/types'
 import type { Ctx } from './ctx'
 import { getGlance, listAnnotations, saveAnnotation, saveGlance, tombstone, type DB } from './db'
+import { listIdeas, saveIdea } from './ideasDb'
 import { t } from '../shared/i18n'
 import { IS_WIN } from './platform'
 
@@ -51,6 +52,7 @@ interface SnapFolder {
 }
 
 type SnapAnn = Omit<Annotation, 'paperId'> & { paperHash: string }
+type SnapIdea = Omit<Idea, 'paperId'> & { paperHash: string }
 
 export interface Snapshot {
   version: 1
@@ -60,8 +62,9 @@ export interface Snapshot {
   papers: SnapPaper[]
   folders: SnapFolder[]
   anns: SnapAnn[]
+  ideas?: SnapIdea[] // 灵感库；老版本的快照没有
   glances: { hash: string; content: Glance; at: number }[]
-  tombstones: { kind: 'paper' | 'folder' | 'ann'; key: string; at: number }[]
+  tombstones: { kind: 'paper' | 'folder' | 'ann' | 'idea'; key: string; at: number }[]
 }
 
 export interface SyncStatus {
@@ -106,6 +109,12 @@ export function makeSnapshot(db: DB, device: string, deviceName: string): Snapsh
   }))
   const anns: SnapAnn[] = []
   for (const r of rows) for (const a of listAnnotations(db, r.id as string)) anns.push({ ...a, paperHash: hashOf.get(a.paperId)! })
+  const ideas: SnapIdea[] = []
+  for (const r of rows)
+    for (const i of listIdeas(db, r.id as string)) {
+      const { paperId: _p, ...rest } = i
+      ideas.push({ ...rest, paperHash: hashOf.get(i.paperId)! })
+    }
   const glances = rows
     .map((r) => ({ hash: r.file_hash as string, g: getGlance(db, r.id as string), at: (db.prepare('SELECT created_at FROM glances WHERE paper_id = ?').get(r.id) as { created_at: number } | undefined)?.created_at ?? 0 }))
     .filter((x) => x.g)
@@ -123,6 +132,7 @@ export function makeSnapshot(db: DB, device: string, deviceName: string): Snapsh
       const { paperId: _omit, ...rest } = a as Annotation & { paperHash: string }
       return rest
     }),
+    ideas,
     glances,
     tombstones
   }
@@ -157,9 +167,11 @@ export function mergeSnapshot(db: DB, s: Snapshot): MergeResult {
           changed++
         }
       } else {
-        const a = db.prepare('SELECT updated_at FROM annotations WHERE id = ?').get(t_.key) as { updated_at: number } | undefined
+        // 高亮笔记和灵感：比删除时间早改过的才删
+        const table = t_.kind === 'idea' ? 'ideas' : 'annotations'
+        const a = db.prepare(`SELECT updated_at FROM ${table} WHERE id = ?`).get(t_.key) as { updated_at: number } | undefined
         if (a && a.updated_at < t_.at) {
-          db.prepare('DELETE FROM annotations WHERE id = ?').run(t_.key)
+          db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(t_.key)
           changed++
         }
       }
@@ -205,6 +217,17 @@ export function mergeSnapshot(db: DB, s: Snapshot): MergeResult {
       const { paperHash: _h, ...rest } = a
       if (cur) db.prepare('DELETE FROM annotations WHERE id = ?').run(a.id)
       saveAnnotation(db, { ...rest, paperId: pid })
+      changed++
+    }
+    // 灵感：和高亮笔记一样，晚改的赢
+    for (const i of s.ideas ?? []) {
+      const pid = fresh.get(i.paperHash)
+      if (!pid || tombAt('idea', i.id) >= i.updatedAt) continue
+      const cur = db.prepare('SELECT updated_at FROM ideas WHERE id = ?').get(i.id) as { updated_at: number } | undefined
+      if (cur && cur.updated_at >= i.updatedAt) continue
+      const { paperHash: _h, ...rest } = i
+      if (cur) db.prepare('DELETE FROM ideas WHERE id = ?').run(i.id)
+      saveIdea(db, { ...rest, paperId: pid })
       changed++
     }
     for (const g of s.glances) {

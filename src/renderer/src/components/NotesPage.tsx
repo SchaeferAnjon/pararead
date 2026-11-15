@@ -43,7 +43,7 @@ export function NotesPage(props: { sideHidden: boolean; onOpen: (paperId: string
     const hit = (a: NoteEntry): boolean =>
       (only === 'all' || (only === 'noted' ? !!a.note : a.label === only)) &&
       (!isLabel || sub === 'all' || (sub === 'open') === isOpen(a)) &&
-      (!k || [a.text, a.note, a.paperTitle, a.section, summaryOf(a)].some((s) => s.toLowerCase().includes(k)))
+      (!k || [a.text, a.note, a.paperTitle, a.section, summaryOf(a), ...(a.explain?.chat ?? []).flatMap((x) => [x.q, x.a])].some((s) => s.toLowerCase().includes(k)))
     const by = new Map<string, NoteEntry[]>()
     for (const a of all ?? []) if (hit(a)) by.set(a.paperId, [...(by.get(a.paperId) ?? []), a])
     // 每篇里按页码、位置排；论文按最近做过标注的排前面
@@ -228,7 +228,7 @@ export function NotesPage(props: { sideHidden: boolean; onOpen: (paperId: string
                       {picked.has(a.id) && <Check size={12} strokeWidth={3} />}
                     </span>
                   )}
-                  <span className="np-mark">{a.label ? <i className="lb-dot" data-label={a.label} /> : a.style === 'underline' ? <Underline size={13} className="ul" data-color={a.color} /> : <span className="hl-dot" data-color={a.color} />}</span>
+                  <span className="np-mark">{a.label ? <i className="lb-dot" data-label={a.label} /> : a.style === 'underline' ? <Underline size={13} className="ul" data-color={a.color} /> : a.style === 'box' ? <span className="box-dot" data-color={a.color} /> : <span className="hl-dot" data-color={a.color} />}</span>
                   <span className="np-body">
                     {a.label && (
                       <span className="np-chips">
@@ -245,6 +245,7 @@ export function NotesPage(props: { sideHidden: boolean; onOpen: (paperId: string
                       </span>
                     )}
                     {a.note && <span className="np-note">{a.note}</span>}
+                    {!!a.explain?.chat?.length && <span className="hint">{t('接着问了 {0} 次', a.explain.chat.length)}</span>}
                     <span className="hint num">{[a.page ? t('第 {0} 页', a.page) : '', a.section, new Date(a.createdAt).toLocaleDateString()].filter(Boolean).join(' · ')}</span>
                   </span>
                 </div>

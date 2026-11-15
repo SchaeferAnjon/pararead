@@ -31,3 +31,13 @@ html, body { background: var(--bg); }
 .wp-got p { margin: 4px 0 0; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.5; }
 .wp-got-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: var(--fs-sm); }
 .wp-got-row .ellipsis { flex: 1; }
+/* 灵感：搜收的句子，插原句（带页码）或插转述 */
+.wp-topics { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.wp-topic { height: 20px; }
+.wp-topic.on { background: var(--lb-idea-soft); color: var(--lb-idea); }
+.wp-idea { margin: 0 6px 8px; padding: 10px; border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--stroke); display: flex; flex-direction: column; gap: 6px; }
+.wp-idea .q { font: var(--fs)/1.5 var(--font-src); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.wp-idea .use { font-size: var(--fs-sm); line-height: 1.5; padding-left: 8px; border-left: 2px solid var(--lb-idea); }
+.wp-idea .row { display: flex; align-items: center; gap: 6px; }
+.wp-idea .bad { color: var(--red); }
+.idea-ic { color: var(--lb-idea); }

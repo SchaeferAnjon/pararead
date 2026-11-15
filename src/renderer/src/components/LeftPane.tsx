@@ -326,9 +326,16 @@ function Notes(props: Props) {
                     })
                   }
                 >
-                  <span className={'note-mark' + (a.label ? ` lb-${a.label}${isSettled(a) ? ' done' : ''}` : '')} style={{ background: a.label ? undefined : HL_BG[a.color] }}>
-                    {a.text}
-                  </span>
+                  {a.style === 'box' ? (
+                    // 整块标记的公式、图、表：用同色细框，公式照样排出来
+                    <span className="note-mark box" data-color={a.color}>
+                      <Markdown text={a.text} inline raw={false} />
+                    </span>
+                  ) : (
+                    <span className={'note-mark' + (a.label ? ` lb-${a.label}${isSettled(a) ? ' done' : ''}` : '')} style={{ background: a.label ? undefined : HL_BG[a.color] }}>
+                      {a.text}
+                    </span>
+                  )}
                 </div>
                 {a.label && (
                   <div className="note-chips">

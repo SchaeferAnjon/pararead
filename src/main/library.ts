@@ -5,7 +5,7 @@ import { chunkMarkdown, markdownForContext } from '../shared/chunk'
 import type { Paper, ReflowDoc, Tier } from '../shared/types'
 import { getPaper, setReflow, updatePaper, type DB, type PaperPatch } from './db'
 import { readEpub } from './epub'
-import { lookupMeta, type MetaPatch } from './meta'
+import { lookupMeta, type MetaPatch, squashTitle } from './meta'
 import type { Ai } from './ai'
 import { parseJsonLoose } from './glm'
 import { extractPdf, guessMetadata, pageToText, simpleReflow } from './pdftext'
@@ -21,6 +21,7 @@ export interface LibraryDeps {
   dataDir: string
   ai: Ai
   log: (msg: string) => void
+  defaultEngine?: () => 'flash' | 'basic' // 设置里默认的重排档：flash 时快速排在精细前面
 }
 
 export interface ImportExtra {
@@ -200,6 +201,23 @@ export class Library {
     return { status: 'added', paper: getPaper(db, id)! }
   }
 
+  /** 库里还没有全文的「仅链接」那一条：先按 DOI、arXiv 号认，再按题目（去掉标点、大小写）认 */
+  findLink(m: { doi?: string | null; arxiv?: string | null; title?: string | null }): string | null {
+    const links = this.d.db.prepare("SELECT id, doi, arxiv, title FROM papers WHERE kind = 'link' AND deleted = 0").all() as { id: string; doi: string | null; arxiv: string | null; title: string }[]
+    const doi = m.doi?.toLowerCase().trim()
+    if (doi) {
+      const hit = links.find((x) => x.doi?.toLowerCase().trim() === doi)
+      if (hit) return hit.id
+    }
+    if (m.arxiv) {
+      const hit = links.find((x) => x.arxiv === m.arxiv)
+      if (hit) return hit.id
+    }
+    const want = squashTitle(m.title ?? '')
+    if (want.length >= 12) return links.find((x) => squashTitle(x.title) === want)?.id ?? null
+    return null
+  }
+
   // 给「仅链接」的论文补上 PDF：拷进库、抽文字，之后照常重排
   async attachPdf(id: string, file: string): Promise<void> {
     const { db } = this.d
@@ -248,10 +266,10 @@ export class Library {
     return rows.map((r) => r.text)
   }
 
-  // 用户手动选了档位（且那档有结果）就用它；否则 调整过的 > 精细 > 快速 > 简单
+  // 用户手动选了档位（且那档有结果）就用它；否则 调整过的 > 精细 > 快速 > 简单（设置里默认快速时快速在精细前面）
   bestTier(id: string): Tier | null {
     const want = getPaper(this.d.db, id)?.engine
-    const order: Tier[] = ['edited', 'basic', 'flash', 'simple']
+    const order: Tier[] = this.d.defaultEngine?.() === 'flash' ? ['edited', 'flash', 'basic', 'simple'] : ['edited', 'basic', 'flash', 'simple']
     if (want) order.unshift(want)
     for (const t_ of order) {
       const r = this.d.db.prepare("SELECT 1 FROM reflow WHERE paper_id = ? AND tier = ? AND status = 'done'").get(id, t_)

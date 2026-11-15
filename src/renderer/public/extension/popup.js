@@ -1,8 +1,8 @@
 // 点开插件时的小窗：看 ParaRead 开着没有，认出这一页的论文，点一下存进去。
 const zh = navigator.language.toLowerCase().startsWith('zh')
 const T = zh
-  ? { on: '已连上', off: '没开着', none: '这一页没认出论文信息。打开论文的详情页（有题名、作者的那一页）再点。', open: '先打开 ParaRead，再点一次。', save: '存进 ParaRead', saveN: (n) => `把选中的 ${n} 篇存进 ParaRead`, saving: '正在存…', pdf: '有 PDF', nopdf: '没找到 PDF，只存信息', added: '已存进文献库', duplicate: '文献库里已经有了', link: '没下到 PDF，只存了信息', failed: '没存上', offline: 'ParaRead 没开着' }
-  : { on: 'Connected', off: 'Not running', none: 'No paper found on this page. Open the paper\'s own page (with title and authors) and try again.', open: 'Open ParaRead first, then click again.', save: 'Save to ParaRead', saveN: (n) => `Save ${n} selected to ParaRead`, saving: 'Saving…', pdf: 'PDF found', nopdf: 'No PDF found, saving details only', added: 'Saved to library', duplicate: 'Already in library', link: 'PDF not available, saved details only', failed: 'Not saved', offline: 'ParaRead is not running' }
+  ? { on: '已连上', off: '没开着', none: '这一页没认出论文信息。打开论文的详情页（有题名、作者的那一页）再点。', open: '先打开 ParaRead，再点一次。', save: '存进 ParaRead', saveN: (n) => `把选中的 ${n} 篇存进 ParaRead`, saving: '正在存…', pdf: '有 PDF', nopdf: '没找到 PDF，只存信息', added: '已存进文献库', duplicate: '文献库里已经有了', link: '没下到 PDF，只存了信息', attached: 'PDF 补进了库里已有的那一条', failed: '没存上', offline: 'ParaRead 没开着' }
+  : { on: 'Connected', off: 'Not running', none: 'No paper found on this page. Open the paper\'s own page (with title and authors) and try again.', open: 'Open ParaRead first, then click again.', save: 'Save to ParaRead', saveN: (n) => `Save ${n} selected to ParaRead`, saving: 'Saving…', pdf: 'PDF found', nopdf: 'No PDF found, saving details only', added: 'Saved to library', duplicate: 'Already in library', link: 'PDF not available, saved details only', attached: 'PDF added to the entry already in your library', failed: 'Not saved', offline: 'ParaRead is not running' }
 const $ = (id) => document.getElementById(id)
 const send = (msg) => chrome.runtime.sendMessage(msg)
 const el = (tag, cls, text) => {
@@ -68,7 +68,7 @@ async function main() {
       r.status.textContent = T.saving
       const res = await send({ type: 'save', item: r.it })
       const st = res?.status ?? 'failed'
-      r.status.className = 's ' + (st === 'added' || st === 'duplicate' ? 'ok' : st === 'link' ? '' : 'bad')
+      r.status.className = 's ' + (st === 'added' || st === 'duplicate' || st === 'attached' ? 'ok' : st === 'link' ? '' : 'bad')
       r.status.textContent = T[st] + (st === 'failed' && res?.error ? `: ${res.error}` : '')
       r.status.dataset.status = st
       if (st === 'added' || st === 'duplicate' || st === 'link') (r.done = true), (r.box.disabled = true)

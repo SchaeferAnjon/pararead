@@ -1,5 +1,5 @@
-import { BookOpen, BookOpenCheck, ChevronDown, ChevronRight, CircleDashed, FlaskConical, Folder as FolderIcon, FolderPlus, Hash, KeyRound, LibraryBig, MessagesSquare, Network, NotebookPen, PanelLeft, Pencil, Plus, ScrollText, Search, Settings, Sheet, SquarePen, SquareTerminal, Telescope, Trash2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { BookOpen, BookOpenCheck, ChevronDown, ChevronRight, CircleDashed, FlaskConical, Folder as FolderIcon, FolderPlus, Hash, KeyRound, LibraryBig, Lightbulb, MessagesSquare, Network, NotebookPen, PanelLeft, Pencil, Plus, ScrollText, Search, Settings, Sheet, SquarePen, SquareTerminal, Telescope, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Folder, Paper, SettingsView } from '@shared/types'
 import { providerOf } from '@shared/providers'
 import { api, errText, type Project, type ResearchKind, type ResearchSession, type SyncStatus } from '../api'
@@ -7,7 +7,7 @@ import { showMenu } from '../lib/menu'
 import { Kbd, useToast } from '../lib/ui'
 import { t } from '@shared/i18n'
 
-export type Route = { kind: 'lib' } | { kind: 'notes' } | { kind: 'ai'; id: string | null; prompt?: string } | { kind: 'agent'; id: string }
+export type Route = { kind: 'lib' } | { kind: 'notes' } | { kind: 'ideas'; focus?: string } | { kind: 'ai'; id: string | null; prompt?: string } | { kind: 'agent'; id: string }
 
 export const SMART = [
   { id: 'all', label: t('全部论文'), icon: LibraryBig },
@@ -44,6 +44,13 @@ export function Sidebar(props: {
 }) {
   const s = props.settings
   const toast = useToast()
+  // 灵感库的条数：收、拿掉、同步来都会推 ideas:changed
+  const [ideaN, setIdeaN] = useState(0)
+  useEffect(() => {
+    const load = (): void => void api.ideaAll().then((l) => setIdeaN(l.length))
+    load()
+    return api.onIdeasChanged(load)
+  }, [])
   const [foldersOpen, setFoldersOpen] = useState(true)
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set())
   const [renaming, setRenaming] = useState<string | null>(null)
@@ -234,6 +241,11 @@ export function Sidebar(props: {
           <button className={'nav-item' + (props.route.kind === 'notes' ? ' on' : '')} onClick={() => props.onRoute({ kind: 'notes' })}>
             <NotebookPen size={16} />
             <span className="l">{t('笔记')}</span>
+          </button>
+          <button className={'nav-item' + (props.route.kind === 'ideas' ? ' on' : '')} onClick={() => props.onRoute({ kind: 'ideas' })}>
+            <Lightbulb size={16} className="idea-ic" />
+            <span className="l">{t('灵感库')}</span>
+            {ideaN > 0 && <span className="count">{ideaN}</span>}
           </button>
         </div>
 

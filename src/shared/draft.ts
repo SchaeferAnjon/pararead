@@ -1,6 +1,6 @@
 // 对比表写出的段落：AI 给的句子先过一遍（只许引用表里这几篇、出处得是表里的格子），
 // 再转成两种送出去的样子：Word 插件收的「文字 + 引用」片段，和带 \cite{key} 的 LaTeX。
-import { isRel, splitCell, type OutlineItem, type Sentence, type SentenceCheck } from './matrix'
+import { isIdea, isRel, splitCell, type OutlineItem, type Sentence, type SentenceCheck } from './matrix'
 
 /** AI 写的句子：cites 用的是论文编号（1 起），这里换成论文 id；编号不在表里的丢掉并记下来 */
 export function cleanSentences(
@@ -63,15 +63,26 @@ export function splitPunct(t: string): [string, string] {
 }
 
 /** 查证的规则部分：没有出处的是推断；引用的论文和出处格子对不上的也标出来。AI 再逐句判断原文撑不撑得住 */
-export function ruleCheck(s: Sentence): SentenceCheck | null {
+export function ruleCheck(s: Sentence, ideaPaper: (cellId: string) => string | null = () => null): SentenceCheck | null {
   if (!s.src.length) return { ok: false, why: s.cites.length ? 'nosrc-cited' : 'nosrc' }
-  const srcPapers = new Set(s.src.filter((x) => !isRel(x)).map((x) => splitCell(x).paperId))
+  const srcPapers = new Set(s.src.filter((x) => !isRel(x)).map((x) => (isIdea(x) ? ideaPaper(x) : splitCell(x).paperId)).filter((x): x is string => !!x))
   const stray = s.cites.filter((id) => !srcPapers.has(id) && !s.src.some(isRel))
   if (stray.length) return { ok: false, why: 'stray' }
   return null
 }
 
-export type Seg = { text: string } | { cite: string[] }
+export type Seg = { text: string } | { cite: string[]; page?: number }
+
+/** 直接引的灵感：用到它的那句（英文段落里是原句，中文段落里是译成中文的引文）给这篇的引用带上页码 */
+export function quotePages(sentences: Sentence[], quotes: { cellId: string; paperId: string; page: number | null }[]): Sentence[] {
+  return sentences.map((s) => {
+    const pages: Record<string, number> = {}
+    for (const q of quotes) if (q.page && s.src.includes(q.cellId) && s.cites.includes(q.paperId)) pages[q.paperId] = q.page
+    return Object.keys(pages).length ? { ...s, pages } : s
+  })
+}
+/** 一处引用只引一篇、而且有页码时才写页码（几篇并在一起的不带） */
+const pageOf = (s: Sentence): number | undefined => (s.cites.length === 1 ? s.pages?.[s.cites[0]] : undefined)
 
 /** Word 插件收的样子：一段文字和引用交替。中文句子里引用紧跟正文，英文前面空一格 */
 export function wordSegments(sentences: Sentence[], lang: 'zh' | 'en'): Seg[] {
@@ -85,7 +96,8 @@ export function wordSegments(sentences: Sentence[], lang: 'zh' | 'en'): Seg[] {
     const [body, punct] = splitPunct(s.t)
     const gap = i && lang === 'en' ? ' ' : ''
     push(gap + body + (s.cites.length && lang === 'en' ? ' ' : ''))
-    if (s.cites.length) out.push({ cite: s.cites })
+    const page = pageOf(s)
+    if (s.cites.length) out.push(page ? { cite: s.cites, page } : { cite: s.cites })
     push(punct || (lang === 'en' ? '.' : '。'))
   })
   return out
@@ -101,7 +113,8 @@ export function toLatex(sentences: Sentence[], keyOf: (paperId: string) => strin
   return sentences
     .map((s, i) => {
       const [body, punct] = splitPunct(s.t)
-      const cite = s.cites.length ? `~\\cite{${s.cites.map(keyOf).join(',')}}` : ''
+      const page = pageOf(s)
+      const cite = s.cites.length ? `~\\cite${page ? `[p.~${page}]` : ''}{${s.cites.map(keyOf).join(',')}}` : ''
       return (i && lang === 'en' ? ' ' : '') + texEscape(body) + cite + texEscape(punct || (lang === 'en' ? '.' : '。'))
     })
     .join('')
@@ -112,7 +125,8 @@ export function plainText(sentences: Sentence[], numOf: (paperId: string) => num
   return sentences
     .map((s, i) => {
       const [body, punct] = splitPunct(s.t)
-      const cite = s.cites.length ? `${lang === 'en' ? ' ' : ''}[${s.cites.map(numOf).sort((a, b) => a - b).join(', ')}]` : ''
+      const page = pageOf(s)
+      const cite = s.cites.length ? `${lang === 'en' ? ' ' : ''}[${s.cites.map(numOf).sort((a, b) => a - b).join(', ')}${page ? `, p. ${page}` : ''}]` : ''
       return (i && lang === 'en' ? ' ' : '') + body + cite + (punct || (lang === 'en' ? '.' : '。'))
     })
     .join('')

@@ -37,6 +37,13 @@ export interface ExplainRecord {
   versions: ExplainVersion[]
   misses: number
   group?: GroupExplain | null
+  chat?: ExplainTurn[] // 讲解下面「接着问这一处」的一问一答
+}
+/** 讲解卡里接着问的一轮 */
+export interface ExplainTurn {
+  q: string
+  a: string
+  at: number
 }
 export type Tier = 'flash' | 'basic' | 'simple' | 'edited' // edited：调整区域后重新生成的
 
@@ -126,7 +133,7 @@ export interface Annotation {
   paperId: string
   mode: 'pdf' | 'reflow'
   color: HlColor
-  style?: 'highlight' | 'underline' // 高亮（底色）还是划线；老数据没有这一项，算高亮
+  style?: 'highlight' | 'underline' | 'box' // 高亮（底色）、划线，还是整块（公式、图、表）用颜色框住；老数据没有这一项，算高亮
   label?: AnnLabel | null // 看不懂 / 有质疑
   labelStatus?: LabelStatus | null // 标签的处理状态；空是还没处理（看不懂是还没懂，有质疑是待判断）
   explain?: ExplainRecord | null // 按标签讲的讲解，存下来再看不再花 AI
@@ -208,6 +215,7 @@ export interface Settings {
   trStyle: TrStyle // 译文样式，十二种（shared/trStyles.ts）
   trLayout: 'stack' | 'side' // 双语的排法：译文跟在原文下面，或者原文在左、译文在右
   termMarks: boolean // 正文里给术语画虚线、悬停看解释
+  defaultEngine: 'flash' | 'basic' // 默认用哪种重排：basic 是导入后快速先出、精细好了换上；flash 是只用快速，精细不自动跑（每篇在阅读页还能单独换）
   senseGroups: boolean // 双语时的意群显示：一句原文配一句译文，原文的一块和译文里对它的那几段同色
   senseStyle: SenseStyle // 意群怎么上色：字换成这一块的颜色，或者字不变色、底下画同色的线
   leftW: number
@@ -216,6 +224,8 @@ export interface Settings {
   rightCollapsed: boolean
   libSideW: number
   lastColor: HlColor
+  ideaHow: IdeaHow // 收灵感时「写论文时」上次选的：直接引原句还是转述
+  ideaGroup: 'topic' | 'paper' | 'time' // 灵感库按什么分组
   pdfInvert: boolean
   libView: 'table' | 'card'
   libSort: { key: 'opened' | 'added' | 'title' | 'year' | 'progress'; desc: boolean }
@@ -315,3 +325,33 @@ export interface Ink {
   createdAt: number
 }
 
+
+/** 灵感：读到的好句子收进灵感库，写论文时带出处引用。和高亮、标签是两回事，同一句可以都有 */
+export type IdeaHow = 'quote' | 'paraphrase' // 写论文时直接引原句，还是用自己的话转述
+export interface Idea {
+  id: string
+  paperId: string
+  mode: 'pdf' | 'reflow'
+  text: string
+  page: number | null
+  rects: number[][] | null // 原文模式：页内归一化矩形 [x, y, w, h]
+  blockId: string | null
+  blockHash: string | null
+  start: number | null
+  end: number | null
+  section: string
+  use: string // 想怎么用（可以空）
+  topics: string[]
+  how: IdeaHow
+  paraphrase: { en?: string; zh?: string } | null // AI 转述过的存着，再用不再花额度
+  createdAt: number
+  updatedAt: number
+}
+
+/** 灵感库里的一条：连着论文，key 和自动导出的 .bib 一致 */
+export interface IdeaEntry extends Idea {
+  paperTitle: string
+  paperAuthors: string[]
+  paperYear: number | null
+  bibKey: string
+}

@@ -150,6 +150,12 @@ export function Library(props: {
   }
 
   const open = (id: string, mode?: ReadMode): void => {
+    // 「仅链接」的还没有全文：不打开空的阅读页，选中它，右边面板里补 PDF
+    if (props.papers?.find((x) => x.id === id)?.kind === 'link') {
+      setSelected([id])
+      toast(t('这篇还没有 PDF：在右边补上就能读'))
+      return
+    }
     remember(query)
     props.onOpen(id, { top: listRef.current?.scrollTop ?? 0, selected: [id] }, mode)
   }

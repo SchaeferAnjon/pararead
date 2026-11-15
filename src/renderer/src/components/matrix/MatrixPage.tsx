@@ -1,7 +1,7 @@
 import { ChartBar, Ellipsis, FileDown, PanelLeft, Pencil, Plus, Sheet, SquarePen, Trash2, Waypoints, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
-import { isRel, splitCell, type MatrixState } from '@shared/matrix'
+import { isIdea, isRel, splitCell, type MatrixState } from '@shared/matrix'
 import { api, errText, type MatrixView, type OpenAt, type ResearchSession } from '../../api'
 import { showMenu } from '../../lib/menu'
 import { Segmented, useDebounced, useToast } from '../../lib/ui'
@@ -80,6 +80,10 @@ export function MatrixPage(props: { session: ResearchSession; sideHidden: boolea
   const label = useCallback(
     (id: string): string => {
       if (!st) return id
+      if (isIdea(id)) {
+        const i = v?.ideas.find((x) => `idea:${x.id}` === id)
+        return i ? t('灵感 · {0}：{1}', papers.get(i.paperId)?.name ?? '', i.text.length > 48 ? i.text.slice(0, 48) + '…' : i.text) : t('灵感')
+      }
       if (isRel(id)) {
         const r = st.relations?.find((x) => `rel:${x.id}` === id)
         return r ? t('关系 · {0} → {1}：{2}', papers.get(r.from)?.name ?? '', papers.get(r.to)?.name ?? '', r.label) : t('关系')
@@ -88,7 +92,7 @@ export function MatrixPage(props: { session: ResearchSession; sideHidden: boolea
       const colName = col === 'n' ? t('你的批注') : (st.cols.find((x) => x.id === col)?.name ?? col)
       return `${papers.get(paperId)?.name ?? ''} · ${colName}`
     },
-    [st, papers]
+    [st, papers, v]
   )
 
   const openAt = async (paperId: string, quote: string, page: number | null): Promise<void> => {
@@ -268,7 +272,7 @@ export function MatrixPage(props: { session: ResearchSession; sideHidden: boolea
             onClose={() => setDrawer(null)}
           />
         )}
-        {writing && <WriteDrawer v={v} sel={sel} label={label} num={num} onLit={setLit} onClose={() => (setDrawer(null), setLit([]))} />}
+        {writing && <WriteDrawer v={v} sel={sel} label={label} num={num} onLit={setLit} onToggle={toggle} onClose={() => (setDrawer(null), setLit([]))} />}
       </div>
     </>
   )

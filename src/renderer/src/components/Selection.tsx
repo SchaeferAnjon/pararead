@@ -1,6 +1,7 @@
-import { Copy, Languages, Lightbulb, MessageCircleQuestion, MessageSquareReply, NotebookPen, StickyNote, Trash2, Underline } from 'lucide-react'
+import { BookOpen, Copy, Languages, Lightbulb, MessageCircleQuestion, MessageSquareReply, NotebookPen, StickyNote, Trash2, Underline } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ANN_LABELS, HL_COLORS, type Annotation, type AnnLabel, type HlColor, type Paper } from '@shared/types'
+import { ANN_LABELS, HL_COLORS, type Annotation, type AnnLabel, type HlColor, type IdeaHow, type Paper } from '@shared/types'
+import { IdeaCapture, type IdeaDraft } from './IdeaCard'
 import { LABEL_NAME } from '@shared/annLabels'
 import { api, streamRequest } from '../api'
 import { Markdown } from '../lib/Markdown'
@@ -30,10 +31,15 @@ export function SelectionLayer(props: {
   onDelete: (a: Annotation) => Promise<void>
   onAsk: (quote: string, extra?: string) => void
   onAskImage: (image: string, context: string, prefill?: string) => void
+  ideaTopics: string[] // 收灵感的小卡里列出的主题（最近用过的在前）
+  ideaHow: IdeaHow
+  pageOf: (text: string) => number | null // 对照模式选的字在原文第几页（小卡上写出处）
+  onIdea: (s: SelInfo, d: IdeaDraft) => Promise<void>
 }) {
   const { sel } = props
   const [card, setCard] = useState<Card | null>(null)
   const [noteFor, setNoteFor] = useState<Annotation | null>(null)
+  const [ideaOpen, setIdeaOpen] = useState(false)
   const [tick, setTick] = useState(0)
   const [copied, setCopied] = useState(false)
   const stopRef = useRef<(() => void) | null>(null)
@@ -43,6 +49,7 @@ export function SelectionLayer(props: {
   useEffect(() => {
     setCard(null)
     setNoteFor(null)
+    setIdeaOpen(false)
     setCopied(false)
   }, [sel])
 
@@ -66,7 +73,7 @@ export function SelectionLayer(props: {
     if (!sel || !r || !mid || !box) return setPos(null)
     const w = box.offsetWidth
     const h = box.offsetHeight
-    const preferBelow = !!card || !!noteFor
+    const preferBelow = !!card || !!noteFor || ideaOpen
     const spaceAbove = r.top - mid.top
     let below = preferBelow ? true : spaceAbove < 44 + 8
     let top = below ? r.bottom + 8 : r.top - 8 - h
@@ -77,7 +84,7 @@ export function SelectionLayer(props: {
     let left = r.left + r.width / 2 - w / 2
     left = Math.min(Math.max(left, mid.left + 12), mid.right - 12 - w)
     setPos({ left, top, below })
-  }, [sel, card, noteFor, tick])
+  }, [sel, card, noteFor, ideaOpen, tick])
 
   const close = useEvent(() => {
     props.onClose()
@@ -130,6 +137,12 @@ export function SelectionLayer(props: {
     if (a) setNoteFor(a)
   })
 
+  // 灵感：新选的字和点在已有标注上都能收（同一句可以既是高亮、有质疑，又在灵感库里）
+  const canIdea = !!sel && (!!sel.target || !!sel.existing) && !!sel.text.trim()
+  const idea = useEvent(() => {
+    if (canIdea) setIdeaOpen(true)
+  })
+
   const ask = useEvent(() => {
     if (!sel) return
     if (sel.image) props.onAskImage(sel.image, sel.paragraph)
@@ -154,11 +167,12 @@ export function SelectionLayer(props: {
         window.getSelection()?.removeAllRanges()
         return
       }
-      if (card || noteFor || e.metaKey || e.ctrlKey) return
+      if (card || noteFor || ideaOpen || e.metaKey || e.ctrlKey) return
       const k = e.key.toLowerCase()
       if (k === 't') runAi('translate')
       else if (k === 'e') runAi('explain')
       else if (k === 'n') void note()
+      else if (k === 'i' && canIdea) idea()
       else if (k === 'a') ask()
       else if (['1', '2', '3', '4'].includes(k)) void color(HL_COLORS[Number(k) - 1])
       else return
@@ -166,18 +180,18 @@ export function SelectionLayer(props: {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [sel, card, noteFor, runAi, note, ask, color, close])
+  }, [sel, card, noteFor, ideaOpen, canIdea, runAi, note, ask, color, idea, close])
 
   // 点空白处关
   useEffect(() => {
     if (!sel) return
     const onDown = (e: MouseEvent): void => {
       if (boxRef.current?.contains(e.target as Node)) return
-      if (card || noteFor) close()
+      if (card || noteFor || ideaOpen) close()
     }
     window.addEventListener('mousedown', onDown)
     return () => window.removeEventListener('mousedown', onDown)
-  }, [sel, card, noteFor, close])
+  }, [sel, card, noteFor, ideaOpen, close])
 
   if (!sel) return null
   const style: React.CSSProperties = pos ? { left: pos.left, top: pos.top } : { left: -9999, top: -9999 }
@@ -200,6 +214,27 @@ export function SelectionLayer(props: {
         />
       </div>
     )
+
+  if (ideaOpen) {
+    const tg = sel.target
+    const ex = sel.existing
+    const page = tg?.mode === 'pdf' ? tg.page : (ex?.page ?? props.pageOf(sel.text))
+    const section = tg?.mode === 'reflow' ? tg.section : (ex?.section ?? '')
+    return (
+      <div ref={boxRef} className="pop idea-pop" style={style}>
+        <IdeaCapture
+          text={sel.text}
+          where={[page ? t('第 {0} 页', page) : '', section].filter(Boolean).join(' · ')}
+          topics={props.ideaTopics}
+          how={props.ideaHow}
+          onCancel={close}
+          onSave={(d) => {
+            void props.onIdea(sel, d).then(close)
+          }}
+        />
+      </div>
+    )
+  }
 
   if (card)
     return (
@@ -246,7 +281,7 @@ export function SelectionLayer(props: {
   return (
     <div ref={boxRef} className="pop sel-toolbar" style={style} onMouseDown={(e) => e.preventDefault()}>
       <TBtn icon={<Languages size={16} />} label={t('翻译')} k="T" onClick={() => runAi('translate')} />
-      <TBtn icon={<Lightbulb size={16} />} label={t('解释')} k="E" onClick={() => runAi('explain')} />
+      <TBtn icon={<BookOpen size={16} />} label={t('解释')} k="E" onClick={() => runAi('explain')} />
       <span className="tb-sep" />
       {(sel.target || ex) &&
         HL_COLORS.map((c, i) => (
@@ -269,6 +304,7 @@ export function SelectionLayer(props: {
         ))}
       {(sel.target || ex) && <span className="tb-sep" />}
       {(sel.target || ex) && <TBtn icon={<StickyNote size={16} />} label={t('笔记')} k="N" onClick={() => void note()} />}
+      {canIdea && <TBtn icon={<Lightbulb size={16} className="idea-ic" />} label={t('灵感')} k="I" onClick={idea} />}
       <TBtn icon={<MessageCircleQuestion size={16} />} label={t('问 AI')} k="A" onClick={ask} />
       {ex ? (
         <TBtn

@@ -36,7 +36,7 @@ import {
 } from './db'
 import { exportMarkdown, safeFileName } from './exporter'
 import { Ai } from './ai'
-import { pageOfText } from '../shared/refs'
+import { pageOfText, plain as plainMd } from '../shared/refs'
 import { SenseQueue } from './senses'
 import { claudeStatus, findClaude } from './claudeCode'
 import { Connector, CONNECTOR_PORT } from './connector'
@@ -54,6 +54,8 @@ import { registerImport } from './ipcImport'
 import { registerPaper } from './ipcPaper'
 import { registerResearch } from './research'
 import { registerMatrix } from './matrix'
+import { registerIdeas } from './ipcIdeas'
+import { allIdeas, listIdeas } from './ideasDb'
 import { registerAgent } from './agent'
 import { registerExportPdf } from './exportPdf'
 import { registerLayout } from './ipcLayout'
@@ -105,7 +107,7 @@ const ai = new Ai(
 // 选的是本机 Claude Code：先把 claude 命令找好（导入论文时要同步地问 AI 能不能用）
 if (providerOf(settings.get().provider).local) void findClaude().catch((e: Error) => log(`找 claude 命令出错：${e.message}`))
 const db = openDb(join(dataDir, 'library.sqlite'))
-const library = new Library({ db, dataDir, ai, log })
+const library = new Library({ db, dataDir, ai, log, defaultEngine: () => settings.get().defaultEngine })
 
 let mainWin: BrowserWindow | null = null
 let settingsWin: BrowserWindow | null = null
@@ -152,11 +154,13 @@ const mineruInstaller = new MineruInstaller(
     settings.set({ mineruPath: command })
     broadcast('settings:changed', settings.view())
     // 装好了：之前只做了简单重排的论文补上快速和精细重排
-    for (const p of listPapers(db)) if (p.kind === 'pdf' && p.reflow.basic !== 'done') enqueueReflow(p.id)
+    for (const p of listPapers(db)) if (p.kind === 'pdf' && (settings.get().defaultEngine === 'flash' ? p.reflow.flash !== 'done' : p.reflow.basic !== 'done')) enqueueReflow(p.id)
   }
 )
 
-function enqueueReflow(paperId: string, tiers: ('flash' | 'basic')[] = ['flash', 'basic'], args?: string[]): void {
+// 默认只用快速时，精细不自动跑（占本机算力一篇 1 到 3 分钟）；在阅读页切到精细时再单独排
+const autoTiers = (): ('flash' | 'basic')[] => (settings.get().defaultEngine === 'flash' ? ['flash'] : ['flash', 'basic'])
+function enqueueReflow(paperId: string, tiers: ('flash' | 'basic')[] = autoTiers(), args?: string[]): void {
   // MinerU 还没装好：先用简单重排（只取文字），马上能读；装好后自动补精细的
   if (!mineruReady()) {
     void library
@@ -255,6 +259,7 @@ ctx.streamer = streamer
 
 let urlImporter: ReturnType<typeof registerImport> | null = null
 let explainer: ReturnType<typeof registerExplain> | null = null
+let ideasIpc: ReturnType<typeof registerIdeas> | null = null
 let connector: Connector | null = null
 
 function registerIpc(): void {
@@ -263,6 +268,7 @@ function registerIpc(): void {
   registerResearch(ctx)
   bibExport.register()
   registerMatrix(ctx, { word: () => wordAddin, bib: () => bibExport.status() })
+  ideasIpc = registerIdeas(ctx, { touch: () => sync.touch(), word: () => wordAddin })
   registerAgent(ctx, (input) => urlImporter!.fromInput(input))
   registerExportPdf(ctx, loadRenderer)
   registerLayout(ctx)
@@ -441,6 +447,13 @@ function registerIpc(): void {
   ipcMain.handle('ann:save', (_e, a: Annotation) => {
     // 对照模式里做的标注没有页码：按摘的字去原文每页的文字里找，笔记页里每条都能说出出处
     if (a.mode === 'reflow' && a.page === null) a.page = pageOfText(library.pageTexts(a.paperId), a.text)
+    // 整块标记的公式、图（字在原文里找不到）：用它前后最近一段正文的页码
+    if (a.mode === 'reflow' && a.page === null && a.style === 'box' && a.blockId) {
+      const blocks = library.reflowDoc(a.paperId)?.blocks ?? []
+      const i = blocks.findIndex((b) => b.id === a.blockId)
+      for (let d = 1; i >= 0 && d < 6 && a.page === null; d++)
+        for (const b of [blocks[i - d], blocks[i + d]]) if (b?.type === 'paragraph' && a.page === null) a.page = pageOfText(library.pageTexts(a.paperId), plainMd(b.md).slice(0, 200))
+    }
     saveAnnotation(db, a)
     sync.touch()
     explainer?.saved(a)
@@ -463,7 +476,7 @@ function registerIpc(): void {
       const secs = sectionsOf(doc.blocks)
       for (const a of anns) if (a.mode === 'pdf') a.section = sectionForText(doc.blocks, secs, a.text) ?? a.section
     }
-    const md = exportMarkdown(paper, anns, order)
+    const md = exportMarkdown(paper, anns, order, listIdeas(db, paperId))
     const name = `${safeFileName(paper.title)} ${t('笔记')}.md`
     // 自动化测试时用 PARAREAD_EXPORT_DIR 跳过保存面板
     let target: string | undefined
@@ -504,8 +517,17 @@ function registerIpc(): void {
       patch = { ...patch, textModel: p.text ?? '', visionModel: p.vision ?? p.text ?? '' }
     }
     if (patch.provider && providerOf(patch.provider).local) void findClaude().catch((e: Error) => log(`找 claude 命令出错：${e.message}`))
+    const engineWas = settings.get().defaultEngine
     settings.set(patch)
     if (patch.theme) nativeTheme.themeSource = patch.theme
+    // 换了默认的重排档：开着的论文换成新的那档；改成精细时，还没有精细结果的论文排队补上
+    if (patch.defaultEngine && patch.defaultEngine !== engineWas) {
+      for (const p of listPapers(db)) {
+        if (p.kind !== 'pdf') continue
+        if (patch.defaultEngine === 'basic' && mineruReady() && p.reflow.basic === 'none') enqueueReflow(p.id, ['basic'])
+        broadcast('reflow:done', { paperId: p.id, tier: library.bestTier(p.id) })
+      }
+    }
     if (patch.uiLang !== undefined) {
       // 换界面语言：菜单重建，各窗口重新加载
       setUiLang(process.env.PARAREAD_UI_LANG ?? patch.uiLang, app.getPreferredSystemLanguages()[0])
@@ -1028,7 +1050,9 @@ const wordAddin = new WordAddin({
   dir: join(dataDir, 'word'),
   staticDir: join(__dirname, '../renderer'),
   papers: () => listPapers(db),
-  prefs: () => ({ style: settings.get().wordStyle, check: settings.get().wordCheck })
+  prefs: () => ({ style: settings.get().wordStyle, check: settings.get().wordCheck }),
+  ideas: () => allIdeas(db),
+  paraphrase: (id, lang) => ideasIpc!.paraphrase(id, lang)
 })
 const updater = new Updater(app.isPackaged, () => settings.get().autoUpdate, (st) => broadcast('update:state', st))
 // 各窗口的 preload 启动时同步来问界面语言

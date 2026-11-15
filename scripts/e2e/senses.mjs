@@ -60,8 +60,14 @@ try {
   await win.keyboard.press('Escape')
   // 等眼前这几段都出来
   const visibleReady = () => ev(() => { const sc = document.querySelector('.reflow-scroller').getBoundingClientRect(); const vis = [...document.querySelectorAll('.blk.paragraph')].filter((b) => { const q = b.getBoundingClientRect(); return q.bottom > sc.top + 40 && q.top < sc.bottom - 40 }); return vis.length > 0 && vis.every((b) => b.classList.contains('senses')) })
+  // 还没分好的段落左边有个小圈在转
+  let spins = 0
+  for (let i = 0; i < 20 && !spins; i++) (await sleep(150)), (spins = await win.locator('.blk .sg-wait .spin').count())
+  ok('分意群的时候，还没好的段落旁边转圈', spins > 0, `${spins} 段在转`)
+  console.log(await shot(win, 'senses-wait'))
   for (let i = 0; i < 60 && !(await visibleReady()); i++) await sleep(1000)
   await sleep(1500)
+  ok('分好的段落不再转圈', await ev(() => [...document.querySelectorAll('.blk.senses')].every((b) => !b.querySelector('.sg-wait'))))
   const sgCount = await win.locator('.blk.senses').count()
   ok('打开后正文段变成一句一行', sgCount >= 3, `${sgCount} 段有了意群`)
   // 每一句：原文用到的颜色块和译文用到的一一对上（一块只在一边有颜色就是对错了）
@@ -155,6 +161,20 @@ try {
   await win.keyboard.press('Escape')
   await sleep(1500)
   ok('再打开：直接出来（走缓存），设置里记着', (await win.locator('.blk.senses').count()) >= 3 && (await ev(() => window.api.getSettings())).senseGroups === true, `${await win.locator('.blk.senses').count()} 段`)
+
+  // 没对上（AI 出错）：那段旁边换成能点的重试图标，点了再要一次
+  await ev(() => window.api.setApiKey('sk-wrong-key-for-test'))
+  await ev(() => { const sc = document.querySelector('.reflow-scroller'); sc.scrollTop = sc.scrollHeight * 0.55 })
+  let errs = 0
+  for (let i = 0; i < 40 && !errs; i++) (await sleep(1000)), (errs = await win.locator('.blk .sg-wait.err').count())
+  ok('AI 出错时那段旁边是重试图标', errs > 0, `${errs} 段`)
+  await ev(() => window.api.setApiKey(''))
+  await sleep(500)
+  const fixedId = await win.locator('.blk .sg-wait.err').first().evaluate((n) => n.closest('.blk').dataset.block)
+  await win.locator('.blk .sg-wait.err').first().click()
+  let healed = false
+  for (let i = 0; i < 60 && !healed; i++) (await sleep(1000)), (healed = await ev((id) => !!document.querySelector(`.blk.senses[data-block="${id}"]`), fixedId))
+  ok('点重试：Key 好了以后那段分好意群', healed, fixedId ?? '')
 } finally {
   await close(app)
 }

@@ -10,14 +10,32 @@ import { searchWeb, type MetaPatch, type SearchHit } from './meta'
 import { download, resolve } from './urlImport'
 import { findZoteroDir, readZotero, type ZoteroLibrary } from './zotero'
 import { t } from '../shared/i18n'
+import type { Paper } from '../shared/types'
 
-export type UrlImportResult = ImportResult | { status: 'noPdf'; meta: MetaPatch; landing: string | null; error?: string }
+// attached：PDF 补进了库里已有的「仅链接」那一条
+export type UrlImportResult = ImportResult | { status: 'added'; paper: Paper; attached: true } | { status: 'noPdf'; meta: MetaPatch; landing: string | null; error?: string }
 
 export type ZoteroState = 'waiting' | 'importing' | 'done' | 'duplicate' | 'failed' | 'paused' | 'skipped'
 
 // 导入：网址、全网检索、仅链接的论文补 PDF、Zotero。返回给小书签（pararead://add?url=）用的网址导入
 export function registerImport(c: Ctx): { fromInput: (input: string) => Promise<UrlImportResult>; capture: (cap: Capture) => Promise<CaptureResult> } {
   const tmp = join(c.dataDir, 'tmp')
+
+  // 库里已经有这篇的「仅链接」条目：PDF 补进那一条，不另起一条。补不上（不是 PDF、这个 PDF 已经在库里）返回 null，照常导入
+  const attachTo = async (file: string, meta: MetaPatch & { title?: string }): Promise<Paper | null> => {
+    const id = c.library.findLink(meta)
+    if (!id) return null
+    try {
+      await c.library.attachPdf(id, file)
+    } catch (e) {
+      c.log(`补 PDF 没成：${(e as Error).message}`)
+      return null
+    }
+    c.library.applyMeta(id, meta, false)
+    c.afterImport(id)
+    c.broadcast('library:changed', null)
+    return getPaper(c.db, id)
+  }
 
   const importUrl = async (pdfUrl: string | null, meta: MetaPatch, landing: string | null, source: 'url' | 'search'): Promise<UrlImportResult> => {
     if (!pdfUrl) return { status: 'noPdf', meta, landing }
@@ -28,6 +46,8 @@ export function registerImport(c: Ctx): { fromInput: (input: string) => Promise<
       return { status: 'noPdf', meta, landing, error: (e as Error).message }
     }
     try {
+      const linked = await attachTo(file, meta)
+      if (linked) return { status: 'added', paper: linked, attached: true }
       const name = (meta.title ?? 'paper').replace(/[\\/:*?"<>|]+/g, ' ').slice(0, 120) + '.pdf'
       const r = await c.library.importFile(file, { title: meta.title, authors: meta.authors, source, fileName: name, meta })
       // 下载的不是 PDF（出版社的登录页之类）当作没有全文
@@ -49,12 +69,17 @@ export function registerImport(c: Ctx): { fromInput: (input: string) => Promise<
   const capture = async (cap: Capture): Promise<CaptureResult> => {
     const meta: MetaPatch & { title: string } = { ...cap.meta, title: cap.meta.title.trim(), url: cap.meta.url ?? cap.url }
     const done = (r: UrlImportResult): CaptureResult | null =>
-      r.status === 'added' || r.status === 'duplicate' ? { status: r.status, title: r.paper.title } : null
+      r.status === 'added' || r.status === 'duplicate' ? { status: r.status === 'added' && 'attached' in r ? 'attached' : r.status, title: r.paper.title } : null
     if (cap.pdf) {
       mkdirSync(tmp, { recursive: true })
       const file = join(tmp, `${newId()}.pdf`)
       writeFileSync(file, Buffer.from(cap.pdf, 'base64'))
       try {
+        const linked = await attachTo(file, meta)
+        if (linked) {
+          c.library.applyMeta(linked.id, meta, true)
+          return { status: 'attached', title: linked.title }
+        }
         const name = meta.title.replace(/[\\/:*?"<>|]+/g, ' ').slice(0, 120) + '.pdf'
         const r = await c.library.importFile(file, { title: meta.title, authors: meta.authors, source: 'url', fileName: name, meta })
         if (r.status === 'added') {

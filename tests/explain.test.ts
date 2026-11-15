@@ -274,3 +274,20 @@ describe('拆开看用意群对齐', () => {
     expect(senseChunks(sens, md, zh, 'abc')).toEqual([])
   })
 })
+
+describe('讲解卡里接着问', () => {
+  it('讲解去掉分节标签给 AI 看；几轮问答写成一段带到问答栏', async () => {
+    const { plainExplain, turnsText, withMiss } = await import('../src/shared/explain')
+    expect(plainExplain('<one>一句话</one>\n<steps>甲 || 乙</steps>')).toBe('一句话\n\n甲：乙')
+    expect(turnsText([{ q: '为什么 64 Hz', a: '因为 BVP 是 64 Hz' }])).toBe('问：为什么 64 Hz\n答：因为 BVP 是 64 Hz')
+    // 说「还不懂」时接着问的几轮不丢
+    expect(withMiss({ versions: [], misses: 0, chat: [{ q: 'q', a: 'a', at: 1 }] }).chat).toHaveLength(1)
+  })
+  it('接着问的提示词带着讲解、前几轮和这一问', async () => {
+    const { askMessages } = await import('../src/main/explainPrompts')
+    const m = askMessages({ title: 'T', lang: '简体中文', text: 'x', onTr: false, paragraph: 'p', around: '', context: 'c', terms: '', senses: '', focus: '', before: [], label: 'confused', explained: '讲过的', turns: [{ q: 'q1', a: 'a1' }], question: 'q2' })
+    expect(String(m[1].content)).toContain('讲过的')
+    expect(m.map((x) => x.role)).toEqual(['system', 'user', 'assistant', 'user', 'assistant', 'user'])
+    expect(m.at(-1)!.content).toBe('q2')
+  })
+})

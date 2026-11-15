@@ -3,12 +3,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { t } from '@shared/i18n'
 import { LABEL_NAME } from '@shared/annLabels'
 import { askMarkdown, asksOf, isOpen, latest, openCounts, parseConfused, parseDoubt, STATUS_NAME, statusOf, walkOrder } from '@shared/explain'
-import type { Annotation, LabelStatus, Paper } from '@shared/types'
+import type { Annotation, LabelStatus, Paper, SettingsView } from '@shared/types'
 import { api, errText } from '../api'
 import { useExplainStream, usePendingExplains } from '../lib/explain'
 import { showMenu } from '../lib/menu'
 import { Empty, useToast } from '../lib/ui'
 import { ExplainBody, LabelChips, StatusChip } from './ExplainBody'
+import { ExplainAskBox, ExplainTurns, useExplainAsk } from './ExplainChat'
+import { latest as latestVersion, plainExplain, turnsText } from '@shared/explain'
 
 export type WalkRequest = { nonce: number; ids: string[] | null; start?: string; auto: boolean }
 
@@ -55,6 +57,8 @@ export function QuestionsPane(props: {
   onFocusAnn: (a: Annotation | null) => void
   onQuote: (quote: string) => void
   onRemoveLabel: (a: Annotation) => void
+  settings: SettingsView
+  onToChat: (quote: string, context: string) => void
 }) {
   const toast = useToast()
   const [view, setView] = useState<View>({ kind: 'list' })
@@ -106,7 +110,7 @@ export function QuestionsPane(props: {
             ))}
           </span>
         </div>
-        <WalkItem key={a.id} a={a} auto={view.auto} pending={pending.has(a.id)} onQuote={props.onQuote} onNext={next} toast={toast} />
+        <WalkItem key={a.id} a={a} auto={view.auto} pending={pending.has(a.id)} onQuote={props.onQuote} onNext={next} toast={toast} settings={props.settings} onToChat={props.onToChat} />
       </div>
     )
   }
@@ -258,8 +262,15 @@ export function QuestionsPane(props: {
 }
 
 // 逐条里的一条：讲过的直接出（不再花 AI）；没讲过的，是「过一遍」进来的就当场讲，从笔记跳过来的先给一个「讲一讲」
-function WalkItem(props: { a: Annotation; auto: boolean; pending: boolean; onQuote: (q: string) => void; onNext: (asks?: Ask[]) => void; toast: (s: string) => void }) {
+function WalkItem(props: { a: Annotation; auto: boolean; pending: boolean; onQuote: (q: string) => void; onNext: (asks?: Ask[]) => void; toast: (s: string) => void; settings: SettingsView; onToChat: (quote: string, context: string) => void }) {
   const { a } = props
+  const asking = useExplainAsk(a)
+  // 放到 AI 问答里接着聊：引用这一处，讲解的「一句话」和这几轮问答作为背景带过去
+  const toChat = (): void => {
+    const v = latestVersion(a.explain)
+    const head = v ? plainExplain(v.raw).split('\n').filter(Boolean).slice(0, 6).join('\n') : ''
+    props.onToChat(a.text, [head && `讲解（摘要）：\n${head}`, turnsText(a.explain?.chat ?? [])].filter(Boolean).join('\n\n'))
+  }
   const ex = useExplainStream()
   const versions = a.explain?.versions ?? []
   const [sel, setSel] = useState(() => latest(a.explain)?.focus ?? '')
@@ -353,7 +364,11 @@ function WalkItem(props: { a: Annotation; auto: boolean; pending: boolean; onQuo
             )}
           </div>
         )}
+        {(raw || streaming) && <ExplainTurns a={a} live={asking.live} onToChat={toChat} />}
       </div>
+      {(versions.length > 0 || (!!raw && !streaming)) && (
+        <ExplainAskBox settings={props.settings} busy={asking.busy} disabled={streaming} label={a.label} onAsk={asking.ask} onStop={asking.stop} />
+      )}
       <div className="q-foot">
         {a.label === 'confused' && !isOpen(a) ? (
           <>

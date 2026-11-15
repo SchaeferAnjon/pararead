@@ -1,15 +1,15 @@
-import { ChevronDown, ChevronUp, CodeXml, FolderOpen, RefreshCw, Send, ShieldCheck, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, CodeXml, FolderOpen, Lightbulb, Plus, RefreshCw, Send, ShieldCheck, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { splitPunct } from '@shared/draft'
 import { t } from '@shared/i18n'
-import { isRel, splitCell, type Draft, type Org } from '@shared/matrix'
+import { ideaCellId, isIdea, isRel, splitCell, type Draft, type Org } from '@shared/matrix'
 import { api, errText, type BibStatus, type MatrixView } from '../../api'
 import { Segmented, Skeleton, useToast } from '../../lib/ui'
 
 type Busy = 'outline' | 'write' | 'check' | null
 
 // 「写一段」抽屉：用到的素材 → 怎么组织 → 提纲（能挪）→ 语言 → 写成段落 → 查证 → 送进 Word 或复制成 LaTeX
-export function WriteDrawer(props: { v: MatrixView; sel: string[]; label: (id: string) => string; num: (paperId: string) => number; onLit: (ids: string[]) => void; onClose: () => void }) {
+export function WriteDrawer(props: { v: MatrixView; sel: string[]; label: (id: string) => string; num: (paperId: string) => number; onLit: (ids: string[]) => void; onToggle: (id: string, on: boolean) => void; onClose: () => void }) {
   const { v } = props
   const sid = v.sessionId
   const toast = useToast()
@@ -19,6 +19,9 @@ export function WriteDrawer(props: { v: MatrixView; sel: string[]; label: (id: s
   const [showCheck, setShowCheck] = useState(!!v.state.draft?.checks)
   const [latex, setLatex] = useState<Awaited<ReturnType<typeof api.matrixLatex>> | null>(null)
   const [wordOff, setWordOff] = useState(false)
+  const [ideaMenu, setIdeaMenu] = useState(false)
+  // 表里这几篇收进灵感库的句子：还没加进素材的列在「＋ 灵感」里
+  const ideasLeft = v.ideas.filter((i) => !props.sel.includes(ideaCellId(i.id)))
 
   const run = async (step: Exclude<Busy, null>, fn: () => Promise<Draft>): Promise<Draft | null> => {
     setBusy(step)
@@ -112,12 +115,51 @@ export function WriteDrawer(props: { v: MatrixView; sel: string[]; label: (id: s
       <div className="mx-subh">
         {t('用到的素材')} <span className="num hint">{t('{0} 条', props.sel.length)}</span>
       </div>
-      <div className="mx-chips">
-        {props.sel.map((id) => (
-          <span className="tag" key={id}>
-            {props.label(id)}
+      <div className="mx-chips idea-chips">
+        {props.sel.map((id) =>
+          isIdea(id) ? (
+            <span className="tag idea-chip" key={id} title={props.label(id)}>
+              <Lightbulb size={12} className="idea-ic" />
+              <span className="ellipsis">{props.label(id)}</span>
+              <button className="x" title={t('不用这条')} onClick={() => props.onToggle(id, false)}>
+                <X size={12} />
+              </button>
+            </span>
+          ) : (
+            <span className="tag" key={id}>
+              {props.label(id)}
+            </span>
+          )
+        )}
+        {v.ideas.length > 0 && (
+          <span className="idea-add">
+            <button className="tag dash" disabled={!ideasLeft.length} title={ideasLeft.length ? undefined : t('表里这几篇的灵感都加进来了')} onClick={() => setIdeaMenu((x) => !x)}>
+              <Plus size={12} />
+              {t('灵感')}
+            </button>
+            {ideaMenu && ideasLeft.length > 0 && (
+              <div className="pop solid menu idea-menu" data-part="add-idea" onMouseLeave={() => setIdeaMenu(false)}>
+                <div className="hint">{t('表里这几篇的灵感')}</div>
+                {ideasLeft.map((i) => (
+                  <button
+                    key={i.id}
+                    className="menu-item"
+                    onClick={() => {
+                      props.onToggle(ideaCellId(i.id), true)
+                      setIdeaMenu(false)
+                    }}
+                  >
+                    <Lightbulb size={14} className="idea-ic" />
+                    <span className="im-b">
+                      <span className="q">{i.text}</span>
+                      <span className="hint">{[v.papers.find((p) => p.id === i.paperId)?.short, i.page ? t('第 {0} 页', i.page) : '', i.topics.join('、'), i.how === 'quote' ? t('直接引') : t('转述')].filter(Boolean).join(' · ')}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </span>
-        ))}
+        )}
       </div>
       <div className="mx-subh">{t('怎么组织')}</div>
       <Segmented
@@ -253,6 +295,11 @@ export function WriteDrawer(props: { v: MatrixView; sel: string[]; label: (id: s
 }
 
 function srcWhere(v: MatrixView, id: string): string {
+  if (isIdea(id)) {
+    const i = v.ideas.find((x) => ideaCellId(x.id) === id)
+    const p = i && v.papers.find((x) => x.id === i.paperId)
+    return i && p ? `${p.short}${i.page ? ' ' + t('第 {0} 页', i.page) : ''}` : t('灵感')
+  }
   if (isRel(id)) {
     const r = v.state.relations?.find((x) => `rel:${x.id}` === id)
     const a = v.papers.find((p) => p.id === r?.from)
@@ -360,7 +407,7 @@ function LatexDialog(props: { data: Awaited<ReturnType<typeof api.matrixLatex>>;
   )
 }
 
-function WordOffDialog(props: { onClose: () => void }) {
+export function WordOffDialog(props: { onClose: () => void }) {
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && props.onClose()}>
       <div className="modal" role="dialog" aria-label={t('Word 插件还没开')}>

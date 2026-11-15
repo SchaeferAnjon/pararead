@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { pageOfText } from '../src/shared/refs'
-import { alignOffsets, balanced, counterpart, cut, needsMd, pairedMarks, parseSenses, senseable, senseGaps, toMd } from '../src/shared/senses'
+import { alignOffsets, balanced, counterpart, cut, maskMath, needsMd, pairedMarks, parseSenses, senseable, senseGaps, senseText, toMd } from '../src/shared/senses'
 import { SenseQueue } from '../src/main/senses'
 
 const SRC = 'If you increase the learning rate too much, the loss will start to diverge [1]. Could you tell me why the new model converges faster on the small dataset?'
@@ -151,8 +151,10 @@ describe('意群：哪些要交给 Markdown、哪些段不做', () => {
     expect(senseable('The complexity of modern traffic has made driver stress a pervasive threat.')).toBe(true)
     expect(senseable('Too short.')).toBe(false)
     expect(senseable('First paragraph long enough to count here.\n\nSecond paragraph.')).toBe(false)
-    expect(senseable('- a list item that is long enough to pass the length check')).toBe(false)
-    expect(senseable('1) a numbered item that is long enough to pass the length check')).toBe(false)
+    // 只有一项的列表（编号小节）去掉编号后能做；多项的不做
+    expect(senseable('- a list item that is long enough to pass the length check')).toBe(true)
+    expect(senseable('1) a numbered item that is long enough to pass the length check')).toBe(true)
+    expect(senseable('- one list item that is long enough\n- another list item here')).toBe(false)
   })
 })
 
@@ -273,5 +275,24 @@ describe('意群：两边颜色对得上，对不全再问一次', () => {
     expect(calls).toHaveLength(2)
     expect(calls[1]).toContain('measurement approaches.')
     expect((res as { data: { chunks: unknown[] }[] }).data[0].chunks).toHaveLength(2)
+  })
+})
+
+describe('意群：编号小节和行内公式', () => {
+  it('只有一项的编号小节去掉编号再做；多项的列表不做', () => {
+    expect(senseText('1) Experimental Setup and Fairness: All models are evaluated using standard implementations.')).toEqual({ text: 'Experimental Setup and Fairness: All models are evaluated using standard implementations.', marker: '1.' })
+    expect(senseable('1) Experimental Setup and Fairness: All models are evaluated using standard implementations.')).toBe(true)
+    expect(senseable('1. first item of a list that is long enough\n2. second item of the same list')).toBe(false)
+    expect(senseText('Plain paragraph text.').marker).toBeNull()
+  })
+  it('行内公式换成记号给模型，回来的片段换回原样，能在原文里定位', () => {
+    const md = 'The model achieves a mean accuracy of $8 8 . 4 3 \\% \\pm 2 . 8 9$ , a mean F1-score of $0 . 8 8 \\pm 0 . 0 3$ , indicating strong performance.'
+    const zh = '模型的平均准确率为 88.43% ± 2.89，平均 F1 分数为 0.88 ± 0.03，表明性能很强。'
+    const { masked, unmask } = maskMath(md)
+    expect(masked).toBe('The model achieves a mean accuracy of ⟦M1⟧ , a mean F1-score of ⟦M2⟧ , indicating strong performance.')
+    const raw = { sentences: [[{ en: unmask('The model achieves a mean accuracy of ⟦M1⟧ ,'), zh: '模型的平均准确率为 88.43% ± 2.89，' }, { en: unmask('a mean F1-score of ⟦M2⟧ ,'), zh: '平均 F1 分数为 0.88 ± 0.03，' }, { en: 'indicating strong performance.', zh: '表明性能很强。' }]] }
+    const [s] = parseSenses(raw, md, zh)
+    expect(s.chunks).toHaveLength(3)
+    expect(s.chunks.every((c) => c.zh.length > 0)).toBe(true)
   })
 })

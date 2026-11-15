@@ -1,4 +1,5 @@
 import { NotesPage } from './NotesPage'
+import { IdeasPage } from './IdeasPage'
 import { useCallback, useEffect, useState } from 'react'
 import type { Folder, Paper, ReadMode, SettingsView } from '@shared/types'
 import { api, errText, type OpenAt, type Project, type ResearchSession, type SyncStatus } from '../api'
@@ -19,7 +20,7 @@ export function MainWindow(props: {
   onRoute: (r: Route) => void
   onPricing: () => void
   startWith: 'zotero' | null
-  onOpen: (id: string, st: LibState, mode?: ReadMode, ann?: string, at?: OpenAt) => void
+  onOpen: (id: string, st: LibState, mode?: ReadMode, ann?: string, at?: OpenAt, idea?: string) => void
 }) {
   const toast = useToast()
   const [papers, setPapers] = useState<Paper[] | null>(null)
@@ -135,6 +136,7 @@ export function MainWindow(props: {
           />
         )}
         {route.kind === 'notes' && <NotesPage sideHidden={sideHidden} onOpen={(id, ann) => props.onOpen(id, props.libState, undefined, ann)} />}
+        {route.kind === 'ideas' && <IdeasPage sideHidden={sideHidden} settings={props.settings} focus={route.focus} onOpen={(id, idea) => props.onOpen(id, props.libState, undefined, undefined, undefined, idea)} />}
         {route.kind === 'ai' && (
           <ResearchPage
             key={route.id ?? 'new'}

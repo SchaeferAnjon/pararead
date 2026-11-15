@@ -4,7 +4,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { MetaPatch } from './meta'
 
-export const CONNECTOR_PORT = 27485
+// 测试实例用 PARAREAD_CONNECTOR_PORT 换一个口，免得把东西发进正在用的那个应用
+export const CONNECTOR_PORT = Number(process.env.PARAREAD_CONNECTOR_PORT) || 27485
 const MAX_BODY = 120 * 1024 * 1024
 
 export interface Capture {
@@ -14,7 +15,7 @@ export interface Capture {
   pdf: string | null // 插件下载到的 PDF（base64）；没下到是 null，应用再自己试一次
 }
 export interface CaptureResult {
-  status: 'added' | 'duplicate' | 'link' | 'failed'
+  status: 'added' | 'duplicate' | 'link' | 'attached' | 'failed' // attached：库里已有这篇的仅链接条目，PDF 补进去了
   title: string
   error?: string
 }

@@ -80,7 +80,7 @@ function Settings2() {
           {sec === 'ai' && <Ai s={s} set={set} setS={setS} />}
           {sec === 'member' && <Member s={s} set={set} />}
           {sec === 'translate' && <Translate s={s} set={set} />}
-          {sec === 'reflow' && <Reflow s={s} setS={setS} />}
+          {sec === 'reflow' && <Reflow s={s} setS={setS} set={set} />}
           {sec === 'storage' && <Storage s={s} set={set} />}
           {sec === 'sync' && <Sync s={s} set={set} />}
           {sec === 'browser' && <BrowserPlugin />}
@@ -543,7 +543,7 @@ function Translate({ s, set }: P) {
   )
 }
 
-function Reflow({ s, setS }: { s: SettingsView; setS: (v: SettingsView) => void }) {
+function Reflow({ s, setS, set }: P & { setS: (v: SettingsView) => void }) {
   const [check, setCheck] = useState<TestResult>(null)
   const [busy, setBusy] = useState(false)
   const mu = s.mineruPath.replace(/^\/Users\/[^/]+/, '~')
@@ -551,18 +551,39 @@ function Reflow({ s, setS }: { s: SettingsView; setS: (v: SettingsView) => void 
   const working = !!inst && ['uv', 'python', 'packages', 'models'].includes(inst.phase)
   return (
     <>
-      <FSec title={t('重排引擎')} desc={t('论文导入后转成网页，才能逐段对照和划词。先用快速重排，几秒就能读；精细重排好了自动换上。')}>
-        <div className="choice">
+      <FSec title={t('重排引擎')} desc={t('论文导入后转成网页，才能逐段对照和划词。点一种设成默认；每篇在阅读页的「快速 / 精细」菜单里还能单独换。')}>
+        {/* 选默认：点卡片空白处就选；卡片里的按钮（更改、检测、下载）照常用 */}
+        <div
+          className={'choice pick' + (s.defaultEngine === 'flash' ? ' on' : '')}
+          role="radio"
+          aria-checked={s.defaultEngine === 'flash'}
+          tabIndex={0}
+          onClick={() => s.defaultEngine !== 'flash' && set({ defaultEngine: 'flash' })}
+        >
           <Zap size={18} />
-          <div>
-            <div className="ct2">{t('快速 · 本地')}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="ct2">
+              {t('快速 · 本地')}
+              {s.defaultEngine === 'flash' && <span className="tag">{t('默认')}</span>}
+            </div>
             <div className="cd2">{t('几秒好；公式是图片，双栏偶尔串行')}</div>
+            {s.defaultEngine === 'flash' && <div className="cd2">{t('设成默认时精细不自动跑，不占电脑；哪篇要精细，在阅读页切过去再排。')}</div>}
           </div>
         </div>
-        <div className="choice">
+        <div
+          className={'choice pick' + (s.defaultEngine !== 'flash' ? ' on' : '')}
+          role="radio"
+          aria-checked={s.defaultEngine !== 'flash'}
+          tabIndex={0}
+          onClick={(e) => !(e.target as Element).closest('button') && s.defaultEngine === 'flash' && set({ defaultEngine: 'basic' })}
+        >
           <Layers size={18} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="ct2">{t('精细 · 本地 MinerU')}</div>
+            <div className="ct2">
+              {t('精细 · 本地 MinerU')}
+              {s.defaultEngine !== 'flash' && <span className="tag">{t('默认')}</span>}
+            </div>
+            {s.defaultEngine !== 'flash' && <div className="cd2">{t('导入后先出快速的，几秒就能读；精细好了自动换上。')}</div>}
             <div className="cd2">{t('公式转 LaTeX、表格能复制；一篇 1 到 3 分钟，占本机算力')}</div>
             {!s.mineruInstalled && (
               <div style={{ marginTop: 8 }}>

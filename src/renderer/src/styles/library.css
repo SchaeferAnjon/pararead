@@ -160,3 +160,12 @@ mark.hit { background: var(--selection); color: inherit; border-radius: 2px; }
 .np-note { font-size: var(--fs); line-height: 1.6; padding-left: 8px; border-left: 2px solid var(--stroke-strong); white-space: pre-wrap; }
 .np-empty { margin: 18vh auto 0; max-width: 360px; display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); text-align: center; color: var(--text-2); }
 .np-empty b { color: var(--text); font-size: var(--fs-lg); }
+
+/* 「仅链接」的论文：详情面板底部一块，说清为什么没有 PDF、怎么补；把 PDF 拖到面板上时整块加框提示 */
+.insp-link { flex: none; margin: 0 24px 12px; padding: 12px 14px; border-radius: var(--r-lg); background: var(--fill-1); box-shadow: inset 0 0 0 1px var(--stroke-soft); }
+.insp-link .il-t { font-weight: 500; }
+.insp-link .il-d { margin-top: 4px; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.55; }
+.insp-link .il-b { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.insp-link .il-b .btn { text-decoration: none; }
+.insp[data-drop="on"] { box-shadow: inset 0 0 0 2px var(--accent); }
+.insp[data-drop="on"] .insp-link { background: var(--accent-soft); }

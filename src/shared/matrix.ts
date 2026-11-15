@@ -65,11 +65,13 @@ export interface OutlineItem {
   h: string
   cells: string[]
 }
-/** 段落里的一句：t 带句末标点，不带引用号；cites 是论文 id；src 是它用到的格子（或关系） */
+/** 段落里的一句：t 带句末标点，不带引用号；cites 是论文 id；src 是它用到的格子（或关系、灵感）；
+ *  pages：这句原样引了某篇的原句（直接引的灵感），引用带上页码 */
 export interface Sentence {
   t: string
   cites: string[]
   src: string[]
+  pages?: Record<string, number>
 }
 export interface SentenceCheck {
   ok: boolean
@@ -113,6 +115,9 @@ export const splitCell = (id: string): { paperId: string; col: string } => {
 }
 export const relCellId = (relId: string): string => `rel:${relId}`
 export const isRel = (id: string): boolean => id.startsWith('rel:')
+/** 「写一段」里加进来的灵感：idea:<灵感 id> */
+export const ideaCellId = (ideaId: string): string => `idea:${ideaId}`
+export const isIdea = (id: string): boolean => id.startsWith('idea:')
 
 // —— 原文定位 ——
 

@@ -11,6 +11,12 @@ const require = createRequire(process.env.PLAYWRIGHT_ROOT ?? '/opt/homebrew/lib/
 const { chromium } = require('playwright')
 const CHROMIUM = process.env.E2E_CHROMIUM ?? `${homedir()}/Library/Caches/ms-playwright/chromium-1228/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`
 const EXT = `${ROOT}/out/renderer/extension`
+// 插件写死发到 27485：那个口已经被正在用的 ParaRead 占着时，抓到的论文会进真实文献库，不跑
+const busy = await fetch('http://127.0.0.1:27485/ping', { headers: { 'X-ParaRead-Connector': '1' }, signal: AbortSignal.timeout(1500) }).then(() => true, () => false)
+if (busy) {
+  console.log('27485 已经有一个 ParaRead 在听（多半是正在用的那个）：先退出它再跑，免得测试的论文进真实文献库')
+  process.exit(2)
+}
 const fails = []
 const ok = (name, pass, info = '') => (console.log(pass ? '通过' : '没过', name, info), pass || fails.push(name))
 

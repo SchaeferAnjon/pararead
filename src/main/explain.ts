@@ -2,10 +2,11 @@
 // 设置里开了「打标签后在后台先备好讲解」才在打标签时排队先讲（一次一条）。
 // 讲的时候带上：所在段落和前后两段、全文、这篇的术语表、意群对齐（有缓存才用）；有质疑再加学术检索的结果和本文自己的引用。
 import { ipcMain } from 'electron'
-import { citedIn, groupKey, latest, litQuery, sections, senseChunks, withMiss } from '../shared/explain'
+import { citedIn, groupKey, latest, litQuery, plainExplain, sections, senseChunks, withMiss } from '../shared/explain'
+import { thinkLevel } from '../shared/thinking'
 import { sensesKey } from '../shared/hash'
 import { findReferences, plain } from '../shared/refs'
-import type { SenseSentence } from '../shared/senses'
+import { senseText, type SenseSentence } from '../shared/senses'
 import { termRegex } from '../shared/terms'
 import { t } from '../shared/i18n'
 import type { Annotation, Block, ExplainRecord, ExplainVersion, LabelStatus, LitItem, Term } from '../shared/types'
@@ -13,7 +14,7 @@ import type { Ctx } from './ctx'
 import { getAiCache, getAnnotation, getCachedTranslation, getPaper, getPaperCache, setLabelState } from './db'
 import type { ChatMsg } from './glm'
 import { searchWeb, squashTitle } from './meta'
-import { confusedMessages, doubtMessages, groupMessages, type ExplainInput } from './explainPrompts'
+import { askMessages, confusedMessages, doubtMessages, groupMessages, type ExplainInput } from './explainPrompts'
 
 const sq = (s: string): string => plain(s).replace(/[^A-Za-z0-9]+/g, '').toLowerCase()
 
@@ -79,8 +80,9 @@ export function registerExplain(c: Ctx, syncTouch: () => void): { saved: (a: Ann
     let chunks: { en: string; zh: string }[] = []
     if (block?.translatable) {
       const zh = getCachedTranslation(db, c.translator.keyFor(block.md))
-      const hit = zh ? getAiCache(db, sensesKey(block.md.trim(), zh.trim())) : null
-      if (zh && hit) chunks = senseChunks(JSON.parse(hit) as SenseSentence[], block.md.trim(), zh.trim(), a.text)
+      const en = senseText(block.md).text
+      const hit = zh ? getAiCache(db, sensesKey(en, zh.trim())) : null
+      if (zh && hit) chunks = senseChunks(JSON.parse(hit) as SenseSentence[], en, zh.trim(), a.text)
     }
     const ctx = library.contextText(a.paperId, Math.min(ai.ctxChars(), 40000))
     return {
@@ -144,7 +146,7 @@ export function registerExplain(c: Ctx, syncTouch: () => void): { saved: (a: Ann
   function addVersion(id: string, v: ExplainVersion, o: { again?: boolean }): Annotation | null {
     const cur = getAnnotation(db, id)
     if (!cur?.label) return null
-    const base: ExplainRecord = o.again ? withMiss(cur.explain) : { versions: cur.explain?.versions ?? [], misses: cur.explain?.misses ?? 0, group: cur.explain?.group ?? null }
+    const base: ExplainRecord = o.again ? withMiss(cur.explain) : { versions: cur.explain?.versions ?? [], misses: cur.explain?.misses ?? 0, group: cur.explain?.group ?? null, chat: cur.explain?.chat }
     const saved = setLabelState(db, id, { explain: { ...base, versions: [...base.versions, v].slice(-8) } })
     if (saved) c.broadcast('explain:saved', saved)
     syncTouch()
@@ -192,9 +194,33 @@ export function registerExplain(c: Ctx, syncTouch: () => void): { saved: (a: Ann
         const g = { key, ids: anns.map((a) => a.id), raw: full, at: Date.now() }
         for (const a of anns) {
           const cur = getAnnotation(db, a.id)
-          const saved = cur && setLabelState(db, a.id, { explain: { versions: cur.explain?.versions ?? [], misses: cur.explain?.misses ?? 0, group: g } })
+          const saved = cur && setLabelState(db, a.id, { explain: { versions: cur.explain?.versions ?? [], misses: cur.explain?.misses ?? 0, group: g, chat: cur.explain?.chat } })
           if (saved) c.broadcast('explain:saved', saved)
         }
+        syncTouch()
+      }
+    })
+  })
+
+  // 讲解卡里接着问这一处：带着这处的材料、最新一版讲解和前几轮，按问答框选的思考档回答；答完存在标注上
+  ipcMain.handle('explain:ask', (e, reqId: string, annId: string, question: string) => {
+    const a = getAnnotation(db, annId)
+    if (!a?.label) throw new Error(t('这条标注没有标签'))
+    const q = question.trim()
+    if (!q) throw new Error(t('先写下想问什么'))
+    if (!ai.ready()) throw new Error(t('AI 服务还没设好：在设置里选一家、填上 Key'))
+    const { inp } = input(a, '', [])
+    const turns = a.explain?.chat ?? []
+    const s = settings.get()
+    c.streamer.streamTo(e.sender, reqId, askMessages({ ...inp, label: a.label, explained: plainExplain(latest(a.explain)?.raw ?? ''), turns, question: q }), {
+      think: thinkLevel(s.thinkLevels, s.provider, s.textModel) ?? undefined,
+      onFinish: (full) => {
+        if (!full.trim()) return
+        const cur = getAnnotation(db, annId)
+        if (!cur) return
+        const rec: ExplainRecord = { versions: cur.explain?.versions ?? [], misses: cur.explain?.misses ?? 0, group: cur.explain?.group ?? null, chat: [...(cur.explain?.chat ?? []), { q, a: full.trim(), at: Date.now() }].slice(-20) }
+        const saved = setLabelState(db, annId, { explain: rec })
+        if (saved) c.broadcast('explain:saved', saved)
         syncTouch()
       }
     })

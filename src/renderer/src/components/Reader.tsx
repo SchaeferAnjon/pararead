@@ -2,7 +2,10 @@ import { ALargeSmall, Check, ChevronDown, Columns2, Rows2, ChevronLeft, ChevronU
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type * as PdfJs from 'pdfjs-dist'
 import { sectionsOf, squash } from '@shared/chunk'
-import type { Annotation, HlColor, MajorPoint, Paper, ReadMode, ReadPosition, ReflowDoc, SettingsView, Tier, Term, Ink, AnnLabel } from '@shared/types'
+import type { Annotation, Block, HlColor, Idea, MajorPoint, Paper, ReadMode, ReadPosition, ReflowDoc, SettingsView, Tier, Term, Ink, AnnLabel } from '@shared/types'
+import { recentTopics } from '@shared/ideas'
+import { pageOfText } from '@shared/refs'
+import type { IdeaDraft } from './IdeaCard'
 import { api, errText, type OpenAt, type ReflowProgress } from '../api'
 import { showMenu } from '../lib/menu'
 import { loadPdf } from '../lib/pdf'
@@ -34,7 +37,7 @@ const MID_MIN = 480
 // 正文列比这个窄，标题栏的文字按钮只留图标
 const COMPACT_BAR = 700
 
-export function Reader(props: { paperId: string; initialMode?: ReadMode; initialAnn?: string; initialAt?: OpenAt; settings: SettingsView; onBack: () => void; onOpenPaper: (id: string) => void }) {
+export function Reader(props: { paperId: string; initialMode?: ReadMode; initialAnn?: string; initialAt?: OpenAt; initialIdea?: string; settings: SettingsView; onBack: () => void; onOpenPaper: (id: string) => void; onOpenIdeas: (ideaId: string) => void }) {
   const { paperId, settings } = props
   const toast = useToast()
   const [paper, setPaper] = useState<Paper | null>(null)
@@ -42,6 +45,10 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
   const [doc, setDoc] = useState<ReflowDoc | null>(null)
   const [prog, setProg] = useState<ReflowProgress | null>(null)
   const [anns, setAnns] = useState<Annotation[]>([])
+  // 灵感库里这篇的句子（正文左边的小灯泡）；收灵感的小卡里列的主题是全库最近用过的
+  const [ideas, setIdeas] = useState<Idea[]>([])
+  const [ideaTopics, setIdeaTopics] = useState<string[]>([])
+  const [focusIdea, setFocusIdea] = useState<string | null>(null)
   const [pdf, setPdf] = useState<PdfJs.PDFDocumentProxy | null>(null)
   const [pdfErr, setPdfErr] = useState<string | null>(null)
   const [pageTexts, setPageTexts] = useState<string[]>([])
@@ -121,6 +128,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
       // 新论文重排好之前停在原文，好了以后默认对照；之后记住上次的模式
       setMode(props.initialMode ?? p.lastMode ?? (d ? 'reflow' : 'pdf'))
       setAnns(await api.annList(paperId))
+      setIdeas(await api.ideaList(paperId))
       setInks(await api.inkList(paperId))
       setProg(await api.reflowProgress(paperId))
       void api.updatePaper(paperId, { lastOpened: Date.now() })
@@ -166,7 +174,11 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
       api.onReflowDone((p) => p.paperId === paperId && void reloadDoc(p.tier)),
       api.onReflowFailed((p) => {
         if (p.paperId !== paperId) return
-        void api.getPaper(paperId).then(setPaper)
+        void api.getPaper(paperId).then((x) => {
+          setPaper(x)
+          // 手动选的那一档没排成：说清楚，还在用的是哪一档，能重试
+          if (x?.engine === p.tier) toast(t('「{0}」重排没成：{1}。现在还是「{2}」', TIER_NAME[p.tier as Tier], p.error ?? '', TIER_NAME[(doc?.tier ?? 'flash') as Tier]), { label: t('重试'), run: () => void api.setEngine(paperId, p.tier as Tier) })
+        })
       })
     ]
     return () => offs.forEach((f) => f())
@@ -287,16 +299,80 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     await api.annSave(n)
     setAnns((l) => l.map((x) => (x.id === a.id ? n : x)))
   })
+  // 对照模式里给公式、图、表整块标记（用颜色框住）：没标过就新建，换颜色就改，color 为 null 是去掉
+  const markBlock = useEvent(async (b: Block, text: string, color: HlColor | null) => {
+    const cur = anns.find((a) => a.style === 'box' && a.blockId === b.id)
+    if (cur && !color) return void deleteAnn(cur)
+    if (cur && color) return void updateAnn({ ...cur, color, updatedAt: Date.now() })
+    if (!color) return
+    await createAnn({ text, paragraph: text, getRect: () => null, target: { mode: 'reflow', blockId: b.id, blockHash: b.hash, start: null as unknown as number, end: null as unknown as number, section: sections.get(b.id) ?? '' } }, color, '', 'box')
+  })
   const deleteAnn = useEvent(async (a: Annotation) => {
     await api.annDelete(a.id)
     setAnns((l) => l.filter((x) => x.id !== a.id))
-    toast(t('已删除高亮'), {
+    toast(a.style === 'box' ? t('已去掉标记') : t('已删除高亮'), {
       label: t('撤销'),
       run: () => {
         void api.annSave(a).then(() => setAnns((l) => [...l, a]))
       }
     })
   })
+
+  // 灵感：别的地方（灵感库页、另一台电脑同步来）改了就重读；主题列表跟着全库走
+  useEffect(() => {
+    const load = (): void => {
+      void api.ideaList(paperId).then(setIdeas)
+      void api.ideaAll().then((l) => setIdeaTopics(recentTopics(l, 12)))
+    }
+    load()
+    return api.onIdeasChanged(load)
+  }, [paperId])
+  const createIdea = useEvent(async (info: SelInfo, d: IdeaDraft) => {
+    const t_ = info.target
+    const ex = info.existing
+    const now = Date.now()
+    // 点在已有标注上收的：位置照那条标注
+    const loc = t_
+      ? t_.mode === 'pdf'
+        ? { mode: 'pdf' as const, page: t_.page, rects: t_.rects, blockId: null, blockHash: null, start: null, end: null, section: sectionForPage(t_.page) }
+        : { mode: 'reflow' as const, page: null, rects: null, blockId: t_.blockId, blockHash: t_.blockHash, start: t_.start, end: t_.end, section: t_.section }
+      : ex
+        ? { mode: ex.mode, page: ex.page, rects: ex.rects, blockId: ex.blockId, blockHash: ex.blockHash, start: ex.start, end: ex.end, section: ex.section }
+        : null
+    if (!loc) return
+    const i: Idea = { id: crypto.randomUUID().slice(0, 12), paperId, text: info.text, ...loc, use: d.use, topics: d.topics, how: d.how, paraphrase: null, createdAt: now, updatedAt: now }
+    const saved = await api.ideaSave(i)
+    setIdeas((l) => [...l.filter((x) => x.id !== saved.id), saved])
+    if (d.how !== settings.ideaHow) void api.setSettings({ ideaHow: d.how })
+    window.getSelection()?.removeAllRanges()
+    toast(d.topics.length ? t('收进灵感库 · {0}', d.topics.join('、')) : t('收进灵感库'), { label: t('打开灵感库'), run: () => props.onOpenIdeas(saved.id) })
+  })
+  const removeIdea = useEvent(async (i: Idea) => {
+    await api.ideaDelete(i.id)
+    setIdeas((l) => l.filter((x) => x.id !== i.id))
+    toast(t('已从灵感库拿掉'), { label: t('撤销'), run: () => void api.ideaSave(i).then((x) => setIdeas((l) => [...l, x])) })
+  })
+  const goIdea = useEvent((i: Idea) => {
+    if (i.mode === 'reflow' && i.blockId) {
+      if (mode !== 'reflow') switchMode('reflow')
+      setTimeout(() => setJump({ nonce: jumpSeq++, kind: 'block', blockId: i.blockId! }), mode === 'reflow' ? 0 : 60)
+    } else if (i.page) {
+      if (mode !== 'pdf') switchMode('pdf')
+      setTimeout(() => setJump({ nonce: jumpSeq++, kind: 'page', page: i.page!, frac: i.rects?.[0]?.[1] }), mode === 'pdf' ? 0 : 60)
+    }
+    setFocusIdea(i.id)
+    setTimeout(() => setFocusIdea((x) => (x === i.id ? null : x)), 2600)
+  })
+  // 从灵感库点「回到原处」进来的：灵感读到了以后跳过去，左边那个灯泡和那一句亮一下
+  const cameIdea = useRef(props.initialIdea)
+  useEffect(() => {
+    const i = cameIdea.current && paper && mode ? ideas.find((x) => x.id === cameIdea.current) : undefined
+    if (!i) return
+    cameIdea.current = undefined
+    const t_ = setTimeout(() => goIdea(i), 400)
+    return () => clearTimeout(t_)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ideas, paper, mode])
 
   // 讲解、状态在主进程存好了推过来：换掉手里那条
   useEffect(
@@ -455,6 +531,9 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     h.key = key
     goBlock(blocks[h.i])
   })
+  // 手动选了一档但还没排好（排队、重排中、没排成）：标签写选的那档
+  const wantTier: 'flash' | 'basic' | null = paper && doc && (paper.engine === 'flash' || paper.engine === 'basic') && doc.tier !== paper.engine && paper.reflow[paper.engine] !== 'done' ? paper.engine : null
+  const wantFailed = !!wantTier && paper!.reflow[wantTier] === 'failed'
   const toggleKeys = useEvent(() => {
     if (!doc) return toast(t('重排好以后才能标重点'))
     const on = !keysOn
@@ -579,7 +658,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
 
   const engineMenu = async (e: React.MouseEvent): Promise<void> => {
     if (!paper) return
-    const cur = doc?.tier ?? null
+    const cur = wantTier ?? doc?.tier ?? null
     const st = (t_: 'flash' | 'basic'): string => (paper.reflow[t_] === 'running' ? t('重排中') : paper.reflow[t_] === 'failed' ? t('失败过') : '')
     const act = await showMenu(
       [
@@ -662,6 +741,12 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
       }}
       onQuote={goQuote}
       onRemoveLabel={(a) => void updateAnn({ ...a, label: null })}
+      settings={settings}
+      onToChat={(quote, context) => {
+        setAttach({ quote, image: null, context })
+        setRightTab('ai')
+        showChat()
+      }}
     />
   )
   const rightTabs = (
@@ -840,8 +925,15 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
                   {trAll ? (compact ? `${trPct}%` : t('翻译中 {0}%', trPct)) : !compact && t('全文翻译')}
                 </button>
               )}
-              <button className="btn ghost" title={t('重排引擎')} onClick={(e) => void engineMenu(e)}>
-                {TIER_NAME[doc.tier]}
+              <button
+                className="btn ghost"
+                title={wantTier ? (wantFailed ? t('「{0}」重排没成，现在显示的是「{1}」', TIER_NAME[wantTier], TIER_NAME[doc.tier]) : t('正在用「{0}」重排，好了自动换上；现在显示的是「{1}」', TIER_NAME[wantTier], TIER_NAME[doc.tier])) : t('重排引擎')}
+                onClick={(e) => void engineMenu(e)}
+              >
+                {/* 选了还没排好的那一档：标签写选的那档和进度，不再显示成旧的那档让人以为没选上 */}
+                {wantTier && !wantFailed && <span className="spin spin-12" />}
+                {wantTier && wantFailed && <span className="dot err sm" />}
+                {wantTier ? (wantFailed ? TIER_NAME[wantTier] : prog?.tier === wantTier && prog.percent !== null && prog.status === 'running' ? `${TIER_NAME[wantTier]} ${prog.percent}%` : TIER_NAME[wantTier]) : TIER_NAME[doc.tier]}
                 <ChevronDown size={12} />
               </button>
               <button className={'icon-btn' + (keysOn ? ' active' : '')} title={t('AI 重点高亮')} onClick={toggleKeys}>
@@ -939,6 +1031,10 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
                 pdf={pdf}
                 paper={paper}
                 anns={anns}
+                ideas={ideas}
+                focusIdea={focusIdea}
+                onIdeaLibrary={(i) => props.onOpenIdeas(i.id)}
+                onIdeaRemove={(i) => void removeIdea(i)}
                 zoom={zoom}
                 invert={settings.pdfInvert}
                 boxMode={boxMode}
@@ -991,10 +1087,15 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
           {mode === 'reflow' && (
             <ReflowView
               backHandle={backHandle}
+              onMarkBlock={markBlock}
               paper={paper}
               doc={doc}
               prog={prog}
               anns={anns}
+              ideas={ideas}
+              focusIdea={focusIdea}
+              onIdeaLibrary={(i) => props.onOpenIdeas(i.id)}
+              onIdeaRemove={(i) => void removeIdea(i)}
               settings={settings}
               trPreview={trPreview}
               tr={tr}
@@ -1051,6 +1152,10 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
           onDelete={deleteAnn}
           onAsk={askAi}
           onAskImage={askImage}
+          ideaTopics={ideaTopics}
+          ideaHow={settings.ideaHow}
+          pageOf={(text) => pageOfText(pageTexts, text)}
+          onIdea={createIdea}
         />
       </section>
 

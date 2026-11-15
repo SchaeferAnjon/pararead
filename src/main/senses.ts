@@ -1,7 +1,7 @@
 // 意群显示要的数据：一段原文加它的译文，问一次 AI 拿到每句、每块怎么对（shared/senses.ts 里定位），按内容缓存。
 // 一段一个请求，并发跟翻译一样；后来的请求排在前面（刚滚到的那几段先出）。
 import { sensesKey } from '../shared/hash'
-import { parseSenses, senseGaps, type SenseSentence } from '../shared/senses'
+import { maskMath, parseSenses, senseGaps, type SenseSentence } from '../shared/senses'
 import { t } from '../shared/i18n'
 import { parseJsonLoose, type ChatMsg } from './glm'
 import { sensesMessages } from './prompts'
@@ -19,6 +19,12 @@ export interface SenseQueueOptions {
   call: (messages: ChatMsg[]) => Promise<string>
   onResult: (r: { paperId: string; key: string; data?: SenseSentence[]; error?: string }) => void
   concurrency: () => number
+}
+
+// 再问时提到的原文片段也用占位记号写（和发给模型的原文一致）
+const unmaskNote = (note: string, en: string): string => {
+  const found = [...en.matchAll(/\$[^$\n]+\$/g)].map((m) => m[0])
+  return found.reduce((acc, f, i) => acc.split(f).join(`⟦M${i + 1}⟧`), note)
 }
 
 const better = (a: { missing: number; cover: number }, b: { missing: number; cover: number }): boolean => a.missing < b.missing || (a.missing === b.missing && a.cover > b.cover)
@@ -94,16 +100,23 @@ export class SenseQueue {
 
   private async run(it: Item): Promise<void> {
     try {
-      const msgs = sensesMessages(it.en, it.zh)
+      // 行内公式换成占位记号给模型，回来的片段再换回原样（模型抄不回 MinerU 那种带空格的公式）
+      const { masked, unmask } = maskMath(it.en)
+      const back = (raw: unknown): unknown => {
+        const list = (raw as { sentences?: unknown[] })?.sentences
+        if (!Array.isArray(list)) return raw
+        return { sentences: list.map((s) => (Array.isArray(s) ? s.map((x: { en?: unknown; zh?: unknown }) => (x && typeof x.en === 'string' ? { ...x, en: unmask(x.en) } : x)) : s)) }
+      }
+      const msgs = sensesMessages(masked, it.zh)
       const out = await this.o.call(msgs)
       if (this.stopped) return
-      let data = parseSenses(parseJsonLoose(out), it.en, it.zh)
+      let data = parseSenses(back(parseJsonLoose(out)), it.en, it.zh)
       // 对得不全（有原文块没找到译文，或者译文有一成以上没落在任何一块里）：把问题告诉模型，再问一次，留对得全的那份
       const gaps = senseGaps(data, it.zh)
       if (!data.length || gaps.missing > 0 || gaps.cover < 0.9) {
         const retry = await this.o
-          .call([...msgs, { role: 'assistant', content: out }, { role: 'user', content: retryNote(data, it.en, it.zh) }])
-          .then((o2) => parseSenses(parseJsonLoose(o2), it.en, it.zh))
+          .call([...msgs, { role: 'assistant', content: out }, { role: 'user', content: maskMath(it.en).masked === it.en ? retryNote(data, it.en, it.zh) : unmaskNote(retryNote(data, it.en, it.zh), it.en) }])
+          .then((o2) => parseSenses(back(parseJsonLoose(o2)), it.en, it.zh))
           .catch(() => [] as SenseSentence[])
         if (this.stopped) return
         if (retry.length && (!data.length || better(senseGaps(retry, it.zh), gaps))) data = retry

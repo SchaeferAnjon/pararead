@@ -1,4 +1,5 @@
-import type { Annotation, Paper } from '../shared/types'
+import type { Annotation, Idea, Paper } from '../shared/types'
+import { ideasMarkdown } from '../shared/ideas'
 import { LABEL_NAME } from '../shared/annLabels'
 import { STATUS_NAME, statusOf, summaryOf } from '../shared/explain'
 
@@ -6,7 +7,7 @@ const COLOR_NAME: Record<string, string> = { yellow: '黄', green: '绿', blue: 
 
 // 高亮和笔记导出成 Markdown：按小节分组，原文用引用块，笔记跟在下面。给 Obsidian 用。
 // sectionOrder 是对照模式里的标题顺序；原文模式的高亮按页码排在没有小节名的组里。
-export function exportMarkdown(paper: Paper, anns: Annotation[], sectionOrder: string[]): string {
+export function exportMarkdown(paper: Paper, anns: Annotation[], sectionOrder: string[], ideas: Idea[] = []): string {
   const lines: string[] = []
   lines.push(`# ${paper.title}`)
   lines.push('')
@@ -18,7 +19,7 @@ export function exportMarkdown(paper: Paper, anns: Annotation[], sectionOrder: s
     lines.push(meta.join('  \n'))
     lines.push('')
   }
-  lines.push(`共 ${anns.length} 条高亮和笔记，导出于 ${new Date().toISOString().slice(0, 10)}。`)
+  lines.push(`共 ${anns.length} 条高亮和笔记${ideas.length ? `、${ideas.length} 条灵感` : ''}，导出于 ${new Date().toISOString().slice(0, 10)}。`)
   lines.push('')
 
   const groups = new Map<string, Annotation[]>()
@@ -48,6 +49,8 @@ export function exportMarkdown(paper: Paper, anns: Annotation[], sectionOrder: s
       if (a.label) {
         const sum = summaryOf(a)
         lines.push(`状态：${STATUS_NAME[statusOf(a)!]}${sum ? `。讲解：${sum}` : ''}`, '')
+        // 讲解下面接着问的几轮
+        for (const x of a.explain?.chat ?? []) lines.push(`**问**：${x.q}`, '', `**答**：${x.a}`, '')
       }
       if (a.note.trim()) {
         lines.push(a.note.trim())
@@ -55,6 +58,7 @@ export function exportMarkdown(paper: Paper, anns: Annotation[], sectionOrder: s
       }
     }
   }
+  lines.push(...ideasMarkdown(ideas))
   return lines.join('\n')
 }
 

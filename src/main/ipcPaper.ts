@@ -1,5 +1,5 @@
 import { dialog, ipcMain } from 'electron'
-import { writeFileSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { thinkKey, thinkLevel, type ThinkLevel } from '../shared/thinking'
@@ -69,7 +69,7 @@ export function registerPaper(c: Ctx): void {
           }
         ]
         messages.splice(0, messages.length, { role: 'user', content: parts })
-      } else messages.push({ role: 'user', content: text + FOLLOWUP_HINT })
+      } else messages.push({ role: 'user', content: (msg.context ? `在讲解里已经聊过这一处：\n${msg.context.slice(0, 6000)}\n\n` : '') + text + FOLLOWUP_HINT })
       // 思考强度：界面给的档这个模型得有，没有就用最省的一档；看图不思考
       const thinkOf = (want: ThinkLevel | undefined): ThinkLevel | undefined => {
         const { provider, model } = ai.conf()
@@ -204,6 +204,8 @@ export function registerPaper(c: Ctx): void {
 
   // 手动选重排档位：有结果直接用，没有就排队跑（简单重排当场跑）
   ipcMain.handle('reflow:engine', async (_e, paperId: string, tier: Tier | null) => {
+    // 快速、精细都要 MinerU：没装好时别记下这一档（不然标签一直转圈），直接说清楚
+    if ((tier === 'flash' || tier === 'basic') && !existsSync(c.settings.get().mineruPath)) throw new Error(t('这台电脑还没装好 MinerU，只能用简单重排；到「设置 › 重排」里下载'))
     updatePaper(db, paperId, { engine: tier })
     const p = getPaper(db, paperId)!
     if (tier === 'flash' || tier === 'basic') {

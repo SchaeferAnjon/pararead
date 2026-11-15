@@ -115,3 +115,22 @@ export function groupMessages(o: { lang: string; items: { text: string; paragrap
     { role: 'user', content: user.filter(Boolean).join('\n\n') }
   ]
 }
+
+/** 讲解卡里接着问：带着这处的材料、刚才那份讲解和前几轮，回答他这一问 */
+export function askMessages(o: ExplainInput & { label: 'confused' | 'doubt'; explained: string; turns: { q: string; a: string }[]; question: string }): ChatMsg[] {
+  const system = [
+    o.label === 'confused'
+      ? '你刚给一位读英文论文的研究生讲了他标了「看不懂」的一处（讲解在下面）。他接着追问，你就这一处回答他。'
+      : '你刚帮一位读英文论文的研究生查证了他标了「有质疑」的一处（查证在下面）。他接着追问，你就这一处回答他。',
+    `用${o.lang}回答，术语保留英文，公式用 LaTeX（$...$）。不用破折号，不要客套话，不要 Markdown 标题。先直接回答，再按需要补一两句理由；能从论文里找到的说清在哪一节，论文没说的明说是你的推断。`,
+    '别把讲解再复述一遍，只答他这一问；他问的和这处无关时，简短回答并提醒他可以到 AI 问答里问。'
+  ]
+  const messages: ChatMsg[] = [
+    { role: 'system', content: system.join('\n') },
+    { role: 'user', content: `${material(o)}\n\n刚才的${o.label === 'confused' ? '讲解' : '查证'}：\n${o.explained || '（还没讲）'}` },
+    { role: 'assistant', content: '好的，我记住这一处和刚才的讲解了。你想接着问什么？' }
+  ]
+  for (const x of o.turns.slice(-6)) messages.push({ role: 'user', content: x.q }, { role: 'assistant', content: x.a })
+  messages.push({ role: 'user', content: o.question })
+  return messages
+}

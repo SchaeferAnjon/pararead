@@ -163,3 +163,13 @@ a.ex-lit:hover { background: var(--fill-2); }
 .np-chips .lb-chip { margin: 0; }
 .np-sum { font-size: var(--fs); line-height: 1.6; padding-left: 10px; border-left: 2px solid var(--stroke-strong); }
 .np-sum b { font-weight: 500; color: var(--text-2); margin-right: 4px; }
+
+/* 讲解下面接着问：问在右边的气泡里，答照问答栏的正文样式；输入框在「还不懂 / 懂了」上面 */
+.ex-chat { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--stroke-soft); display: flex; flex-direction: column; gap: 10px; }
+.ex-turn { display: flex; flex-direction: column; gap: 6px; }
+.ex-turn .ubub { font-size: var(--fs); }
+.ex-ans { font-size: var(--fs); line-height: 1.65; }
+.ex-ans .md > :first-child { margin-top: 0; }
+.ex-tochat { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-sm); color: var(--text-2); }
+.ex-inbox { margin: 0 12px 10px; }
+.ex-inbox textarea { min-height: 22px; font-size: var(--fs); }

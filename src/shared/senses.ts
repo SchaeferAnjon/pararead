@@ -83,10 +83,33 @@ export function balanced(md: string): boolean {
   return true
 }
 
-/** 这一段能不能做意群：只做一整段的普通文字（列表、多段、表格、引用块按原样显示） */
-export function senseable(md: string): boolean {
+/**
+ * 做意群用的那段字：只有一项的列表（「1) Experimental Setup: …」这种编号小节）去掉开头的编号，编号单独给出来画在前面。
+ * 普通显示时 Markdown 把它排成列表，编号不在文字里；意群显示时文字也得一个字不差，所以编号用样式画（不进 textContent）。
+ */
+export function senseText(md: string): { text: string; marker: string | null } {
   const s = md.trim()
+  const m = /^([-*+]|(\d+)[.)])\s+/.exec(s)
+  if (!m) return { text: s, marker: null }
+  const rest = s.slice(m[0].length)
+  if (/^\s*([-*+]|\d+[.)])\s/m.test(rest)) return { text: s, marker: null }
+  return { text: rest, marker: m[2] ? `${m[2]}.` : '•' }
+}
+
+/** 这一段能不能做意群：只做一整段的普通文字（多项的列表、多段、表格、引用块按原样显示；只有一项的编号小节可以） */
+export function senseable(md: string): boolean {
+  const s = senseText(md).text
   return s.length >= 30 && !/\n\s*\n/.test(s) && !/^\s*([-*+]|\d+[.)])\s/m.test(s) && !/^\s*[#>|]/m.test(s) && !s.includes('$$')
+}
+
+/**
+ * 行内公式换成占位记号再交给模型：MinerU 的公式写法（「$8 8 . 4 3 \\% \\pm 2 . 8 9$」）模型抄不回原样，整句就对不上。
+ * 返回换过的原文和换回去的办法（模型回来的片段里的记号换回原来的公式）。
+ */
+export function maskMath(md: string): { masked: string; unmask: (s: string) => string } {
+  const found: string[] = []
+  const masked = md.replace(/\$[^$\n]+\$/g, (m) => `⟦M${found.push(m)}⟧`)
+  return { masked, unmask: (s) => s.replace(/⟦M(\d+)⟧/g, (all, n: string) => found[Number(n) - 1] ?? all) }
 }
 
 type Raw = { en?: unknown; zh?: unknown }

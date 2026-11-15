@@ -2,7 +2,8 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 
 import { LABEL_NAME } from '@shared/annLabels'
 import { isSettled, STATUS_NAME, statusOf } from '@shared/explain'
 import type * as PdfJs from 'pdfjs-dist'
-import type { Annotation, Paper, ReadPosition, Ink} from '@shared/types'
+import type { Annotation, Idea, Paper, ReadPosition, Ink} from '@shared/types'
+import { IdeaGutter, useIdeaPeek, type Peek } from './IdeaMarks'
 import { pdfjs } from '../lib/pdf'
 import { findTextRange, normRects, selectionText } from '../lib/selection'
 import { useNotePreview } from '../lib/ui'
@@ -26,6 +27,10 @@ export function PdfView(props: {
   pdf: PdfJs.PDFDocumentProxy
   paper: Paper
   anns: Annotation[]
+  ideas: Idea[]
+  focusIdea: string | null
+  onIdeaLibrary: (i: Idea) => void
+  onIdeaRemove: (i: Idea) => void
   zoom: number
   invert: boolean
   boxMode: boolean
@@ -43,6 +48,7 @@ export function PdfView(props: {
   onInkErase: (id: string) => void
   backHandle?: BackHandle
 }) {
+  const ideaPeek = useIdeaPeek()
   const { pdf } = props
   const scroller = useRef<HTMLDivElement>(null)
   const back = useJumpBack(scroller, props.backHandle)
@@ -189,6 +195,7 @@ export function PdfView(props: {
     }
     if (props.inkTool) return
     if (box) return finishBox()
+    if ((e.target as Element).closest('.idea-gut, .idea-peek')) return
     const sel = window.getSelection()
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
       // 点在已有高亮上
@@ -380,6 +387,11 @@ export function PdfView(props: {
             scale={scale}
             render={visible.has(i + 1)}
             anns={props.anns.filter((a) => a.mode === 'pdf' && a.page === i + 1)}
+            ideas={props.ideas.filter((x) => x.page === i + 1)}
+            focusIdea={props.focusIdea}
+            peek={ideaPeek}
+            onIdeaLibrary={props.onIdeaLibrary}
+            onIdeaRemove={props.onIdeaRemove}
             found={found}
             hoverAnn={props.hoverAnn}
             flashAnn={flashAnn}
@@ -454,6 +466,11 @@ const PageView = memo(function PageView(p: {
   scale: number
   render: boolean
   anns: Annotation[]
+  ideas: Idea[]
+  focusIdea: string | null
+  peek: Peek
+  onIdeaLibrary: (i: Idea) => void
+  onIdeaRemove: (i: Idea) => void
   found: Record<string, number[][]>
   hoverAnn: string | null
   flashAnn: string | null
@@ -514,6 +531,32 @@ const PageView = memo(function PageView(p: {
     }
   }, [p.pdf, p.n, p.scale, p.render])
 
+  // 灵感：原文模式收的有矩形；对照模式收的按原句在这一页的文字层里找
+  const [ideaFound, setIdeaFound] = useState<Record<string, number[][]>>({})
+  useEffect(() => {
+    if (!textReady || !textRef.current) return
+    const pageEl = textRef.current.parentElement!
+    const next: Record<string, number[][]> = {}
+    for (const i of p.ideas) {
+      if (i.rects?.length) continue
+      const r = findTextRange(textRef.current, i.text)
+      if (r) next[i.id] = normRects(r, pageEl)
+    }
+    setIdeaFound(next)
+  }, [textReady, p.ideas])
+  const ideaRects = (i: Idea): number[][] => (i.rects?.length ? i.rects : (ideaFound[i.id] ?? []))
+  // 灯泡在页边，和句子第一行齐：句子（几行合起来）在左半页放这一栏左边，在右半页放这一栏右边；
+  // 句子从行中间开始时第一行的矩形在栏中间，所以栏的边按所有行里最左、最右的算
+  const ideaMarks = p.ideas
+    .map((i) => ({ i, rs: ideaRects(i) }))
+    .filter((x) => x.rs.length)
+    .map(({ i, rs }) => {
+      const l = Math.min(...rs.map((r) => r[0]))
+      const rr = Math.max(...rs.map((r) => r[0] + r[2]))
+      const f = rs[0]
+      return { id: i.id, top: f[1] * p.h + (f[3] * p.h - 22) / 2, left: (l + rr) / 2 < 0.5 ? Math.max(2, l * p.w - 30) : Math.min(p.w - 24, rr * p.w + 8) }
+    })
+
   // 没有矩形的高亮（从 Scholaread 导入的）在文字层里按原文找位置
   useEffect(() => {
     if (!textReady || !textRef.current) return
@@ -545,7 +588,15 @@ const PageView = memo(function PageView(p: {
           ))
         )}
       </div>
+      <div className="hl-layer">
+        {p.ideas
+          .filter((i) => p.peek.id === i.id || p.focusIdea === i.id)
+          .flatMap((i) => ideaRects(i).map((r, k) => <div key={i.id + k} className="pdf-idea-line" style={{ left: `${r[0] * 100}%`, top: `${r[1] * 100}%`, width: `${r[2] * 100}%`, height: `${r[3] * 100}%` }} />))}
+      </div>
       <div className="textLayer" ref={textRef} />
+      <div className="idea-layer">
+        <IdeaGutter marks={ideaMarks} ideas={p.ideas} focus={p.focusIdea} peek={p.peek} onLibrary={p.onIdeaLibrary} onRemove={p.onIdeaRemove} />
+      </div>
       {links.length > 0 && (
         <div className="link-layer">
           {links.map((l, i) => (

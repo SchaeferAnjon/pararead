@@ -37,5 +37,20 @@ export function useSenses(paperId: string, onError: (msg: string) => void) {
   /** 关掉再打开时：没成功的那些重新要 */
   const retryFailed = useCallback(() => setMap((m) => Object.fromEntries(Object.entries(m).filter(([, v]) => !('error' in v)))), [])
 
-  return { map, request, retryFailed }
+  /** 一段没对上：点它再要一次 */
+  const retryOne = useCallback(
+    (item: { en: string; zh: string }) => {
+      const key = sensesKey(item.en, item.zh)
+      setMap((m) => {
+        const n = { ...m }
+        delete n[key]
+        mapRef.current = n
+        return n
+      })
+      void request([item])
+    },
+    [request]
+  )
+
+  return { map, request, retryFailed, retryOne }
 }

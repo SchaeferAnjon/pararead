@@ -306,7 +306,7 @@ export function askMarkdown(groups: { paperTitle: string; items: { q: string; st
 
 /** 把一处标签换成别的状态以后的讲解记录：看不懂说「还不懂」时 misses 加一 */
 export function withMiss(rec: ExplainRecord | null | undefined): ExplainRecord {
-  return { versions: rec?.versions ?? [], misses: (rec?.misses ?? 0) + 1, group: rec?.group ?? null }
+  return { versions: rec?.versions ?? [], misses: (rec?.misses ?? 0) + 1, group: rec?.group ?? null, chat: rec?.chat }
 }
 
 /**
@@ -328,4 +328,18 @@ export function senseChunks(sens: SenseSentence[], md: string, zh: string, text:
     }
   }
   return out.slice(0, 8)
+}
+
+/** 讲解的一版去掉分节标签，给接着问时的 AI 看（它知道刚才讲了什么） */
+export function plainExplain(raw: string): string {
+  return raw
+    .replace(/<\/?[a-z]+>/g, '\n')
+    .replace(/\s*\|\|\s*/g, '：')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/** 讲解卡里接着问的几轮，写成一段给 AI 问答接着聊用 */
+export function turnsText(turns: { q: string; a: string }[]): string {
+  return turns.map((x) => `问：${x.q}\n答：${x.a}`).join('\n\n')
 }

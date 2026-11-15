@@ -112,6 +112,30 @@ try {
   ok('第二版围着另一个「卡在哪」讲', again.explain.misses === 1 && again.explain.versions[1].focus !== again.explain.versions[0].focus, JSON.stringify(again.explain.versions.map((v) => v.focus)))
   await until(() => win.locator('.q-walk .ex-opt').count(), 30000)
   console.log(await shot(win, 'explain-walk-again'))
+
+  // 接着问这一处：输入框在「还不懂 / 懂了」上面，回答一段一段出来，存在标注上；能放到 AI 问答里接着聊
+  const box = win.locator('.ex-inbox textarea')
+  ok('讲解卡底部有「接着问这一处」的输入框', (await box.count()) === 1, await box.getAttribute('placeholder'))
+  await box.fill('这里说的意思，能不能用一个更具体的数字例子再讲一遍？')
+  await box.press('Enter')
+  let chunks = 0
+  let lastLen = 0
+  for (let i = 0; i < 240; i++) {
+    await sleep(500)
+    const len = ((await win.locator('.ex-chat .ex-ans').last().textContent()) ?? '').length
+    if (len > lastLen) chunks++, (lastLen = len)
+    if ((await anns(id)).find((a) => a.id === first.id)?.explain?.chat?.length === 1) break
+  }
+  const asked = (await anns(id)).find((a) => a.id === first.id)
+  ok('接着问：回答一段一段出来，存在这条标注上', asked.explain.chat?.length === 1 && asked.explain.chat[0].a.length > 20 && chunks >= 2, `${chunks} 次变长｜${asked.explain.chat?.[0]?.a.slice(0, 60)}`)
+  ok('接着问不动讲解的版数', asked.explain.versions.length === 2)
+  await sleep(500)
+  ok('问答显示在讲解下面，带「放到 AI 问答里接着聊」', (await win.locator('.ex-chat .ex-turn').count()) === 1 && (await win.locator('.ex-tochat').count()) === 1)
+  await ev(() => document.querySelector('.ex-chat')?.scrollIntoView({ block: 'end' }))
+  console.log(await shot(win, 'explain-ask'))
+  await box.fill('那这个和前后文有什么关系？')
+  await box.press('Enter')
+  ok('再问一轮：带着上一轮，存成第 2 轮', await until(async () => (await anns(id)).find((a) => a.id === first.id)?.explain?.chat?.length === 2, 150000))
   await win.locator('.q-foot button', { hasText: '懂了' }).click()
   await sleep(600)
   ok('点「懂了」到第 2 条，第 1 条变成「懂了」', ((await win.locator('.q-walkbar').textContent()) ?? '').includes('第 2 / 3 条') && (await anns(id)).find((a) => a.id === first.id).labelStatus === 'understood')
@@ -151,6 +175,15 @@ try {
   ok('懂了的那条底下给「其实还没懂，放回疑问」，不再是「懂了，下一条」', (await win.locator('.q-foot button', { hasText: '其实还没懂' }).count()) === 1 && (await win.locator('.q-foot .btn.primary').count()) === 0)
   await sleep(1500)
   ok('讲解的版数没变', JSON.stringify((await anns(id)).map((a) => a.explain?.versions?.length ?? 0)) === before)
+  // 讲过、接着问过的那条再打开：两轮问答都在；放到 AI 问答里接着聊
+  ok('再打开：接着问的两轮都在', (await win.locator('.ex-chat .ex-turn').count()) === 2)
+  await win.locator('.ex-tochat').click()
+  await sleep(800)
+  const att = await win.locator('.col-right .attach-quote').innerText().catch(() => '')
+  ok('放到 AI 问答：右栏换到问答，引用着这一处', att.length > 10 && (await win.locator('.ex-inbox').count()) === 0, att.slice(0, 50))
+  console.log(await shot(win, 'explain-tochat'))
+  await win.locator('.r-tabs .seg-item', { hasText: '疑问' }).click()
+  await sleep(600)
 
   // 左栏笔记：状态和一句话讲解
   await win.locator('.lp-tabs .seg-item', { hasText: '笔记' }).click()
@@ -204,6 +237,7 @@ try {
   const f = await ev((x) => window.api.annExport(x), id)
   const txt = f ? readFileSync(f, 'utf8') : ''
   ok('导出的 Markdown 带状态和讲解', /状态：懂了。讲解：/.test(txt) && /状态：质疑成立/.test(txt))
+  ok('导出的 Markdown 带接着问的问答', (txt.match(/\*\*问\*\*：/g) ?? []).length === 2 && txt.includes('**答**：'))
 } finally {
   await close(app)
 }

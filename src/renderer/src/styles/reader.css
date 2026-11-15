@@ -265,12 +265,14 @@ body.resizing .reader { transition: none; }
 .tr-fill .blk.senses .tr .sen { background: var(--fill-2); border-radius: var(--r-sm); padding: 4px 10px; margin-left: -10px; margin-right: -10px; }
 /* 意群两种样式（2026-11-15 用户定：意群文字和下划线两种）：文字着色是字换成这一块的颜色；
    下划线是字不变色、底下一条同色的线，块和块之间的空格和标点不画，看得出在哪断开 */
-.sg[data-c="0"] { --c: var(--sg-1); }
-.sg[data-c="1"] { --c: var(--sg-2); }
-.sg[data-c="2"] { --c: var(--sg-3); }
-.sg[data-c="3"] { --c: var(--sg-4); }
+.sg[data-c="0"] { --c: var(--sg-1); --cb: var(--sg-1-bg); }
+.sg[data-c="1"] { --c: var(--sg-2); --cb: var(--sg-2-bg); }
+.sg[data-c="2"] { --c: var(--sg-3); --cb: var(--sg-3-bg); }
+.sg[data-c="3"] { --c: var(--sg-4); --cb: var(--sg-4-bg); }
 .sg-text .sg { color: var(--c); }
-.sg-underline .sg { background-image: linear-gradient(var(--c), var(--c)); background-repeat: no-repeat; background-position: 0 100%; background-size: 100% 2px; padding-bottom: 1px; }
+/* 下划线样式（2026-11-15 用户：线太深压迫感重，照 Notion）：字不变色，块铺 Notion 那种浅彩底，底下一条细的淡色线 */
+.sg-underline .sg { background-color: var(--cb); background-image: linear-gradient(color-mix(in srgb, var(--c) 45%, transparent), color-mix(in srgb, var(--c) 45%, transparent)); background-repeat: no-repeat; background-position: 0 100%; background-size: 100% 1.5px; padding-bottom: 1px; border-radius: 2px; }
+.sg-underline .sg.hot { background-color: color-mix(in srgb, var(--c) 22%, var(--cb)); }
 .sg.hot { background-color: color-mix(in srgb, var(--c) 16%, transparent); border-radius: 3px; }
 .blk.senses .sen-in { display: inline; }
 
@@ -481,3 +483,32 @@ button.think { width: 100%; text-align: left; }
 .bp-go { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: var(--r-sm); font-size: var(--fs); color: var(--text); white-space: nowrap; }
 .bp-go:hover { background: var(--btn-bg-hover); }
 .bp-go .kbd { margin-left: 4px; }
+
+/* 公式、图、表整块标记：用标记色的框框住（框比内容外扩一点，不压字）；悬停工具条最前面四个色点 */
+.blk.boxed { outline: 2px solid var(--box-c); outline-offset: 6px; border-radius: var(--r-md); }
+[data-box="yellow"], .box-dot[data-color="yellow"], .note-mark.box[data-color="yellow"] { --box-c: var(--hl-yellow-dot); }
+[data-box="green"], .box-dot[data-color="green"], .note-mark.box[data-color="green"] { --box-c: var(--hl-green-dot); }
+[data-box="blue"], .box-dot[data-color="blue"], .note-mark.box[data-color="blue"] { --box-c: var(--hl-blue-dot); }
+[data-box="red"], .box-dot[data-color="red"], .note-mark.box[data-color="red"] { --box-c: var(--hl-red-dot); }
+.hoverbar .hb-mark { display: inline-flex; align-items: center; gap: 5px; padding: 0 8px 0 6px; margin-right: 2px; border-right: 1px solid var(--stroke-soft); }
+.hoverbar .hb-dot { width: 14px; height: 14px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+.hoverbar .hb-dot:hover { transform: scale(1.15); }
+.hoverbar .hb-dot[data-color="yellow"] { background: var(--hl-yellow-dot); }
+.hoverbar .hb-dot[data-color="green"] { background: var(--hl-green-dot); }
+.hoverbar .hb-dot[data-color="blue"] { background: var(--hl-blue-dot); }
+.hoverbar .hb-dot[data-color="red"] { background: var(--hl-red-dot); }
+.hoverbar .hb-dot.on { box-shadow: 0 0 0 2px var(--bg-popover), 0 0 0 3.5px var(--box-c, currentColor); }
+.hoverbar .hb-dot.on[data-color="yellow"] { --box-c: var(--hl-yellow-dot); }
+.hoverbar .hb-dot.on[data-color="green"] { --box-c: var(--hl-green-dot); }
+.hoverbar .hb-dot.on[data-color="blue"] { --box-c: var(--hl-blue-dot); }
+.hoverbar .hb-dot.on[data-color="red"] { --box-c: var(--hl-red-dot); }
+.box-dot { width: 12px; height: 12px; border-radius: 3px; display: block; flex: none; box-shadow: inset 0 0 0 2px var(--box-c); }
+.note-mark.box { display: inline-block; padding: 2px 6px; border-radius: var(--r-sm); box-shadow: inset 0 0 0 1.5px var(--box-c); }
+/* 只有一项的编号小节做意群时：编号用样式画（不进文字，标注的字符偏移不变），写在第一句前面 */
+.blk.senses .src .sen[data-marker]::before { content: attr(data-marker) '\00a0'; color: var(--text-2); }
+
+/* 意群开着、这段还没分好：段落左边的空白里一个小圈在转；没对上时换成一个能点的重试小图标。窄的时候挪到段落右上角 */
+.sg-wait { position: absolute; left: -26px; top: .55em; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-2); }
+.sg-wait.err { border-radius: 999px; color: var(--text-2); background: var(--fill-2); cursor: pointer; }
+.sg-wait.err:hover { background: var(--fill-3); color: var(--text); }
+@container (max-width: 640px) { .sg-wait { left: auto; right: -4px; top: -14px; } }

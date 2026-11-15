@@ -15,7 +15,8 @@ import { randomBytes, X509Certificate } from 'node:crypto'
 import { homedir } from 'node:os'
 import { dirname, extname, join, posix } from 'node:path'
 import { t, uiLang } from '../shared/i18n'
-import type { Paper, WordStatus } from '../shared/types'
+import type { IdeaEntry, Paper, WordStatus } from '../shared/types'
+import { matchIdea, recentTopics } from '../shared/ideas'
 import type { Seg } from '../shared/draft'
 import type { CiteItem } from '../shared/wordCite'
 import { IS_WIN } from './platform'
@@ -112,6 +113,7 @@ export interface WordInboxItem {
   title: string
   segments: Seg[]
   items: CiteItem[]
+  inline?: boolean // 灵感：插在光标处，不另起一段
 }
 
 const brief = (p: Paper): CiteItem => ({ id: p.id, title: p.title, authors: p.authors, year: p.year, venue: p.venue, volume: p.volume, issue: p.issue, pages: p.pages, doi: p.doi, url: p.url, publisher: p.publisher, arxiv: p.arxiv })
@@ -134,6 +136,8 @@ export class WordAddin {
       staticDir: string // out/renderer
       papers: () => Paper[]
       prefs: () => { style: string; check: boolean }
+      ideas: () => IdeaEntry[]
+      paraphrase: (id: string, lang: 'en' | 'zh') => Promise<string>
     }
   ) {
     this.keyFile = join(o.dir, 'localhost.key')
@@ -333,10 +337,20 @@ export class WordAddin {
     const host = (req.headers.host ?? '').replace(/:\d+$/, '')
     if (!['localhost', '127.0.0.1', '[::1]'].includes(host)) return send(403, '{"error":"host"}')
     const u = new URL(req.url ?? '/', ORIGIN)
-    // 窗格插好了一段：从收件箱拿掉。只有这一处收 POST
+    // 窗格插好了一段：从收件箱拿掉
     if (u.pathname === '/api/inbox/done' && req.method === 'POST') {
       this.inbox = this.inbox.filter((x) => x.id !== u.searchParams.get('id'))
       return send(200, '{"ok":true}')
+    }
+    // 灵感转述（花 AI 额度）：要 POST 加窗格自己的头，别的网页发不出带这个头的跨站请求（没有 CORS 头，预检过不了）
+    if (u.pathname === '/api/ideas/paraphrase' && req.method === 'POST') {
+      if (req.headers['x-pararead-pane'] !== '1') return send(403, '{"error":"header"}')
+      const lang = u.searchParams.get('lang') === 'zh' ? 'zh' : 'en'
+      this.o
+        .paraphrase(u.searchParams.get('id') ?? '', lang)
+        .then((text) => send(200, JSON.stringify({ text })))
+        .catch((e: Error) => send(500, JSON.stringify({ error: e.message })))
+      return
     }
     if (req.method !== 'GET') return send(405, '{"error":"method"}')
     if (u.pathname === '/api/inbox') {
@@ -349,6 +363,22 @@ export class WordAddin {
       const all = this.o.papers()
       const hit = words.length ? all.filter((p) => words.every((w) => `${p.title} ${p.authors.join(' ')} ${p.year ?? ''} ${p.venue ?? ''} ${p.doi ?? ''}`.toLowerCase().includes(w))) : [...all].sort((a, b) => (b.lastOpened ?? b.createdAt) - (a.lastOpened ?? a.createdAt))
       return send(200, JSON.stringify({ total: hit.length, items: hit.slice(0, 50).map(brief) }))
+    }
+    // 灵感库：搜原句、用法、主题、论文；topic 只看带这个主题的；最近收的在前
+    if (u.pathname === '/api/ideas') {
+      const q = u.searchParams.get('q') ?? ''
+      const topic = (u.searchParams.get('topic') ?? '').toLowerCase()
+      const all = this.o.ideas()
+      const papers = new Map(this.o.papers().map((p) => [p.id, p]))
+      const hit = all.filter((i) => matchIdea(i, q) && (!topic || i.topics.some((x) => x.toLowerCase() === topic)) && papers.has(i.paperId))
+      return send(
+        200,
+        JSON.stringify({
+          total: hit.length,
+          topics: recentTopics(all, 30),
+          items: hit.slice(0, 60).map((i) => ({ id: i.id, text: i.text, page: i.page, section: i.section, use: i.use, topics: i.topics, how: i.how, paraphrase: i.paraphrase, paper: brief(papers.get(i.paperId)!) }))
+        })
+      )
     }
     if (u.pathname === '/api/items') {
       const ids = new Set((u.searchParams.get('ids') ?? '').split(',').filter(Boolean))

@@ -44,20 +44,26 @@
             pending.push(() => (doc.selected = node))
           },
           getRange() {
-            return { select: () => pending.push(() => (doc.cursor = null)) }
+            return { select: () => pending.push(() => (doc.cursor = null)), insertText: (t) => insertNode(t, node) }
           }
         },
         () => node,
         ['tag', 'title', 'text']
       )
-    // 新插的一段文字（在文档末尾，或者在光标所在控件的后面）包成内容控件
-    const insertNode = (text) => {
+    // 新插的一段文字（在文档末尾，或者在光标所在控件的后面，或者紧跟在 after 那个节点后面）包成内容控件；
+    // 返回的「范围」还能接着往它后面插（灵感插在光标处是一串文字和引用）
+    const insertNode = (text, after) => {
       const node = { text, cc: false, tag: '', title: '' }
       pending.push(() => {
-        const at = doc.cursor ? doc.nodes.indexOf(doc.cursor) + 1 : doc.nodes.length
+        const ref = after ?? doc.cursor
+        const at = ref ? doc.nodes.indexOf(ref) + 1 : doc.nodes.length
         doc.nodes.splice(at, 0, node)
       })
-      return { insertContentControl: () => (pending.push(() => (node.cc = true)), ccProxy(node)) }
+      return {
+        insertContentControl: () => (pending.push(() => (node.cc = true)), ccProxy(node)),
+        getRange: () => ({ select: () => pending.push(() => (doc.cursor = null)), insertText: (t) => insertNode(t, node) }),
+        insertText: (t, where) => (where === 'After' || where === 'End' ? insertNode(t, node) : (() => { throw new Error('假 Word 的范围只支持 After / End') })())
+      }
     }
     const body = guard(
       {

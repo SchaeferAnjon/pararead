@@ -20,7 +20,10 @@ import type {
   Term,
   Ink,
   LabelStatus,
-  ExplainVersion
+  ExplainVersion,
+  Idea,
+  IdeaEntry,
+  IdeaHow
 } from '@shared/types'
 import type { SenseSentence } from '@shared/senses'
 
@@ -248,8 +251,19 @@ export interface Api {
   annDelete(id: string): Promise<void>
   annExport(paperId: string): Promise<string | null>
   annSections(paperId: string): Promise<Record<string, string>>
+  ideaList(paperId: string): Promise<Idea[]>
+  ideaAll(): Promise<IdeaEntry[]>
+  /** 存一条灵感；对照模式收的由主进程补页码，原文模式收的补小节名，回来的是存好的那条 */
+  ideaSave(i: Idea): Promise<Idea>
+  ideaDelete(id: string): Promise<void>
+  /** AI 转述（点了才问，存在这条灵感上） */
+  ideaParaphrase(id: string, lang: 'en' | 'zh', again?: boolean): Promise<string>
+  /** 送进 Word 窗格的收件箱；没开 Word 插件的本机服务时报 word-off */
+  ideaToWord(id: string, how: IdeaHow, lang: 'en' | 'zh'): Promise<{ paneOpen: boolean }>
+  onIdeasChanged(cb: () => void): Off
   /** 按标签讲一处：流式走 onStream，讲完存在标注上并推 onExplainSaved；focus 只围着它讲，again 是「还不懂，换个讲法」 */
   explainStart(reqId: string, annId: string, o?: { focus?: string; again?: boolean }): Promise<Pick<ExplainVersion, 'lit' | 'chunks'>>
+  explainAsk(reqId: string, annId: string, question: string): Promise<void>
   /** 几处一起讲（先找共同卡点）：讲完挂在每一处上 */
   explainGroup(reqId: string, annIds: string[]): Promise<void>
   explainStatus(annIds: string[], status: LabelStatus): Promise<Annotation[]>

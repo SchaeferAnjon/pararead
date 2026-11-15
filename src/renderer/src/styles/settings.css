@@ -63,3 +63,7 @@
 .tp-head { display: flex; align-items: center; justify-content: space-between; font-size: var(--fs-sm); color: var(--text-2); }
 .tr-preview .reflow { padding: 0; max-width: none; margin: 0; }
 .tr-preview .reflow.lay-side { max-width: none; }
+/* 能点着选默认的卡片（重排引擎）：悬停有底，选中的带「默认」小标 */
+.choice.pick { cursor: pointer; }
+.choice.pick:not(.on):hover { background: var(--fill-1); }
+.choice .ct2 .tag { margin-left: 8px; vertical-align: 1px; }

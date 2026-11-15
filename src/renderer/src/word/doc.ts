@@ -3,7 +3,7 @@
 // 引到的文献信息、当前格式、参考文献表的顺序存在文档自己的设置里（跟着 .docx 走）。
 import type { Seg } from '@shared/draft'
 import { t } from '@shared/i18n'
-import { BIB_TAG, bibEntries, bibHtml, bibOrder, citeTag, fitsTag, idsOfTag, inText, numbering, type CiteItem, type Items, type WordStyle } from '@shared/wordCite'
+import { BIB_TAG, bibEntries, bibHtml, bibOrder, citeTag, fitsTag, idsOfTag, inText, inTextHtml, numbering, pageOfTag, type CiteItem, type Items, type WordStyle } from '@shared/wordCite'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare const Office: any
@@ -18,6 +18,7 @@ const docBibIds = (): string[] => (store().get('pr.bib') as string[] | null) ?? 
 
 export interface DocState {
   cites: string[][] // 每处引用引的文献 id，按在正文里的先后
+  pages: (number | null)[] // 每处引用的页码（直接引原句的才有）
   texts: string[] // 每处引用现在的文字
   hasBib: boolean
   bibIds: string[]
@@ -27,6 +28,7 @@ export interface DocState {
 
 interface Scan {
   cites: string[][]
+  pages: (number | null)[]
   ctrls: any[]
   bib: any | null
 }
@@ -35,10 +37,10 @@ async function scan(ctx: any): Promise<Scan> {
   const ccs = ctx.document.body.contentControls
   ccs.load('items/tag,items/text')
   await ctx.sync()
-  const out: Scan = { cites: [], ctrls: [], bib: null }
+  const out: Scan = { cites: [], pages: [], ctrls: [], bib: null }
   for (const cc of ccs.items) {
     const ids = idsOfTag(cc.tag ?? '')
-    if (ids) (out.cites.push(ids), out.ctrls.push(cc))
+    if (ids) (out.cites.push(ids), out.pages.push(pageOfTag(cc.tag ?? '')), out.ctrls.push(cc))
     else if (cc.tag === BIB_TAG && !out.bib) out.bib = cc
   }
   return out
@@ -49,7 +51,7 @@ async function read(ctx: any, s: Scan): Promise<DocState> {
   body.load('text')
   for (const cc of s.ctrls) cc.load('text')
   await ctx.sync()
-  return { cites: s.cites, texts: s.ctrls.map((cc) => cc.text as string), hasBib: !!s.bib, bibIds: docBibIds(), bodyText: body.text as string, items: docItems() }
+  return { cites: s.cites, pages: s.pages, texts: s.ctrls.map((cc) => cc.text as string), hasBib: !!s.bib, bibIds: docBibIds(), bodyText: body.text as string, items: docItems() }
 }
 
 export const readDoc = (): Promise<DocState> => Word.run(async (ctx: any) => read(ctx, await scan(ctx)))
@@ -61,8 +63,12 @@ export function refresh(style: WordStyle): Promise<DocState> {
     const s = await scan(ctx)
     const num = numbering(s.cites)
     s.ctrls.forEach((cc, i) => {
-      const want = inText(s.cites[i], style, num, items)
-      if (cc.text !== want) cc.insertText(want, 'Replace')
+      const want = inText(s.cites[i], style, num, items, s.pages[i])
+      if (cc.text === want) return
+      // GB/T 直接引的页码写成上标
+      const html = inTextHtml(s.cites[i], style, num, items, s.pages[i])
+      if (html) cc.insertHtml(html, 'Replace')
+      else cc.insertText(want, 'Replace')
     })
     if (s.bib) s.bib.insertHtml(bibHtml(bibEntries(s.cites, style, items)), 'Replace')
     await ctx.sync()
@@ -156,11 +162,40 @@ export async function insertParagraph(para: { segments: Seg[]; items: CiteItem[]
       else
         for (const ids of fitGroups(seg.cite)) {
           const cc = p.insertText('[…]', 'End').insertContentControl()
-          cc.tag = citeTag(ids)
+          cc.tag = citeTag(ids, ids.length === 1 ? seg.page : null)
           cc.title = t('ParaRead 引用')
         }
     }
     await ctx.sync()
+  })
+  return refresh(style)
+}
+
+/** 灵感插在光标处（不另起一段）：“原句” 加带页码的引用，或转述加引用；选中了字就插在选区后面 */
+export async function insertInline(para: { segments: Seg[]; items: CiteItem[] }, style: WordStyle): Promise<DocState> {
+  const items = { ...docItems() }
+  for (const it of para.items) items[it.id] = it
+  store().set('pr.items', items)
+  await save()
+  const v13 = Office.context.requirements.isSetSupported('WordApi', '1.3')
+  await Word.run(async (ctx: any) => {
+    let at = ctx.document.getSelection()
+    let last: any = null
+    for (const seg of para.segments) {
+      if ('text' in seg) {
+        at = at.insertText(seg.text, 'After')
+        last = at
+      } else
+        for (const ids of fitGroups(seg.cite)) {
+          const cc = at.insertText('[…]', 'After').insertContentControl()
+          cc.tag = citeTag(ids, ids.length === 1 ? seg.page : null)
+          cc.title = t('ParaRead 引用')
+          at = cc.getRange('After')
+          last = cc
+        }
+    }
+    await ctx.sync()
+    if (v13 && last) (last.getRange('After').select('End'), await ctx.sync())
   })
   return refresh(style)
 }

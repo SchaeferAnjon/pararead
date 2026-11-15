@@ -10,7 +10,7 @@ import { MenuHost } from './lib/menu'
 import { ToastProvider, useToast } from './lib/ui'
 
 export function App() {
-  const [open, setOpen] = useState<{ id: string; mode?: ReadMode; ann?: string; at?: OpenAt } | null>(null)
+  const [open, setOpen] = useState<{ id: string; mode?: ReadMode; ann?: string; at?: OpenAt; idea?: string } | null>(null)
   const [settings, setSettings] = useState<SettingsView | null>(null)
   const [route, setRoute] = useState<Route>({ kind: 'lib' })
   const [libState, setLibState] = useState<LibState>({ top: 0, selected: [] })
@@ -39,7 +39,21 @@ export function App() {
       {!settings.onboarded ? (
         <Onboarding settings={settings} onPricing={() => setPricing(true)} onDone={(then) => setStartWith(then ?? null)} />
       ) : open ? (
-        <Reader key={open.id} paperId={open.id} initialMode={open.mode} initialAnn={open.ann} initialAt={open.at} settings={settings} onBack={() => setOpen(null)} onOpenPaper={(id) => setOpen({ id })} />
+        <Reader
+          key={open.id}
+          paperId={open.id}
+          initialMode={open.mode}
+          initialAnn={open.ann}
+          initialAt={open.at}
+          initialIdea={open.idea}
+          settings={settings}
+          onBack={() => setOpen(null)}
+          onOpenPaper={(id) => setOpen({ id })}
+          onOpenIdeas={(idea) => {
+            setRoute({ kind: 'ideas', focus: idea })
+            setOpen(null)
+          }}
+        />
       ) : (
         <MainWindow
           settings={settings}
@@ -48,9 +62,9 @@ export function App() {
           onRoute={setRoute}
           onPricing={() => setPricing(true)}
           startWith={startWith}
-          onOpen={(id, st, mode, ann, at) => {
+          onOpen={(id, st, mode, ann, at, idea) => {
             setLibState(st)
-            setOpen({ id, mode, ann, at })
+            setOpen({ id, mode, ann, at, idea })
           }}
         />
       )}

@@ -21,9 +21,14 @@ export const CITE_PREFIX = 'prcite:'
 export const BIB_TAG = 'prbib'
 // Word 的内容控件 tag 最长 64 个字符
 const MAX_TAG = 64
-export const citeTag = (ids: string[]): string => CITE_PREFIX + ids.join(',')
-export const fitsTag = (ids: string[]): boolean => citeTag(ids).length <= MAX_TAG
-export const idsOfTag = (tag: string): string[] | null => (tag.startsWith(CITE_PREFIX) ? tag.slice(CITE_PREFIX.length).split(',').filter(Boolean) : null)
+// 直接引原句的那处引用带页码：tag 后面加 #p<页码>，比如 prcite:G7P2krnZ#p6
+export const citeTag = (ids: string[], page?: number | null): string => CITE_PREFIX + ids.join(',') + (page ? `#p${page}` : '')
+export const fitsTag = (ids: string[], page?: number | null): boolean => citeTag(ids, page).length <= MAX_TAG
+export const idsOfTag = (tag: string): string[] | null => (tag.startsWith(CITE_PREFIX) ? tag.slice(CITE_PREFIX.length).replace(/#p\d+$/, '').split(',').filter(Boolean) : null)
+export const pageOfTag = (tag: string): number | null => {
+  const m = tag.startsWith(CITE_PREFIX) ? /#p(\d+)$/.exec(tag) : null
+  return m ? Number(m[1]) : null
+}
 
 /** 按第一次出现的先后编号，从 1 起 */
 export function numbering(cites: string[][]): Map<string, number> {
@@ -56,11 +61,13 @@ function authorYear(it: CiteItem, withYear: boolean): string {
   return withYear ? `${who}, ${it.year ?? 'n.d.'}` : who
 }
 
-/** 文中那一处引用的文字 */
-export function inText(ids: string[], style: WordStyle, num: Map<string, number>, items: Items): string {
+/** 文中那一处引用的文字；page 是直接引原句时的页码（只引一篇时才写）：IEEE [1, p. 6]，GB/T [1]6（页码上标），APA (Haghi et al., 2026, p. 6)，MLA (Haghi et al. 6) */
+export function inText(ids: string[], style: WordStyle, num: Map<string, number>, items: Items, page: number | null = null): string {
+  const pg = ids.length === 1 ? page : null
   if (isNumeric(style)) {
     const ns = ids.map((id) => num.get(id)).filter((n): n is number => n !== undefined)
     if (!ns.length) return '[?]'
+    if (pg) return style === 'ieee' ? `[${ns[0]}, p. ${pg}]` : `[${ns[0]}]${pg}`
     // IEEE 每个号各带方括号：[1], [3]–[5]；GB/T 写在一个方括号里：[1,3-5]
     if (style === 'ieee') return runs(ns).map(([a, b]) => (a === b ? `[${a}]` : `[${a}]–[${b}]`)).join(', ')
     return `[${ranges(ns)}]`
@@ -70,7 +77,16 @@ export function inText(ids: string[], style: WordStyle, num: Map<string, number>
     .filter(Boolean)
     .sort((a, b) => sortKey(a).localeCompare(sortKey(b)))
     .map((it) => authorYear(it, style === 'apa'))
-  return parts.length ? `(${parts.join('; ')})` : '(?)'
+  if (!parts.length) return '(?)'
+  if (pg) return style === 'apa' ? `(${parts[0]}, p. ${pg})` : `(${parts[0]} ${pg})`
+  return `(${parts.join('; ')})`
+}
+
+/** 写进 Word 的那一处：GB/T 的页码是上标，别的照 inText 的字 */
+export function inTextHtml(ids: string[], style: WordStyle, num: Map<string, number>, items: Items, page: number | null = null): string | null {
+  if (style !== 'gbt' || !page || ids.length !== 1) return null
+  const n = num.get(ids[0])
+  return n === undefined ? null : `[${n}]<sup>${page}</sup>`
 }
 
 const sortKey = (it: CiteItem): string => `${(it.authors[0] ? lastName(it.authors[0]) : it.title).toLowerCase()} ${it.year ?? 9999} ${it.title.toLowerCase()}`
@@ -107,6 +123,7 @@ export interface Issue {
 /** 论文格式检查：文献缺项、编号被手改、手打的编号、参考文献表没有或者过期 */
 export function check(input: {
   cites: string[][]
+  pages?: (number | null)[] // 每处引用的页码（直接引原句的才有）
   texts: string[] // 每处引用现在在文档里的文字
   items: Items
   style: WordStyle
@@ -120,7 +137,7 @@ export function check(input: {
   cites.forEach((ids, i) => {
     const lost = ids.filter((id) => !items[id])
     if (lost.length) out.push({ level: 'error', cite: i, text: t('第 {0} 处引用有 {1} 篇文献的信息不在这个文档里，重新插入一次', i + 1, lost.length) })
-    const want = inText(ids, style, num, items)
+    const want = inText(ids, style, num, items, input.pages?.[i] ?? null)
     if (texts[i] !== undefined && texts[i].trim() !== want) out.push({ level: 'error', cite: i, text: t('第 {0} 处引用被手改过：现在是 {1}，应该是 {2}。点「更新全文」改回来', i + 1, texts[i].trim() || t('空的'), want) })
   })
   for (const id of num.keys()) {
@@ -138,7 +155,7 @@ export function check(input: {
   if (isNumeric(style)) {
     const ours = new Map<string, number>()
     const add = (s: string): void => void ours.set(s, (ours.get(s) ?? 0) + 1)
-    cites.forEach((ids) => (inText(ids, style, num, items).match(/\[[\d,-]+\]/g) ?? []).forEach(add))
+    cites.forEach((ids, i) => (inText(ids, style, num, items, input.pages?.[i] ?? null).match(/\[[\d,-]+\]/g) ?? []).forEach(add))
     if (input.hasBib) for (const n of num.values()) add(`[${n}]`)
     const manual: string[] = []
     for (const m of input.bodyText.match(/\[\d+(?:\s*[-–,，]\s*\d+)*\]/g) ?? []) {

@@ -171,12 +171,37 @@ const PAPER_COLS: [string, string][] = [
   ['read_updated_at', 'INTEGER NOT NULL DEFAULT 0'] // 阅读进度、位置、模式的改动时间（和上面分开合并）
 ]
 
+// 灵感库（读到的好句子，写论文时引用）：和标注分开存，同一句可以既是高亮或「有质疑」，又在灵感库里
+const SCHEMA_IDEAS = `
+CREATE TABLE IF NOT EXISTS ideas (
+  id TEXT PRIMARY KEY,
+  paper_id TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  text TEXT NOT NULL,
+  page INTEGER,
+  rects TEXT,
+  block_id TEXT,
+  block_hash TEXT,
+  start INTEGER,
+  "end" INTEGER,
+  section TEXT NOT NULL DEFAULT '',
+  use_note TEXT NOT NULL DEFAULT '',
+  topics TEXT NOT NULL DEFAULT '[]',
+  how TEXT NOT NULL DEFAULT 'quote',
+  paraphrase TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ideas_paper ON ideas(paper_id);
+`
+
 export function openDb(file: string): DB {
   const db = new Database(file)
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
   db.exec(SCHEMA)
   db.exec(SCHEMA_2)
+  db.exec(SCHEMA_IDEAS)
   const have = new Set((db.prepare('PRAGMA table_info(papers)').all() as { name: string }[]).map((c) => c.name))
   for (const [c, def] of PAPER_COLS) if (!have.has(c)) db.exec(`ALTER TABLE papers ADD COLUMN ${c} ${def}`)
   const folderCols = new Set((db.prepare('PRAGMA table_info(folders)').all() as { name: string }[]).map((c) => c.name))
@@ -414,7 +439,7 @@ function rowToAnn(r: AnnRow): Annotation {
     paperId: r.paper_id,
     mode: r.mode === 'reflow' ? 'reflow' : 'pdf',
     color: r.color as Annotation['color'],
-    style: r.style === 'underline' ? 'underline' : 'highlight',
+    style: r.style === 'underline' || r.style === 'box' ? r.style : 'highlight',
     label: r.label === 'confused' || r.label === 'doubt' ? r.label : null,
     labelStatus: (r.label_status as LabelStatus | null) ?? null,
     explain: r.explain ? (JSON.parse(r.explain) as ExplainRecord) : null,
@@ -489,7 +514,7 @@ export function deleteAnnotation(db: DB, id: string): void {
 }
 
 // 同步用的删除记录：别的电脑看到后也删（比删除时间早改过的才删）
-export function tombstone(db: DB, kind: 'paper' | 'folder' | 'ann', key: string, at = Date.now()): void {
+export function tombstone(db: DB, kind: 'paper' | 'folder' | 'ann' | 'idea', key: string, at = Date.now()): void {
   db.prepare('INSERT INTO sync_tombstones (kind, key, at) VALUES (?, ?, ?) ON CONFLICT(kind, key) DO UPDATE SET at = MAX(at, excluded.at)').run(kind, key, at)
 }
 
