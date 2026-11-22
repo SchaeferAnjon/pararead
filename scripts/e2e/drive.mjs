@@ -1,5 +1,5 @@
 // 端到端驱动：用 playwright 的 _electron 启动开发构建（先 npm run build），数据放隔离目录（--data-dir），不碰真实文献库。
-// 带 E2E=1 启动（测试模式，见 src/main/testMode.ts）：窗口不出现在屏幕上、不抢焦点，访达、打开面板、右键菜单只记到 globalThis.srScreen。
+// 在 macOS 上带 E2E=1 启动（测试模式，见 src/main/testMode.ts）：窗口不出现在屏幕上、不抢焦点，访达、打开面板、右键菜单只记到 globalThis.srScreen。
 // 用法见 scripts/e2e/smoke.mjs。原生右键菜单 playwright 点不到：菜单栏命令用 app.evaluate 调菜单项的 click()，
 // 右键菜单里的动作直接调 window.api 的同一个接口。
 import { createRequire } from 'node:module'
@@ -30,7 +30,8 @@ export async function launch(dir, env = {}) {
     args: packaged ? [`--data-dir=${dataDir}`] : [`${ROOT}/out/main/index.js`, `--data-dir=${dataDir}`],
     cwd: ROOT,
     // 界面语言固定简体中文（脚本按中文文案找按钮）；要截别的语言传 PARAREAD_UI_LANG
-    env: { PARAREAD_UI_LANG: 'zh', ...process.env, E2E: '1', ...env },
+    // 测试模式只在 macOS 上开：Windows 上从不显示的窗口截不了图（CI 是 GitHub 的机器，照旧显示窗口）
+    env: { PARAREAD_UI_LANG: 'zh', ...process.env, ...(process.platform === 'darwin' ? { E2E: '1' } : {}), ...env },
     timeout: 60000
   })
   const win = await app.firstWindow()
