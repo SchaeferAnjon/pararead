@@ -70,7 +70,7 @@
 :root:not(:lang(zh), :lang(ja), :lang(ko)) .c-time { width: 112px; }
 .parse { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); white-space: nowrap; font-size: var(--fs-sm); }
 .hit-where { flex: none; font-size: var(--fs-xs); line-height: 16px; padding: 0 4px; margin-right: 4px; border-radius: var(--r-xs); background: var(--fill-2); color: var(--text-2); }
-mark.hit { background: var(--selection); color: inherit; border-radius: 2px; }
+mark.hit { background: var(--find-hit); color: inherit; border-radius: 2px; }
 .no-result { padding: 48px 24px; text-align: center; color: var(--text-2); }
 
 /* 卡片：封面放在浅灰底托里，四周留边 */

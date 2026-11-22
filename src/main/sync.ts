@@ -299,11 +299,17 @@ export class Sync {
     return this.c.settings.get().syncDir || join(ICLOUD, 'ParaRead 同步')
   }
 
+  // 测试模式只同步到设置里指定的目录，不碰 iCloud 云盘里真的同步文件夹
+  private on(): boolean {
+    const s = this.c.settings.get()
+    return s.syncEnabled && !(process.env.E2E === '1' && !s.syncDir) // 不从 testMode 导入：它带 electron，单测里没有
+  }
+
   start(): void {
     this.stop()
     const s = this.c.settings.get()
     this.status = { ...this.status, enabled: s.syncEnabled, dir: this.dir() }
-    if (!s.syncEnabled) return
+    if (!this.on()) return
     void this.run()
     this.timer = setInterval(() => void this.run(), 60_000)
   }
@@ -315,14 +321,14 @@ export class Sync {
 
   // 本机有改动：5 秒后同步一次（连续改动只同步一次）
   touch(): void {
-    if (!this.c.settings.get().syncEnabled) return
+    if (!this.on()) return
     if (this.dirty) clearTimeout(this.dirty)
     this.dirty = setTimeout(() => void this.run(), 5000)
   }
 
   // 正在同步时再叫一次：等这一轮做完，返回它的结果
   run(): Promise<SyncStatus> {
-    if (!this.c.settings.get().syncEnabled) return Promise.resolve(this.status)
+    if (!this.on()) return Promise.resolve(this.status)
     this.running ??= this.once().finally(() => (this.running = null))
     return this.running
   }

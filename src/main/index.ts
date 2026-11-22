@@ -70,13 +70,17 @@ import { setUiLang, t, uiLang } from '../shared/i18n'
 import { Sync } from './sync'
 import { randomUUID } from 'node:crypto'
 import { IS_WIN, keyMatches, openExtensionsPage, quitWatchdog, winAcc } from './platform'
+import { E2E, e2eDataDir, guardScreen } from './testMode'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // 测试实例用 --data-dir=<目录> 把数据放到临时目录，不碰真实的 ~/Library/Application Support/ParaRead
 app.setName('ParaRead')
+// 测试模式（E2E=1）：窗口和系统框都不出现在屏幕上，没给 --data-dir 时数据放临时目录，见 testMode.ts
+guardScreen()
 const dataArg = process.argv.find((a) => a.startsWith('--data-dir='))
 if (dataArg) app.setPath('userData', dataArg.slice('--data-dir='.length))
+else if (E2E) app.setPath('userData', e2eDataDir())
 const dataDir = app.getPath('userData')
 // Windows：双击 PDF、点 pararead:// 链接会再起一个进程，它把参数交给已经开着的那个（second-instance）就退出。
 // 锁按数据目录算，测试实例各用各的 --data-dir，互不影响
@@ -1015,8 +1019,8 @@ app.on('second-instance', (_e, argv) => {
   mainWin?.focus()
 })
 
-// 浏览器小书签：pararead://add?url=<当前网页>。Windows 的开发版不登记（登记的会是光秃秃的 electron.exe）
-if (!IS_WIN || app.isPackaged) app.setAsDefaultProtocolClient('pararead')
+// 浏览器小书签：pararead://add?url=<当前网页>。Windows 的开发版不登记（登记的会是光秃秃的 electron.exe）；测试模式不登记（会把正式版的抢过来）
+if (!E2E && (!IS_WIN || app.isPackaged)) app.setAsDefaultProtocolClient('pararead')
 const pendingUrls: string[] = []
 app.on('open-url', (e, url) => {
   e.preventDefault()

@@ -55,7 +55,12 @@
   --accent-soft: var(--fill-2);
   --accent-ring: light-dark(rgba(0, 0, 0, .25), rgba(255, 255, 255, .3));
   --on-accent: light-dark(#ffffff, #1b1b1d);
-  --selection: rgba(120, 120, 128, .28);
+  /* 选区色：选中的字、对照里对面跟着亮的那层（sel-link）。靛蓝，比系统选中蓝偏紫一档，避开意群蓝和高亮蓝；不是强调色，不进按钮、开关、焦点。
+     不用灰：灰和 --ai-mark 同色、和页面底分不开（2026-11-22 用户说夜间灰底看不清）。
+     --selection-paper 给原文模式 PDF 的文字层（不透明，正片叠底，相邻字块重叠处不加深），-inv 给深色反色的纸；--find-hit 给搜索命中，比选区淡 */
+  --selection: light-dark(rgba(90, 95, 240, .24), rgba(113, 118, 255, .4));
+  --selection-paper: #d7d9fb; --selection-paper-inv: #3d3f77;
+  --find-hit: light-dark(rgba(90, 95, 240, .12), rgba(113, 118, 255, .2));
 
   /* 状态：只进小圆点和小字 */
   --green: light-dark(#1d9a54, #3fcf7f);

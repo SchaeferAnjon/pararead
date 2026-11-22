@@ -823,6 +823,14 @@ function AboutUs() {
           </a>
         </Row>
       </FSec>
+      <FSec title={t('教程')}>
+        <Row label={t('使用教程')} hint={t('配置 AI Key、在 Word 里插引用这些，官网上都有图文步骤。')}>
+          <a className="btn sm" href={`${SITE_URL}/#page=tutorials`} target="_blank" rel="noreferrer">
+            <ExternalLink size={14} />
+            {t('打开教程')}
+          </a>
+        </Row>
+      </FSec>
       <FSec title={t('联系方式')}>
         <Row label={t('邮箱')} hint={t('用得不顺手、想要什么功能，都可以写信告诉我们。')}>
           <span className="mono">{CONTACT_EMAIL}</span>
@@ -972,6 +980,12 @@ function WordPlugin({ s, set }: P) {
               )}
             </>
           )}
+        </Row>
+        <Row label={t('图文教程')} hint={t('Word 里找不到 ParaRead、不知道怎么插引用和参考文献表，照着官网的教程一步一步来。')}>
+          <a className="btn sm" href={`${SITE_URL}/#page=word`} target="_blank" rel="noreferrer">
+            <ExternalLink size={14} />
+            {t('打开教程')}
+          </a>
         </Row>
         <Row label={t('WPS 文字')}>
           <span className="hint">{st?.wps ? t('还不支持 WPS') : t('没找到 WPS')}</span>

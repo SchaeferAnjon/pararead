@@ -18,7 +18,7 @@ body.resizing .reader { transition: none; }
 .mid-body { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 .center-note { padding: var(--sp-6); color: var(--text-2); }
 .find { display: flex; align-items: center; gap: 2px; margin-left: 6px; }
-::highlight(find-hit) { background-color: var(--selection); }
+::highlight(find-hit) { background-color: var(--find-hit); }
 ::highlight(find-cur) { background-color: var(--selection); text-decoration: underline 2px var(--accent); }
 
 /* 显示设置 */
@@ -210,7 +210,11 @@ body.resizing .reader { transition: none; }
   --scale-x: 1; --rotate: 0deg; transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
 .textLayer .markedContent { display: contents; }
 .textLayer span[role="img"] { user-select: none; cursor: default; }
-.textLayer ::selection { background: var(--selection); color: transparent; }
+.textLayer ::selection { background: var(--selection-paper); color: transparent; }
+/* 文字层只画选区：正片叠底在纸上，字还是黑的，pdf.js 相邻字块重叠处也不叠出深块；深色反色的纸用滤色 */
+.textLayer { mix-blend-mode: multiply; }
+[data-theme="dark"] .pdf-wrap.invert .textLayer { mix-blend-mode: screen; }
+[data-theme="dark"] .pdf-wrap.invert .textLayer ::selection { background: var(--selection-paper-inv); }
 .textLayer br::selection { background: transparent; }
 .textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: 0; cursor: default; user-select: none; }
 .textLayer.selecting .endOfContent { top: 0; }
