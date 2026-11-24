@@ -43,7 +43,7 @@ const report = async (win, name) => {
     await win.keyboard.press('Escape')
     await win.locator('.row').first().dblclick()
     await sleep(2000)
-    await win.evaluate(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+    await win.evaluate(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
     await sleep(2500)
     await report(win, 'reader')
     for (const sec of ['general', 'member', 'reflow', 'about']) {

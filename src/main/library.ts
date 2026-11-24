@@ -35,6 +35,8 @@ export interface ImportExtra {
   srId?: string
   fileName?: string
   meta?: MetaPatch
+  /** 画布笔记库里的一篇：不拷贝 PDF，记下库的根目录和库里的路径；不为它问 AI 取标题（列文件夹时一次可能几十篇） */
+  link?: { root: string; path: string }
 }
 
 export type ImportResult = { status: 'added'; paper: Paper } | { status: 'duplicate'; paper: Paper } | { status: 'failed'; file: string; error: string }
@@ -49,7 +51,18 @@ export class Library {
     return join(this.d.dataDir, 'papers')
   }
 
+  /** 这篇的 PDF：画布笔记库里的一篇读库里那份（库连着、文件在时），别的是 ParaRead 自己存的那份 */
   pdfPath(id: string): string {
+    const r = this.d.db.prepare('SELECT vault, vault_path FROM papers WHERE id = ?').get(id) as { vault: string | null; vault_path: string | null } | undefined
+    if (r?.vault && r.vault_path) {
+      const f = join(r.vault, r.vault_path)
+      if (existsSync(f) || !existsSync(this.ownPdfPath(id))) return f
+    }
+    return this.ownPdfPath(id)
+  }
+
+  /** ParaRead 自己存的那份（导入时拷进数据目录的） */
+  ownPdfPath(id: string): string {
     return join(this.papersDir(), `${id}.pdf`)
   }
 
@@ -72,6 +85,8 @@ export class Library {
     if (dup) {
       if (dup.deleted) db.prepare('UPDATE papers SET deleted = 0 WHERE id = ?').run(dup.id)
       if (extra.srId) db.prepare('UPDATE papers SET scholaread_id = COALESCE(scholaread_id, ?) WHERE id = ?').run(extra.srId, dup.id)
+      // 库里那份和文献库里已有的一篇一模一样：这一条改成指到库里那份（ParaRead 自己那份留着，断开库时照旧能读）
+      if (extra.link) db.prepare('UPDATE papers SET vault = ?, vault_path = ? WHERE id = ?').run(extra.link.root, extra.link.path, dup.id)
       return { status: 'duplicate', paper: getPaper(db, dup.id)! }
     }
 
@@ -86,7 +101,7 @@ export class Library {
     let authors = extra.authors?.length ? extra.authors : guess.authors
     let year = guess.year
     // 标题或作者取不到时让 GLM 从第一页文字里抽
-    if ((!title || !authors.length) && this.d.ai.ready()) {
+    if ((!title || !authors.length) && !extra.link && this.d.ai.ready()) {
       try {
         const out = await this.d.ai.once(metadataMessages(ext.pages[0] ? pageToText(ext.pages[0]) : ''), { json: true, timeoutMs: 45_000 })
         const j = parseJsonLoose<{ title?: string; authors?: string[]; year?: number | null }>(out)
@@ -100,7 +115,7 @@ export class Library {
     if (!title) title = basename(file).replace(/\.pdf$/i, '').replace(/[_]+/g, ' ')
 
     const id = newId()
-    copyFileSync(file, this.pdfPath(id))
+    if (!extra.link) copyFileSync(file, this.ownPdfPath(id))
     const now = Date.now()
     const insert = db.transaction(() => {
       db.prepare(
@@ -123,6 +138,7 @@ export class Library {
       )
       const ins = db.prepare('INSERT INTO page_text (paper_id, page, text) VALUES (?, ?, ?)')
       ext.pages.forEach((p, i) => ins.run(id, i + 1, pageToText(p)))
+      if (extra.link) db.prepare('UPDATE papers SET vault = ?, vault_path = ? WHERE id = ?').run(extra.link.root, extra.link.path, id)
     })
     insert()
     if (extra.meta) this.applyMeta(id, extra.meta, false)
@@ -227,7 +243,7 @@ export class Library {
     const other = db.prepare('SELECT id FROM papers WHERE file_hash = ? AND id != ?').get(hash, id) as { id: string } | undefined
     if (other) throw new Error(t('这个 PDF 已经在库里了'))
     const ext = await extractPdf(new Uint8Array(data))
-    copyFileSync(file, this.pdfPath(id))
+    copyFileSync(file, this.ownPdfPath(id))
     const tx = db.transaction(() => {
       db.prepare("UPDATE papers SET kind = 'pdf', file_hash = ?, file_name = ?, page_count = ? WHERE id = ?").run(hash, basename(file), ext.pageCount, id)
       db.prepare('DELETE FROM page_text WHERE paper_id = ?').run(id)

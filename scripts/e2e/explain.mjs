@@ -39,7 +39,7 @@ const dragIn = async (nth) => {
 }
 const label = async (nth, l) => {
   await dragIn(nth)
-  await win.locator(`.sel-toolbar .tb-label[data-label="${l}"]`).click()
+  await win.locator((l === 'confused' ? '.sel-toolbar .tb-kind[data-kind="confused"]' : `.sel-toolbar .tb-label[data-label="${l}"]`)).click()
   await sleep(600)
 }
 const anns = (id) => ev((x) => window.api.annList(x), id)
@@ -65,7 +65,7 @@ try {
   }
   await win.dblclick(`[data-paper="${id}"]`)
   await sleep(1500)
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
   await sleep(2000)
   await toIntro()
   await sleep(700)

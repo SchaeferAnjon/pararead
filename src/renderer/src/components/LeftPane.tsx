@@ -4,8 +4,10 @@ import type * as PdfJs from 'pdfjs-dist'
 import { sectionForText } from '@shared/chunk'
 import { listFigures } from '@shared/refs'
 import { locateTerms } from '@shared/terms'
-import { HL_COLORS, type Annotation, type Block, type HlColor, type MajorPoint, type MajorType, type ReadMode, type ReflowDoc, type Term, type AnnLabel } from '@shared/types'
+import { type Annotation, type Block, type MajorPoint, type MajorType, type ReadMode, type ReflowDoc, type Term, type AnnLabel } from '@shared/types'
 import { LABEL_NAME } from '@shared/annLabels'
+import { CONFUSED, type HlKind } from '@cn/format'
+import { kindOf, nameOfKind } from '@shared/cnLink'
 import { isSettled, summaryOf } from '@shared/explain'
 import { LabelChips } from './ExplainBody'
 import { Markdown } from '../lib/Markdown'
@@ -40,6 +42,8 @@ type Props = {
   curBlock: string | null
   curPage: number
   anns: Annotation[]
+  /** 划线的含义（和画布笔记同一份）：每条写含义名，能按含义筛 */
+  kinds: HlKind[]
   sections: Map<string, string>
   sectionForPage: (p: number | null) => string
   keys: MajorPoint[] | null
@@ -215,16 +219,16 @@ function Toc(props: Props) {
   )
 }
 
-const HL_BG: Record<string, string> = { yellow: 'var(--hl-yellow)', green: 'var(--hl-green)', blue: 'var(--hl-blue)', red: 'var(--hl-red)' }
-const COLOR_NAME: Record<HlColor, string> = { yellow: t('黄'), green: t('绿'), blue: t('蓝'), red: t('红') }
+const HL_BG: Record<string, string> = { yellow: 'var(--hl-yellow)', green: 'var(--hl-green)', blue: 'var(--hl-blue)', red: 'var(--hl-red)', orange: 'var(--hl-orange)', purple: 'var(--hl-purple)', pink: 'var(--hl-pink)', gray: 'var(--hl-gray)' }
 
 function Notes(props: Props) {
   const [kind, setKind] = useState<'all' | 'note' | AnnLabel>('all')
-  const [colors, setColors] = useState<Set<HlColor>>(new Set())
+  // 按含义筛（重点、定义、想引用……，和画布笔记右栏同一个做法）
+  const [keys, setKeys] = useState<Set<string>>(new Set())
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const groups = useMemo(() => {
-    const list = props.anns.filter((a) => (!colors.size || colors.has(a.color)) && (kind === 'all' || (kind === 'note' ? !!a.note : a.label === kind)))
+    const list = props.anns.filter((a) => (!keys.size || keys.has(kindOf(a))) && (kind === 'all' || (kind === 'note' ? !!a.note : a.label === kind)))
     const secOf = (a: Annotation): string => {
       if (a.mode === 'pdf' && props.doc) {
         const s = sectionForText(props.doc.blocks, props.sections, a.text)
@@ -250,24 +254,25 @@ function Notes(props: Props) {
     return [...m.entries()]
       .sort((a, b) => rank(a[0]) - rank(b[0]))
       .map(([k, v]) => [k, v.sort((x, y) => (x.page ?? 0) - (y.page ?? 0) || (x.start ?? 0) - (y.start ?? 0) || x.createdAt - y.createdAt)] as const)
-  }, [props.anns, colors, kind, props.headings, props.sectionForPage, props.doc, props.sections])
+  }, [props.anns, keys, kind, props.headings, props.sectionForPage, props.doc, props.sections])
 
   const more = async (e: React.MouseEvent): Promise<void> => {
     const act = await showMenu(
       [
-        { type: 'section', label: t('按颜色') },
-        ...HL_COLORS.map((c) => ({ id: c, label: t('{0}色', COLOR_NAME[c]), checked: colors.has(c), icon: <span className="hl-dot" data-color={c} /> })),
+        { type: 'section', label: t('按含义') },
+        ...props.kinds.map((k) => ({ id: `k:${k.key}`, label: k.name, checked: keys.has(k.key), icon: <span className="hl-dot" data-color={k.color} /> })),
         { type: 'separator' },
         { id: 'export', label: t('导出 Markdown…'), icon: <Download size={16} />, hint: '⇧⌘E', checked: false }
       ],
       { el: e.currentTarget, align: 'right' }
     )
     if (act === 'export') props.onExport()
-    else if (act)
-      setColors((s) => {
+    else if (act?.startsWith('k:'))
+      setKeys((s) => {
         const n = new Set(s)
-        if (n.has(act as HlColor)) n.delete(act as HlColor)
-        else n.add(act as HlColor)
+        const k = act.slice(2)
+        if (n.has(k)) n.delete(k)
+        else n.add(k)
         return n
       })
   }
@@ -282,19 +287,21 @@ function Notes(props: Props) {
           options={[
             { value: 'all', label: t('全部') },
             { value: 'note', label: t('笔记') },
-            { value: 'confused', label: LABEL_NAME.confused },
+            { value: 'confused', label: props.kinds.find((k) => k.key === CONFUSED)?.name ?? LABEL_NAME.confused },
             { value: 'doubt', label: LABEL_NAME.doubt }
           ]}
         />
-        {colors.size > 0 && (
+        {keys.size > 0 && (
           <span className="lp-dots">
-            {[...colors].map((c) => (
-              <span key={c} className="hl-dot" data-color={c} />
-            ))}
+            {props.kinds
+              .filter((k) => keys.has(k.key))
+              .map((k) => (
+                <span key={k.key} className="hl-dot" data-color={k.color} title={k.name} />
+              ))}
           </span>
         )}
         <span className="spacer" />
-        <button className="icon-btn sm" title={t('按颜色筛选、导出')} onClick={(e) => void more(e)}>
+        <button className="icon-btn sm" title={t('按含义筛选、导出')} onClick={(e) => void more(e)}>
           <Ellipsis size={16} />
         </button>
       </div>
@@ -349,7 +356,13 @@ function Notes(props: Props) {
                   </div>
                 )}
                 {a.note && <div className="note-text">{a.note}</div>}
-                {a.mode === 'pdf' && a.page && <div className="hint num">{t('原文 第 {0} 页', a.page)}</div>}
+                {a.style !== 'box' && (
+                  <div className="hint num note-kind" data-kind={kindOf(a)}>
+                    <span className="hl-dot" data-color={a.color} />
+                    {nameOfKind(props.kinds, kindOf(a))}
+                    {a.page ? ` · ${t('原文 第 {0} 页', a.page)}` : ''}
+                  </div>
+                )}
               </div>
             ))}
           </div>

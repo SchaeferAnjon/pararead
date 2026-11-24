@@ -56,7 +56,7 @@ try {
   for (let i = 0; i < 90 && !(await ev((x) => window.api.getPaper(x), id)).reflow.ready; i++) await sleep(1000)
   await win.dblclick(`[data-paper="${id}"]`)
   await sleep(1500)
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
   await sleep(2000)
   await toIntro()
   for (let i = 0; i < 60; i++) {

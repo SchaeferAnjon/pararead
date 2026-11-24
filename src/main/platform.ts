@@ -2,7 +2,7 @@
 // 量文件夹大小、退出看门狗、设备标识、打开浏览器的扩展页。
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { opendir, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 
 export const IS_WIN = process.platform === 'win32'
 
@@ -52,7 +52,9 @@ export function quitWatchdog(): void {
     spawn('cmd.exe', ['/d', '/c', `ping -n 3 127.0.0.1 >nul & taskkill /F /PID ${process.pid}`], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
     return
   }
-  spawn('/bin/sh', ['-c', 'sleep 1.5; [ "$(ps -p "$1" -o comm=)" = "$2" ] && kill -9 "$1"', 'sh', String(process.pid), process.execPath], { detached: true, stdio: 'ignore' }).unref()
+  // 核对进程号还是本应用：比可执行文件的名字，不比整条路径。ps 报的是启动时用的路径，process.execPath 是解开链接以后的；
+  // pnpm 的 node_modules/electron 是链接，两条路径对不上，看门狗就从来不杀，测试模式里退出常要 10 秒以上（2026-11-23 并进 canvas-notes 后查出来的）
+  spawn('/bin/sh', ['-c', 'sleep 1.5; c="$(ps -p "$1" -o comm=)"; [ "${c##*/}" = "$2" ] && kill -9 "$1"', 'sh', String(process.pid), basename(process.execPath)], { detached: true, stdio: 'ignore' }).unref()
 }
 
 /** 这台电脑的硬件标识（拿不到是 undefined）：Mac 的 IOPlatformUUID，Windows 的 MachineGuid */

@@ -155,6 +155,10 @@ mark.hit { background: var(--find-hit); color: inherit; border-radius: 2px; }
 .np-mark .ul[data-color="green"] { color: var(--hl-green-dot); }
 .np-mark .ul[data-color="blue"] { color: var(--hl-blue-dot); }
 .np-mark .ul[data-color="red"] { color: var(--hl-red-dot); }
+.np-mark .ul[data-color="orange"] { color: var(--hl-orange-dot); }
+.np-mark .ul[data-color="purple"] { color: var(--hl-purple-dot); }
+.np-mark .ul[data-color="pink"] { color: var(--hl-pink-dot); }
+.np-mark .ul[data-color="gray"] { color: var(--hl-gray-dot); }
 .np-body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .np-quote { font-family: var(--font-src); font-size: var(--fs-md); line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .np-note { font-size: var(--fs); line-height: 1.6; padding-left: 8px; border-left: 2px solid var(--stroke-strong); white-space: pre-wrap; }
@@ -169,3 +173,8 @@ mark.hit { background: var(--find-hit); color: inherit; border-radius: 2px; }
 .insp-link .il-b .btn { text-decoration: none; }
 .insp[data-drop="on"] { box-shadow: inset 0 0 0 2px var(--accent); }
 .insp[data-drop="on"] .insp-link { background: var(--accent-soft); }
+
+/* 左栏「画布笔记库」：库名一行灰字，下面是勾上的文件夹；没连上的库灰掉 */
+.cn-vault.missing > .nav-item { color: var(--text-3); }
+.cn-miss { margin-left: auto; color: var(--c-orange); flex: none; font-size: var(--fs-sm); }
+.c-time .cn-in { display: inline-flex; vertical-align: -3px; margin-right: 4px; color: var(--text-3); }

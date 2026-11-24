@@ -7,7 +7,7 @@ import { tmpdir, homedir } from 'node:os'
 import { join } from 'node:path'
 import { close, launch, ROOT, shot, sleep } from './drive.mjs'
 
-const require = createRequire(process.env.PLAYWRIGHT_ROOT ?? '/opt/homebrew/lib/node_modules/')
+const require = createRequire(process.env.PLAYWRIGHT_ROOT ?? import.meta.url)
 const { chromium } = require('playwright')
 const CHROMIUM = process.env.E2E_CHROMIUM ?? `${homedir()}/Library/Caches/ms-playwright/chromium-1228/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`
 const EXT = `${ROOT}/out/renderer/extension`

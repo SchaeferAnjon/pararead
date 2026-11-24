@@ -1,0 +1,215 @@
+/*
+ * 选 AI 的选择器（ai-picker.tsx，task-m55m7）。bar 的三颗照 composer.css 的 .aiin .pick（24 高、左右 6、圆角 6、12px）；
+ * 这里是 box（设置 › AI 那一列）：一个 28 高的框（同设置里的下拉：1px --line2、圆角 6、--card 底、13px），里面三段 24 高、圆角 4，
+ * 段和段之间一道 14 高的细线；选的是「跟默认」「按顺序」时只有一段，占满整个框，后面跟着灰字。菜单同输入框那三个（.ai-menu）。
+ */
+.aipk {
+  display: flex;
+  align-items: center;
+  width: 300px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 2px;
+  border: 1px solid var(--line2, var(--stroke));
+  border-radius: 6px;
+  background: var(--card, var(--bg-elevated));
+  flex: none;
+}
+.aipk-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font: 13px/18px var(--sans, var(--font-sans));
+  color: var(--t1, var(--text));
+  white-space: nowrap;
+}
+.aipk-seg:hover,
+.aipk-seg.open {
+  background: var(--fill, var(--fill-1));
+}
+.aipk-seg .lb {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 家那一段：名字 500，比模型、档重一点 */
+.aipk-seg.fam .lb {
+  font-weight: 500;
+}
+/* 模型名长（OpenCode 的「DeepSeek V4.1 Flash 1017」）时先省略模型，家和档不省 */
+.aipk-seg.fam,
+.aipk-seg:last-child {
+  flex-shrink: 0;
+}
+/* 模型那一段占掉多出来的地方，最后一段贴着框的右边（和「跟默认」那种一段的行右边一样齐） */
+.aipk:not(.leading) .aipk-seg.mdl {
+  flex: 1 1 auto;
+  justify-content: space-between;
+}
+.aipk-seg .eng-logo,
+.aipk-seg .nologo,
+.aipk-seg .cv {
+  flex: none;
+}
+.aipk-seg .cv {
+  color: var(--t3, var(--text-3));
+}
+.aipk-seg .nologo {
+  width: 14px;
+}
+/* 跟默认、按顺序：一段占满，后面跟着那句灰字，箭头靠右 */
+.aipk.leading .aipk-seg {
+  flex: 1 1 auto;
+}
+.aipk-seg.lead .lb {
+  flex: none;
+  font-weight: 500;
+}
+.aipk-seg .m {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  color: var(--t3, var(--text-3));
+}
+.aipk-div {
+  flex: none;
+  width: 1px;
+  height: 14px;
+  margin: 0 1px;
+  background: var(--line2, var(--stroke));
+}
+
+/*
+ * 自查出问题的那一家：标志右上角一个 6 的红点（像图标上的角标，不占地方：设置那一格三段放得下），外面一圈 2 的按钮底色隔开
+ * （悬停、开着时底色是 --fill，圈跟着换，不露白边）；悬停说是什么问题，菜单那一行右边的小字标红
+ */
+.aipk-seg.fam,
+.aiin .pick.eng {
+  position: relative;
+  --aipk-bg: var(--card, var(--bg-elevated));
+}
+.aipk-seg.fam:hover,
+.aipk-seg.fam.open,
+.aiin .pick.eng:hover,
+.aiin .pick.eng.open {
+  --aipk-bg: var(--fill, var(--fill-1));
+}
+.aipk-seg .aipk-warn,
+.aiin .pick .aipk-warn {
+  position: absolute;
+  top: 2px;
+  left: 16px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 0 2px var(--aipk-bg, var(--bg-elevated));
+  pointer-events: none;
+}
+.aiin .pick .aipk-warn {
+  top: 3px;
+  left: 15px;
+}
+.ai-menu .it.warn .r {
+  color: var(--red-t, var(--red));
+}
+
+/* 菜单：同 .ai-menu（圆角 12、--shadow-up、内边距 6、行 30），太长自己滚；模型多时头和找模型的框不跟着滚 */
+.aipk-menu {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.aipk-menu > .aipk-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.aipk-menu:not(:has(.aipk-list)) {
+  overflow-y: auto;
+}
+.aipk-menu .it .r.truncate {
+  min-width: 0;
+  max-width: 62%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aipk-menu .nologo {
+  flex: none;
+  width: 14px;
+}
+.aipk-find {
+  flex: none;
+  height: 28px;
+  margin: 2px 2px 6px;
+  padding: 0 8px;
+  border: 1px solid var(--line2, var(--stroke));
+  border-radius: 6px;
+  background: var(--card, var(--bg-elevated));
+  color: var(--t1, var(--text));
+  font: 12px var(--sans, var(--font-sans));
+  outline: none;
+}
+.aipk-find:focus {
+  border-color: var(--acc-ring, var(--accent-ring));
+  box-shadow: 0 0 0 3px var(--acc-soft, var(--accent-soft));
+}
+/* 底下那句「刚拉的」「上次拉的 11-20 09:14」：和上面隔一道线 */
+.aipk-menu .sub.foot {
+  flex: none;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line, var(--stroke-soft));
+}
+
+/* 设置 › AI：「各功能用哪个」那张表右边一列放三段（Claude Code · Sonnet 5.5 · Extra high 要 290），比别处的 220 宽 */
+.aipk-wide .sa-row:not(.full):not(.info) {
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+/* 「各家命令行」说明那一行前面的小点：不兼容、没更新成是红的，没找到是灰的；参数、接口名等宽 */
+.sa-ds .dot.bad {
+  background: var(--red);
+}
+.sa-ds .dot.off {
+  background: var(--t3, var(--text-3));
+}
+.sa-ds .aipk-code {
+  font: 11.5px var(--mono, var(--font-mono));
+  color: var(--t2, var(--text-2));
+}
+/* 那一列的按钮一样宽、字居中（检查更新、更新、更新到 x、怎么装、换 Key、加 Key、下载、刷新） */
+.sa-btn.aipk-cli-btn {
+  min-width: 96px;
+  justify-content: center;
+}
+/* 默认那一行：左边两行字（这一行管什么），右边选择器；右边距 15，和下面那张表（1 边框 + 14）的右边对齐 */
+.sa-engrow.aipk-defrow {
+  padding-right: 15px;
+}
+.aipk-def {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.aipk-def b {
+  font: 500 13px/1.4 var(--sans, var(--font-sans));
+  color: var(--t1, var(--text));
+}
+.aipk-def small {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--t3, var(--text-3));
+}

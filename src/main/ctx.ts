@@ -19,4 +19,6 @@ export interface Ctx {
   afterImport: (paperId: string) => void
   mainWindow: () => Electron.BrowserWindow | null
   streamer: Streamer
+  /** 画布笔记联动（cnLink.ts）：讲解好了、问答答完时写进库里的配对笔记 */
+  cn: { explained: (annId: string) => void; chatChanged: (paperId: string) => void; readTime: (paperId: string, ms: number) => void }
 }

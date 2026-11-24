@@ -149,6 +149,7 @@ export function registerExplain(c: Ctx, syncTouch: () => void): { saved: (a: Ann
     const base: ExplainRecord = o.again ? withMiss(cur.explain) : { versions: cur.explain?.versions ?? [], misses: cur.explain?.misses ?? 0, group: cur.explain?.group ?? null, chat: cur.explain?.chat }
     const saved = setLabelState(db, id, { explain: { ...base, versions: [...base.versions, v].slice(-8) } })
     if (saved) c.broadcast('explain:saved', saved)
+    if (saved) c.cn.explained(id)
     syncTouch()
     return saved
   }
@@ -221,6 +222,7 @@ export function registerExplain(c: Ctx, syncTouch: () => void): { saved: (a: Ann
         const rec: ExplainRecord = { versions: cur.explain?.versions ?? [], misses: cur.explain?.misses ?? 0, group: cur.explain?.group ?? null, chat: [...(cur.explain?.chat ?? []), { q, a: full.trim(), at: Date.now() }].slice(-20) }
         const saved = setLabelState(db, annId, { explain: rec })
         if (saved) c.broadcast('explain:saved', saved)
+        if (saved) c.cn.explained(annId)
         syncTouch()
       }
     })
@@ -234,6 +236,7 @@ export function registerExplain(c: Ctx, syncTouch: () => void): { saved: (a: Ann
       if (saved) {
         out.push(saved)
         c.broadcast('explain:saved', saved)
+        c.cn.explained(id)
       }
     }
     syncTouch()

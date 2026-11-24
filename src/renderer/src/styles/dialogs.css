@@ -49,3 +49,16 @@
 .ex-line { display: flex; align-items: center; gap: 12px; min-height: 30px; }
 .ex-line > span { width: 56px; color: var(--text-2); flex: none; }
 .ex-line > div { flex: 1; display: flex; align-items: center; gap: 8px; }
+
+/* 放到画布笔记：选库、找文件夹、目录树（选中一行浅灰底）、放进去叫什么 */
+.cn-place-top { display: flex; gap: 8px; align-items: center; }
+.cn-place-tree { max-height: 300px; margin-top: 10px; }
+.cn-place-row { cursor: default; }
+.cn-place-row.on { background: var(--fill-3); }
+.cn-place-paper { padding: 10px 12px; border-radius: var(--r-md); background: var(--bg-inset); margin-bottom: 12px; display: flex; flex-direction: column; gap: 2px; font-weight: 500; }
+.cn-place-paper .hint { font-weight: 400; }
+.cn-place-names { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); }
+.cn-place-sub { font-size: 12px; font-weight: 500; color: var(--text-2); margin-bottom: 2px; }
+.cn-place-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cn-place-name svg { flex: none; color: var(--text-2); }
+.cn-place-name .hint { flex: none; margin-left: 4px; }

@@ -75,8 +75,13 @@
   --hl-yellow: rgba(254, 170, 2, .30); --hl-green: rgba(117, 187, 63, .30);
   --hl-blue: rgba(0, 161, 216, .30);   --hl-red: rgba(255, 64, 21, .30);
   --hl-yellow-dot: #feaa02; --hl-green-dot: #75bb3f; --hl-blue-dot: #00a1d8; --hl-red-dot: #ff4015;
+  /* 画布笔记那边「加一种」的四种（@cn/format 的 HL_DOT 后四种），纸面上同样 30% */
+  --hl-orange: rgba(255, 122, 26, .30); --hl-purple: rgba(139, 92, 246, .30);
+  --hl-pink: rgba(236, 72, 153, .30);   --hl-gray: rgba(142, 142, 147, .30);
+  --hl-orange-dot: #ff7a1a; --hl-purple-dot: #8b5cf6; --hl-pink-dot: #ec4899; --hl-gray-dot: #8e8e93;
   /* 标注标签的线：看不懂蓝、有质疑红（只画线，不铺底）；了结了的用同色 35% */
-  --lb-confused: #2f6fde; --lb-doubt: #e5484d;
+  /* 看不懂是第四种含义（红，和画布笔记同一个红）；有质疑是标记、不占颜色，石墨灰（@cn/format 的 DOUBT_MARK，2026-11-23 用户定不用紫，和灵感的紫灯泡太像） */
+  --lb-confused: var(--hl-red-dot); --lb-doubt: light-dark(#5c6470, #868c95);
   /* 灵感（灵感库）的记号：紫，只画正文左边的小灯泡和用法前那条竖线，不铺底；和四个高亮色、标签的蓝红线、译文的青分开 */
   --lb-idea: light-dark(#7a52d6, #a98bf5);
   --lb-idea-soft: light-dark(rgba(122, 82, 214, .12), rgba(169, 139, 245, .16));

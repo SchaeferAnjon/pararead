@@ -1,0 +1,99 @@
+/*
+ * 窗口背景「主题渐变」的画法（task-aph2j，画布笔记、画布今日一份）：body 里最前面一个 .cn-wall（wall.ts 放进去），
+ * 铺满窗口、压在所有东西后面（z-index -1，在 body 的底色之上）。<html data-winbg='wall'> 时才显示，软件自己的外框那时是透明的。
+ * 颜色是 themes.css 每套的 --wall-base（竖向垫底）和 --wall-glow（三块椭圆色块）；浓淡三档 <html data-wallmix>。
+ * 动：<html data-wallmove='slow|mid|fast'> 时色块那一层慢慢挪、放大一点（只动 transform，合成器做，不重画渐变）；
+ * 窗口在后台、看不见时 wall.ts 设 data-wallrun='0' 停住；系统开了「减少动态效果」一律不动。
+ */
+.cn-wall {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--wall-base);
+}
+[data-winbg='wall'] .cn-wall {
+  display: block;
+}
+.cn-wall > i {
+  position: absolute;
+  inset: 0;
+  background: var(--wall-glow);
+  opacity: var(--wall-k);
+  filter: saturate(var(--wall-sat)) brightness(var(--wall-bright, 1));
+}
+
+:root[data-wallmix='soft'] {
+  --wall-k: 0.5;
+}
+:root[data-wallmix='rich'] {
+  --wall-sat: 1.45;
+}
+/* 浓：面板也从 80% / 82% 降到 75% 不透明，不然深色几套只加饱和度看不出浓 */
+:root[data-winbg='wall'][data-wallmix='rich'] {
+  --isle-k: 75%;
+}
+/* 深色几套的浓再提亮色块（设计复审：只加饱和度、面板 75%，石墨、墨夜的浓和标准色差不到 2，看不出） */
+:root[data-tone='dark'][data-wallmix='rich'] {
+  --wall-bright: 1.3;
+}
+/* 石墨例外：右上角那抹余烬就在标题栏「收起右栏」底下，整层提亮后那颗按钮只剩 2.7 : 1。
+   浓只把左上的炭色、右下的夜雾蓝换亮一档，余烬不提 */
+:root[data-skin='graphite'][data-wallmix='rich'] {
+  --wall-bright: 1;
+  --wall-glow:
+    radial-gradient(120% 70% at 18% 0%, #4d443c 0%, transparent 60%),
+    radial-gradient(58% 72% at 97% 0%, #9a5f2c 0%, rgba(154, 95, 44, 0.35) 32%, transparent 70%),
+    radial-gradient(70% 55% at 72% 100%, #2a3850 0%, transparent 60%);
+}
+
+/* 三档：一个方向走完的秒数（来回是两倍）、挪多远（--wall-amp 乘在关键帧上）、一段走几小步。
+   慢 45 秒、原样（90 秒一个来回，设计稿的「几乎看不出在动」）；中 20 秒、远 1.6 倍；快 8 秒、远 2.2 倍（设计复审：三档只差时间时「快」也几乎看不出在动） */
+:root[data-wallmove='slow'] {
+  --wall-dur: 45s;
+  --wall-amp: 1;
+  --wall-steps: 80;
+}
+:root[data-wallmove='mid'] {
+  --wall-dur: 20s;
+  --wall-amp: 1.6;
+  --wall-steps: 120;
+}
+:root[data-wallmove='fast'] {
+  --wall-dur: 8s;
+  --wall-amp: 2.2;
+  --wall-steps: 120;
+}
+/* 起点就是不动时的样子；每个位置放大的都比挪的多（放大一边多出 (scale-1)/2，比挪的多），窗口边上不会露出没有色块的一条 */
+@keyframes cn-wall-drift {
+  0% {
+    transform: none;
+  }
+  33% {
+    transform: translate(calc(4% * var(--wall-amp)), calc(3% * var(--wall-amp))) scale(calc(1 + 0.1 * var(--wall-amp)));
+  }
+  66% {
+    transform: translate(calc(-3% * var(--wall-amp)), calc(4% * var(--wall-amp))) scale(calc(1 + 0.12 * var(--wall-amp)));
+  }
+  100% {
+    transform: translate(calc(2% * var(--wall-amp)), calc(-2% * var(--wall-amp))) scale(calc(1 + 0.08 * var(--wall-amp)));
+  }
+}
+/* 一段（两个关键帧之间）走 80 到 120 小步，不是每一帧都挪：一步 1 像素上下，看着还是连着动，
+   但半透明面板后面的模糊一秒只重算 5（慢）到 45（快）次，不是 120 次（耗电实测：慢慢动时 GPU 进程从 2.2% 降到 0.4%，task-aph2j） */
+[data-winbg='wall'][data-wallmove] .cn-wall > i {
+  will-change: transform;
+  animation: cn-wall-drift var(--wall-dur) steps(var(--wall-steps)) infinite alternate;
+}
+/* 比上面那条具体：animation 简写会把 play-state 设回 running */
+[data-winbg='wall'][data-wallmove][data-wallrun='0'] .cn-wall > i {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-winbg='wall'][data-wallmove] .cn-wall > i {
+    will-change: auto;
+    animation: none;
+  }
+}

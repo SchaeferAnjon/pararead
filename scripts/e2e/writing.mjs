@@ -10,7 +10,7 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { close, launch, PAPER, ROOT, shot, sleep } from './drive.mjs'
 
-const require = createRequire(process.env.PLAYWRIGHT_ROOT ?? '/opt/homebrew/lib/node_modules/')
+const require = createRequire(process.env.PLAYWRIGHT_ROOT ?? import.meta.url)
 const { chromium } = require('playwright')
 const ARXIV = ['https://arxiv.org/abs/2108.13378', 'https://arxiv.org/abs/2206.04218', 'https://arxiv.org/abs/2206.15165']
 const LATE = 'https://arxiv.org/abs/2206.04200' // 新加的一篇：.bib 要自动跟上

@@ -6,7 +6,7 @@ Read English papers on your Mac: a reflowed layout with a translation under ever
 
 - 官网 / Website：https://pararead.us-cloud.uk
 - 下载 / Download：[最新版 Latest release](https://github.com/SchaeferAnjon/pararead/releases/latest)（macOS 13+，Apple 芯片 / Apple silicon）
-- 许可 / License：GPL-3.0
+- 许可 / License：GPL-3.0-or-later
 
 不用注册账号。填你自己的 AI Key（DeepSeek、智谱、通义、Kimi、豆包、OpenAI、Gemini、Claude 等）永久免费；电脑上装了 Claude Code 的，可以直接用它和它的订阅，不用 Key；不想配 Key 可以买会员。论文、重排的结果、高亮和笔记都存在你的电脑上。
 
@@ -24,16 +24,18 @@ Read English papers on your Mac: a reflowed layout with a translation under ever
 
 ## 自己编译
 
-要 Node 22 以上和 Xcode 命令行工具。
+要 Node 22 以上、pnpm（版本见 package.json 的 packageManager）和 Xcode 命令行工具。
 
 ```bash
-npm install          # npm 11 起要在 package.json 的 allowScripts 里放行原生模块的安装脚本（已经写好）
-npm run rebuild      # better-sqlite3 按 Electron 的 ABI 重编
-npm run dev          # 开发模式
-npm test             # 单元测试，用 Electron 自带的 Node 跑
-npm run typecheck
-npm run dist:dir     # 打一个没签 Developer ID 的 .app 到 release/mac-arm64
+pnpm install         # 原生模块的安装脚本在 pnpm-workspace.yaml 的 allowBuilds 里放行（已经写好）
+pnpm run rebuild     # better-sqlite3 按 Electron 的 ABI 重编
+pnpm run dev         # 开发模式
+pnpm test            # 单元测试，用 Electron 自带的 Node 跑
+pnpm run typecheck
+pnpm run dist:dir    # 打一个没签 Developer ID 的 .app 到 release/mac-arm64
 ```
+
+`packages/` 下是和 [Canvas Notes](https://github.com/SchaeferAnjon/canvas-notes) 共用的包，原样来自那个仓库的同一路径：`format`（Markdown 写法，ParaRead 往 Canvas Notes 库里那篇配对笔记写的段落就用它）、`ai-engines`（各家 AI 的命令行、API Key、本机模型）、`ai-chat`（右栏 AI 问答的对话框），以及它们用到的 `design`、`family`、`atomic`、`git`。
 
 自己编译的版本填自己的 Key，功能一样。
 

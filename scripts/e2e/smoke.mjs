@@ -16,7 +16,7 @@ try {
   }
   await win.dblclick(`[data-paper="${id}"]`)
   await sleep(1500)
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
   await sleep(8000)
   console.log('译文', await win.locator('.tr-text').count(), '段')
   console.log(await shot(win, 'smoke-reflow'))

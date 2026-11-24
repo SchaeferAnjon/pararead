@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { thinkKey, thinkLevel, type ThinkLevel } from '../shared/thinking'
 import { cyrb53 } from '../shared/hash'
 import { plain } from '../shared/refs'
-import type { ChatMessage, Concept, MajorPoint, MajorType, Term, Tier } from '../shared/types'
+import type { ChatBox, ChatMessage, Concept, MajorPoint, MajorType, Term, Tier } from '../shared/types'
 import type { Ctx } from './ctx'
 import { addChat, addReadTime, getAiCache, getPaper, getPaperCache, listChats, putAiCache, putPaperCache, updatePaper } from './db'
 import { safeFileName } from './exporter'
@@ -23,14 +23,14 @@ export function registerPaper(c: Ctx): void {
 
   ipcMain.handle(
     'chat:send',
-    (e, reqId: string, paperId: string, msg: { content: string; quote: string | null; image: string | null; context?: string | null; paperIds?: string[]; think?: ThinkLevel }) => {
+    (e, reqId: string, paperId: string, msg: { content: string; quote: string | null; image: string | null; box?: ChatBox | null; context?: string | null; paperIds?: string[]; think?: ThinkLevel }) => {
       const paper = getPaper(db, paperId)
       if (!paper) throw new Error(t('论文不存在'))
       const s = settings.get()
       const lang = s.aiLang || s.targetLang
       const history = listChats(db, paperId).slice(-12)
       const others = (msg.paperIds ?? []).filter((x) => x !== paperId).slice(0, 19)
-      const user: ChatMessage = { id: newId(), paperId, role: 'user', content: msg.content, quote: msg.quote, image: msg.image, createdAt: Date.now(), paperIds: others }
+      const user: ChatMessage = { id: newId(), paperId, role: 'user', content: msg.content, quote: msg.quote, image: msg.image, ...(msg.box ? { box: msg.box } : {}), createdAt: Date.now(), paperIds: others }
       addChat(db, user)
       // 上下文：这篇占六成，其余几篇平分剩下的
       const budget = ai.ctxChars()
@@ -78,8 +78,10 @@ export function registerPaper(c: Ctx): void {
       c.streamer.streamTo(e.sender, reqId, messages, {
         kind,
         think: kind === 'text' ? thinkOf(msg.think) : undefined,
-        onFinish: (full, info) =>
+        onFinish: (full, info) => {
           addChat(db, { id: newId(), paperId, role: 'assistant', content: full, quote: null, image: null, createdAt: Date.now(), reasoning: info.reasoning || null, thinkMs: info.thinkMs })
+          c.cn.chatChanged(paperId)
+        }
       })
       return user
     }
@@ -195,7 +197,10 @@ export function registerPaper(c: Ctx): void {
   })
 
   ipcMain.handle('papers:readTime', (_e, paperId: string, ms: number) => {
-    if (ms > 0 && ms < 10 * 60_000) addReadTime(db, paperId, Math.round(ms))
+    if (ms > 0 && ms < 10 * 60_000) {
+      addReadTime(db, paperId, Math.round(ms))
+      c.cn.readTime(paperId, Math.round(ms))
+    }
   })
   ipcMain.handle('papers:readStats', (_e, paperId: string) => {
     const rows = db.prepare('SELECT day, ms FROM reading_log WHERE paper_id = ? ORDER BY day').all(paperId) as { day: string; ms: number }[]

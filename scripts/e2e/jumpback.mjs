@@ -19,7 +19,7 @@ try {
   await sleep(2000)
 
   // —— 对照模式
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
   await sleep(2500)
   // 找正文里第一个 [n] 引用，滚到它，点它
   const at = await ev(() => {
@@ -64,7 +64,7 @@ try {
   ok('⌘[ 也回到原处，还在阅读页', Math.abs((await top('.reflow-scroller')) - before) < 4 && (await win.locator('.reflow').count()) === 1)
 
   // —— 原文模式：点 PDF 里的引用链接
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][0]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][0]?.click())
   await sleep(2500)
   const link = await ev(() => {
     const sc = document.querySelector('.pdf-scroller')

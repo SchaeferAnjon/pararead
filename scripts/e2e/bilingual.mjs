@@ -25,7 +25,12 @@ const pick = async (label) => {
   if (label === '上下' || label === '左右') {
     if (await win.locator('.aa-pop').count()) await win.keyboard.press('Escape')
     // 窄窗口里这两格只留图标：按位置点（第 2 格上下、第 3 格左右）
-    await win.locator('.mid-bar .mode-seg .seg-item').nth(label === '上下' ? 1 : 2).click()
+    if (!(await win.locator('.mid-bar .mode-seg .seg-item.on', { hasText: '重排' }).count())) await win.locator('.mid-bar .mode-seg .seg-item', { hasText: '重排' }).click()
+    // 正文列窄时排法只留现在那一格，点一下换另一种
+    const cells = win.locator('.mid-bar .lay-seg .seg-item')
+    if ((await cells.count()) === 1) {
+      if ((await ev(() => window.api.getSettings())).trLayout !== (label === '上下' ? 'stack' : 'side')) await cells.click()
+    } else await cells.nth(label === '上下' ? 0 : 1).click()
   } else {
     if (!(await win.locator('.aa-pop').count())) await win.locator('button[title="显示设置"]').click()
     await win.locator('.aa-pop .seg-item', { hasText: label }).click()
@@ -42,7 +47,7 @@ try {
   for (let i = 0; i < 90 && !(await ev((x) => window.api.getPaper(x), id)).reflow.ready; i++) await sleep(1000)
   await win.dblclick(`[data-paper="${id}"]`)
   await sleep(1500)
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
   for (let i = 0; i < 60 && (await win.locator('.blk.paragraph .tr-text').count()) < 4; i++) await sleep(1000)
 
   let m = await measure()
@@ -80,7 +85,7 @@ try {
   const selInfo = await ev(() => ({ sel: String(getSelection()).slice(0, 60), pop: [...document.querySelectorAll('.pop')].map((n) => n.className), at: document.elementFromPoint(innerWidth / 2, 300)?.className }))
   ok('左右排时划词出工具条', (await win.locator('.sel-toolbar').count()) === 1, JSON.stringify({ ...selInfo, p2 }))
   if (!(await win.locator('.sel-toolbar').count())) console.log(await shot(win, 'bi-debug'))
-  await win.locator('.sel-toolbar .dot-btn').first().click({ timeout: 5000 })
+  await win.locator('.sel-toolbar .tb-kind[data-kind="key"]').click({ timeout: 5000 })
   await sleep(600)
   const anns = await ev((x) => window.api.annList(x), id)
   ok('高亮存上了', anns.length === 1 && anns[0].text.length > 5, anns[0]?.text.slice(0, 40))

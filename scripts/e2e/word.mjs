@@ -7,7 +7,7 @@ import { request } from 'node:https'
 import { createRequire } from 'node:module'
 import { close, launch, ROOT, shot, sleep } from './drive.mjs'
 
-const require = createRequire(process.env.PLAYWRIGHT_ROOT ?? '/opt/homebrew/lib/node_modules/')
+const require = createRequire(process.env.PLAYWRIGHT_ROOT ?? import.meta.url)
 const { chromium } = require('playwright')
 const ORIGIN = 'https://localhost:27484'
 const ok = (name, cond, extra = '') => (console.log(`${cond ? '✓' : '✗'} ${name}${extra ? `：${extra}` : ''}`), cond || (process.exitCode = 1))

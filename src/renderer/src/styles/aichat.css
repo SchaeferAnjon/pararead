@@ -1,0 +1,40 @@
+/* 和画布笔记共用的 AI 对话组件（@cn/ai-chat）要的几样全局样子：画布笔记有、ParaRead 原来没有的补上（照 ParaRead 的 token） */
+.btn-xs { height: 22px; padding: 0 7px; font-size: var(--fs-sm); gap: 4px; }
+.btn-sm { height: 24px; padding: 0 8px; font-size: var(--fs-sm); }
+.lnk { color: var(--accent-text); background: none; padding: 0; display: inline-flex; align-items: center; gap: 2px; }
+.lnk:hover { text-decoration: underline; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.spin-icon { animation: spin .9s linear infinite; flex: none; }
+@keyframes blk-in { from { opacity: 0; transform: translateY(2px); } }
+
+/* 右栏的对话那一格：组件挂在 .reading-ai 下面画（气泡、回答头、材料一排），和画布笔记读 PDF 的对话同一套 */
+.chat.reading-ai .msgs { gap: 14px; }
+.chat.reading-ai .think-row { display: flex; flex-direction: column; gap: 2px; }
+.chat .borrow b { font-weight: 500; }
+.chat .borrow { margin: 0 12px 8px; padding: 10px 12px; border-radius: var(--r-md); background: var(--bg-elevated); box-shadow: inset 0 0 0 1px var(--stroke); display: flex; flex-direction: column; gap: 6px; font-size: var(--fs); }
+.chat .borrow .sub { color: var(--text-2); font-size: var(--fs-sm); }
+.chat .borrow .row2 { display: flex; gap: 6px; }
+.chat .ai-input-wrap { padding: 0; flex: none; }
+
+/* 各家 AI 的标志（@cn/ai-chat 的 engine-logo；画布笔记这几条在它自己的 app.css） */
+.eng-logo { display: inline-grid; place-items: center; flex: none; }
+.eng-logo svg { width: 100%; height: 100%; }
+:disabled > .eng-logo, :disabled .eng-logo { opacity: .45; }
+.chat .am .follow { margin-top: 10px; }
+
+/* 共用组件里写死的白字、开关滑块：ParaRead 叫 --on-accent */
+.chat { --acc-on: var(--on-accent); --text-on-accent: var(--on-accent); }
+/* 字里 ①② 的编号：强调色只给按钮、开关这些，编号用灰底（深色下白字压在近白的强调色上看不见） */
+.chat .aiin .chipm .nb, .chat .um.mq .fn { background: var(--fill-3); color: var(--text); }
+/* 回答下面那排右边：ParaRead 不用胶囊，圆角 6 */
+.chat .cn-ab-reply { border-radius: var(--r-sm); }
+/* 谁来答菜单：半透明底加模糊，不透出下面的字 */
+.ai-menu { -webkit-backdrop-filter: var(--blur-pop); backdrop-filter: var(--blur-pop); }
+.reading-ai .um { text-wrap: pretty; }
+/* 空对话：一句招呼，快速开始做成输入框上面的一排小按钮 */
+.chat .greet { display: flex; flex-direction: column; gap: 4px; }
+.chat .greet .gt { font-size: var(--fs); font-weight: 500; }
+.chat .greet .gs { font-size: var(--fs-sm); color: var(--text-2); }
+.chat .quick { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 6px; flex: none; }
+.chat .quick .qb { height: 24px; padding: 0 8px; border-radius: var(--r-sm); border: 1px solid var(--btn-stroke); background: var(--btn-bg); font-size: var(--fs-sm); color: var(--text); }
+.chat .quick .qb:hover { background: var(--btn-bg-hover); }

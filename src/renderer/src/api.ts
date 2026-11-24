@@ -1,6 +1,10 @@
 import type { ThinkLevel } from '@shared/thinking'
+import type { BabelInstallState, LayoutTrState } from '@shared/layoutTr'
+import type { ChatAskReq, ChatPick } from '../../main/chatAi'
+import type { ChatEngineInfo } from '../../main/ipcChat'
 import type {
   Annotation,
+  ChatBox,
   ChatMessage,
   Concept,
   Folder,
@@ -26,6 +30,13 @@ import type {
   IdeaHow
 } from '@shared/types'
 import type { SenseSentence } from '@shared/senses'
+import type { HlKind, ReadAt } from '@cn/format'
+import type { VaultFolder } from '@cn/family/node'
+export type { CnLinkOf, CnState, CnMigrationView, PlaceInfo, PlacePreview } from '../../main/cnLink'
+import type { CnLinkOf, CnState, CnMigrationView, PlaceInfo, PlacePreview } from '../../main/cnLink'
+export type { HlKind, VaultFolder }
+/** 深链 pararead://open 打开时带的：翻到哪一页、用哪种看法、从画布笔记哪个文件夹首页来的 */
+export type OpenExtra = { page: number | null; view: 'bilingual' | 'original' | null; back: { root: string; folder: string } | null; blockId: string | null }
 
 export interface ReflowProgress {
   paperId: string
@@ -144,7 +155,7 @@ export interface Api {
   zoteroControl(action: 'pause' | 'resume' | 'cancel'): Promise<void>
   onZoteroProgress(cb: (p: { itemId: number; state: ZoteroState; error?: string; paperId?: string }) => void): Off
   onZoteroFinished(cb: () => void): Off
-  onOpenPaper(cb: (id: string) => void): Off
+  onOpenPaper(cb: (id: string, extra?: OpenExtra) => void): Off
   onToast(cb: (text: string) => void): Off
   getReflow(id: string): Promise<ReflowDoc | null>
   reflowProgress(id: string): Promise<ReflowProgress | null>
@@ -162,9 +173,26 @@ export interface Api {
   chatSend(
     reqId: string,
     paperId: string,
-    msg: { content: string; quote: string | null; image: string | null; context?: string | null; paperIds?: string[]; think?: ThinkLevel }
+    msg: { content: string; quote: string | null; image: string | null; box?: ChatBox | null; context?: string | null; paperIds?: string[]; think?: ThinkLevel }
   ): Promise<ChatMessage>
   chatDelete(id: string): Promise<void>
+  /** 右栏 AI 问答由谁答（照画布笔记）：设置里那家（id 'pararead'）加画布笔记那十家；pick 是输入框底下选着的，omni 是全能模式 */
+  chatEngines(): Promise<{ list: ChatEngineInfo[]; pick: ChatPick; omni: boolean }>
+  chatSetPick(p: ChatPick): Promise<void>
+  chatSetOmni(on: boolean): Promise<void>
+  /** 问一次：回答走 onStream；这一家要 Key 而 ParaRead 没有、画布笔记有时不问，回 borrow */
+  chatAsk(reqId: string, paperId: string, req: ChatAskReq): Promise<{ user: ChatMessage } | { borrow: string }>
+  /** 贴的图存进数据目录，回名字；chatPasted 拿回能显示的 data URL */
+  chatPaste(bytes: Uint8Array, mime: string): Promise<string>
+  chatPasted(name: string): Promise<string>
+  /** 底行「+」：系统选图框，回存好的名字和文件名 */
+  chatPickImages(room: number): Promise<{ name: string; label: string }[]>
+  chatNewConversation(paperId: string): Promise<void>
+  /** 「用画布笔记那把？」yes 存一份到 ParaRead，no 记下问过了 */
+  chatBorrow(id: string, yes: boolean): Promise<{ ok: boolean; message?: string }>
+  /** ParaRead 没有、画布笔记存着的 Key（设置 › AI 服务里「用画布笔记那把」） */
+  chatNotesKeys(): Promise<{ id: string; provider: string; name: string }[]>
+  onChatEnginesChanged(cb: () => void): Off
   chatExport(paperId: string, onlyId?: string): Promise<string | null>
   majorPoints(paperId: string, density?: 'less' | 'default' | 'more', force?: boolean): Promise<MajorPoint[]>
   /** 术语表（问一次 AI，按论文缓存） */
@@ -261,6 +289,32 @@ export interface Api {
   /** 送进 Word 窗格的收件箱；没开 Word 插件的本机服务时报 word-off */
   ideaToWord(id: string, how: IdeaHow, lang: 'en' | 'zh'): Promise<{ paneOpen: boolean }>
   onIdeasChanged(cb: () => void): Off
+  /** 把这篇的「看不懂」「有质疑」和 AI 问答写进画布笔记库里那篇配对笔记（pdf 是 PDF 在库里的路径；写法全靠 @cn/format，src/shared/pairedNote.ts） */
+  writePairedNote(paperId: string, vaultRoot: string, pdf: string): Promise<{ note: string; sections: number; changed: boolean }>
+  // 画布笔记联动（main/cnLink.ts）
+  cnState(): Promise<CnState>
+  cnConnect(root: string): Promise<CnState>
+  cnChoose(): Promise<CnState | null>
+  cnDisconnect(root: string): Promise<CnState>
+  cnSetFolders(root: string, folders: string[]): Promise<CnState>
+  cnHide(root: string, path: string, hide: boolean): Promise<void>
+  cnTree(root: string): Promise<VaultFolder[]>
+  cnScan(): Promise<void>
+  cnKinds(paperId: string | null): Promise<HlKind[]>
+  cnCountKind(root: string, key: string): Promise<number>
+  cnRenameKind(root: string, key: string, name: string, all: boolean): Promise<number>
+  cnLink(paperId: string): Promise<CnLinkOf | null>
+  cnWatch(paperId: string): Promise<boolean>
+  cnClosed(paperId: string): Promise<void>
+  cnReadAt(paperId: string): Promise<(ReadAt & { blockId: string | null }) | null>
+  cnPlaceInfo(paperId: string): Promise<PlaceInfo>
+  cnPlacePreview(paperId: string, root: string, folder: string): Promise<PlacePreview>
+  cnPlace(paperId: string, root: string, folder: string): Promise<PlacePreview>
+  cnOpenInCn(paperId: string | null, what: 'note' | 'pdf' | 'folder', o?: { page?: number; folder?: string }): Promise<string>
+  cnMigrate(): Promise<CnMigrationView | null>
+  cnUndoMigration(): Promise<{ notes: number; kept: number }>
+  cnSettled(): Promise<void>
+  onCnAnnChanged(cb: (paperId: string) => void): Off
   /** 按标签讲一处：流式走 onStream，讲完存在标注上并推 onExplainSaved；focus 只围着它讲，again 是「还不懂，换个讲法」 */
   explainStart(reqId: string, annId: string, o?: { focus?: string; again?: boolean }): Promise<Pick<ExplainVersion, 'lit' | 'chunks'>>
   explainAsk(reqId: string, annId: string, question: string): Promise<void>
@@ -289,6 +343,23 @@ export interface Api {
   mineruInstall(): Promise<void>
   mineruStopInstall(): Promise<void>
   onMineruInstall(cb: (s: MineruInstallState) => void): Off
+  /** 保版面翻译组件 BabelDOC（对照、译文看法）：装到哪了、开始装、暂停 */
+  layoutTrInstallState(): Promise<BabelInstallState>
+  layoutTrInstall(): Promise<void>
+  layoutTrStopInstall(): Promise<void>
+  onLayoutTrInstall(cb: (s: BabelInstallState) => void): Off
+  /** 一篇的保版面翻译到哪了；focus 是告诉主进程在看第几页（排在最前面翻） */
+  layoutTrState(paperId: string, total: number): Promise<LayoutTrState>
+  layoutTrFocus(paperId: string, page: number, total: number): Promise<LayoutTrState>
+  layoutTrBlur(paperId: string): Promise<void>
+  layoutTrPause(paperId: string): Promise<LayoutTrState>
+  layoutTrResume(paperId: string): Promise<LayoutTrState>
+  layoutTrRedo(paperId: string, page: number): Promise<LayoutTrState>
+  layoutTrFile(paperId: string, name: string): Promise<Uint8Array>
+  /** 设置 › 翻译：在访达里看组件、删掉组件（移到废纸篓） */
+  layoutTrReveal(): Promise<void>
+  layoutTrRemove(): Promise<void>
+  onLayoutTr(cb: (s: LayoutTrState) => void): Off
   /** 浏览器插件的接收口开着没有，插件文件夹在哪 */
   connectorStatus(): Promise<{ running: boolean; port: number; error: string; dir: string }>
   connectorReveal(): Promise<void>

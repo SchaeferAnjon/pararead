@@ -98,7 +98,7 @@ try {
   ok('中途停', st.err === '已停止' && running !== '0' && children() === '0', `停之前 ${running} 个进程，停之后 ${children()} 个｜${st.err}`)
 
   // 对照：整篇翻译一段一段调
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
   let tr = 0
   for (let i = 0; i < 45 && tr < 6; i++) (await sleep(1000)), (tr = await win.locator('.tr-text').count())
   ok('对照翻译', tr >= 6, `${tr} 段，头一段：${(await win.locator('.tr-text').first().innerText().catch(() => '')).slice(0, 40)}`)

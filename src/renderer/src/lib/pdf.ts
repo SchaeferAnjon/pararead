@@ -6,8 +6,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
 export { pdfjs }
 
-export async function loadPdf(paperId: string): Promise<pdfjs.PDFDocumentProxy> {
-  const data = await api.pdfData(paperId)
+export function openPdfData(data: Uint8Array): Promise<pdfjs.PDFDocumentProxy> {
   return pdfjs.getDocument({
     data,
     cMapUrl: './pdfjs/cmaps/',
@@ -16,4 +15,8 @@ export async function loadPdf(paperId: string): Promise<pdfjs.PDFDocumentProxy> 
     wasmUrl: './pdfjs/wasm/',
     iccUrl: './pdfjs/iccs/'
   }).promise
+}
+
+export async function loadPdf(paperId: string): Promise<pdfjs.PDFDocumentProxy> {
+  return openPdfData(await api.pdfData(paperId))
 }

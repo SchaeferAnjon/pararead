@@ -12,7 +12,7 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { close, launch, PAPER, ROOT, shot, sleep } from './drive.mjs'
 
-const require = createRequire(process.env.PLAYWRIGHT_ROOT ?? '/opt/homebrew/lib/node_modules/')
+const require = createRequire(process.env.PLAYWRIGHT_ROOT ?? import.meta.url)
 const { chromium } = require('playwright')
 const dir = process.argv[2]
 const PAPER2 = process.env.E2E_PAPER2
@@ -113,7 +113,7 @@ try {
   await until('重排好', async () => (await ev((x) => window.api.getPaper(x), pid)).reflow.ready, 180)
   await win.dblclick(`[data-paper="${pid}"]`)
   await sleep(1500)
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
   await win.waitForSelector('.blk .src')
   await sleep(1200)
 
@@ -190,7 +190,7 @@ try {
   await snap('ins-05-doubt-and-idea', { '有质疑的红波浪线和灯泡在同一句': '.reflow .idea-gut >> nth=-1' })
 
   // 5. 原文模式：对照模式收的在页边也有灯泡；划一句收进来
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][0]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][0]?.click())
   await win.waitForSelector('.page[data-page="2"]')
   await ev(() => document.querySelector('.page[data-page="2"]').scrollIntoView())
   await until('第 2 页的文字层', () => ev(() => (document.querySelector('.page[data-page="2"] .textLayer')?.textContent ?? '').replace(/\s+/g, '').includes('Akeystrength')), 30)

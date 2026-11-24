@@ -1,0 +1,60 @@
+/*
+ * canvas-notes 在家族组件（ui.css）上的改动，按 DESIGN.md「组件」：
+ * 按钮都是胶囊；主按钮是黑色胶囊（深色反过来），不用强调色。
+ */
+
+body {
+  background: var(--win);
+  font-size: 13px;
+  line-height: 1.5;
+  text-autospace: normal;
+  font-kerning: normal;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 字重最多 600（DESIGN.md 字体）：<b>、<strong> 默认是 700 */
+b,
+strong {
+  font-weight: 600;
+}
+
+.btn {
+  border-radius: var(--r-full);
+  height: 30px;
+  border-color: var(--line2);
+  box-shadow: none;
+  background: var(--card);
+}
+
+.btn.btn-sm {
+  height: 28px;
+}
+
+.btn-primary {
+  background: var(--solid);
+  border-color: transparent;
+  color: var(--solid-t);
+  box-shadow: none;
+}
+
+.btn-primary:hover {
+  background: var(--solid);
+  opacity: 0.88;
+}
+
+.btn-primary:active {
+  background: var(--solid);
+  opacity: 0.8;
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.ci {
+  flex: none;
+}

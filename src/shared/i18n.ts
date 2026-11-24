@@ -10,6 +10,7 @@ import ja from '../i18n/ja.json'
 import ko from '../i18n/ko.json'
 import zhHant from '../i18n/zh-Hant.json'
 import { kbd } from './kbd'
+import { setI18n } from '@cn/ai-engines/shared'
 
 export const UI_LANGS = ['zh', 'zh-Hant', 'en', 'ja', 'ko', 'de', 'fr', 'es', 'it'] as const
 export type UiLang = (typeof UI_LANGS)[number]
@@ -60,3 +61,12 @@ export function t(s: string, ...args: unknown[]): string {
 // 窗口里：preload 已经把主进程定下来的语言放在 window.__uiLang
 declare const window: { __uiLang?: string } | undefined
 if (typeof window !== 'undefined' && window.__uiLang) setUiLang(window.__uiLang)
+
+// 和画布笔记共用的 AI 包（@cn/ai-engines、@cn/ai-chat）里的字也照这里的表翻：它们的占位写 {name}，按名字填
+setI18n({
+  t: (key, p) => {
+    const out = t(key)
+    return p ? out.replace(/\{(\w+)\}/g, (m, k: string) => (k in p ? String(p[k]) : m)) : out
+  },
+  list: (items) => items.join(lang === 'zh' || lang === 'zh-Hant' || lang === 'ja' ? '、' : ', ')
+})

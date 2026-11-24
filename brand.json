@@ -1,0 +1,12 @@
+{
+  "name": "ParaRead",
+  "appId": "com.jiazonghan.pararead",
+  "scheme": "pararead",
+  "license": "GPL-3.0-or-later",
+  "author": "Jia Zonghan",
+  "year": 2026,
+  "repo": "SchaeferAnjon/pararead",
+  "site": "https://pararead.us-cloud.uk",
+  "contact": "infoschaeferanjon@gmail.com",
+  "notesRepo": "SchaeferAnjon/canvas-notes"
+}

@@ -1,8 +1,8 @@
 // 阅读页三处新控件（2026-11-15，方向 A「模式里直接切」）在真窗口里走一遍：
-// 1. 模式切换四格：原文 / 上下对照 / 左右对照 / 速览，⌘2 在上下和左右之间换；
+// 1. 看法五格：原文 / 对照 / 译文 / 重排 / 速览（2026-11-23 起，以前的上下、左右对照并进「重排」，旁边两格换排法），⌘4 在上下和左右之间换；
 // 2. 意群按钮：点一下开关，小箭头选文字着色或下划线，上下、左右两种排法都看；
 // 3. 「显示」弹层的十二种译文样式：鼠标停上去正文先换（不存），点了才存，逐个量画出来的样子；意群下划线开着时三种下划线和马克笔不画；
-// 4. 问答输入框「思考 · 档位」：deepseek / glm-5.3 / kimi-k3 / 本机 Claude Code 档位各不同，每个模型记一份，设置里同一个值；真发一次 DeepSeek 看「开」生效。
+// 4. 问答输入框底行「想多久」那一颗：deepseek / glm-5.3 / kimi-k3 / 本机 Claude Code 档位各不同，每个模型记一份，设置里同一个值；真发一次 DeepSeek 看「开」生效。
 // DEEPSEEK_API_KEY=… E2E_PAPER=<一篇论文的 PDF> node scripts/e2e/reading-controls.mjs <新的数据目录>
 import { close, launch, PAPER, shot, sleep } from './drive.mjs'
 
@@ -14,7 +14,8 @@ let passed = 0
 const ok = (name, pass, info = '') => (console.log(pass ? '通过' : '没过', name, info), pass ? passed++ : fails.push(name))
 const settings = () => ev(() => window.api.getSettings())
 const art = () => ev(() => document.querySelector('article.reflow')?.className ?? '')
-const seg = (label) => win.locator('.mid-bar .mode-seg .seg-item', { hasText: label })
+// 「上下对照」「左右对照」是重排旁边那两格（只有图标，按悬停提示找）；别的是看法五格
+const seg = (label) => (/^(上下|左右)对照$/.test(label) ? win.locator(`.mid-bar .lay-seg .seg-item[title^="${label}"]`) : win.locator('.mid-bar .mode-seg .seg-item', { hasText: label }))
 const openAa = async () => {
   if (!(await win.locator('.aa-pop').count())) await win.locator('.mid-bar button[title="显示设置"]').click()
   await sleep(200)
@@ -48,9 +49,11 @@ try {
   await win.dblclick(`[data-paper="${id}"]`)
   await sleep(1500)
 
-  // ---- 1. 模式切换四格 ----
+  // ---- 1. 看法五格 ----
   const labels = await win.locator('.mid-bar .mode-seg .seg-item').allInnerTexts()
-  ok('模式切换是四格：原文、上下对照、左右对照、速览', labels.map((x) => x.trim()).join('|') === '原文|上下对照|左右对照|速览', labels.join('|'))
+  ok('看法是五格：原文、对照、译文、重排、速览', labels.map((x) => x.trim()).join('|') === '原文|对照|译文|重排|速览', labels.join('|'))
+  await seg('重排').click()
+  await sleep(500)
   await seg('上下对照').click()
   for (let i = 0; i < 90 && (await win.locator('.blk.paragraph .tr-text').count()) < 6; i++) await sleep(1000)
   ok('点「上下对照」进对照、上下排', !(await art()).includes('lay-side') && (await seg('上下对照').getAttribute('class')).includes('on'))
@@ -59,13 +62,13 @@ try {
   ok('点「左右对照」换成左右排，设置里记成 side', (await art()).includes('lay-side') && (await settings()).trLayout === 'side')
   await app.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById('mode-reflow').click())
   await sleep(500)
-  ok('已经在对照里按 ⌘2：左右换回上下', !(await art()).includes('lay-side') && (await settings()).trLayout === 'stack')
+  ok('已经在重排里按 ⌘4：左右换回上下', !(await art()).includes('lay-side') && (await settings()).trLayout === 'stack')
   await seg('原文').click()
   await sleep(800)
-  ok('点「原文」到原文模式，对照两格都不亮', (await win.locator('.pdf-scroller, .pdf-page, canvas').count()) > 0 && !(await seg('上下对照').getAttribute('class')).includes('on'))
+  ok('点「原文」到原文模式，「重排」不亮、排法两格收起', (await win.locator('.pdf-scroller, .pdf-page, canvas').count()) > 0 && !(await seg('重排').getAttribute('class')).includes('on') && (await win.locator('.mid-bar .lay-seg').count()) === 0)
   await app.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById('mode-reflow').click())
   await sleep(800)
-  ok('在原文里按 ⌘2：回到对照，还是上次的上下排', (await art()).includes('reflow') && !(await art()).includes('lay-side'))
+  ok('在原文里按 ⌘4：回到重排，还是上次的上下排', (await art()).includes('reflow') && !(await art()).includes('lay-side'))
   await ev(() => window.api.setSettings({ display: 'src' }))
   await sleep(300)
   ok('只看英文时没有意群按钮', (await win.locator('.sense-split').count()) === 0)
@@ -204,23 +207,25 @@ try {
   await ev(() => window.api.setSettings({ trStyle: 'text' }))
 
   // ---- 4. 思考强度 ----
-  const chip = win.locator('.col-right .think-chip')
-  const menuItems = () => win.locator('.pop.menu .menu-item.two').allInnerTexts()
+  // 2026-11-23 起：思考档在输入框底行「想多久」那一颗（@cn/ai-chat 的 AiPicker，和画布笔记同一个），设置里那家的档就是它的 effort
+  const chip = win.locator('.col-right [data-testid=ai-effort]')
+  const chipIs = async (name) => (await chip.innerText().catch(() => '')).trim() === name
+  const menuItems = () => win.locator('.aipk-menu [role=menuitemradio]').allInnerTexts()
   const pickLevel = async (name) => {
     await chip.click()
     await sleep(200)
-    await win.locator('.pop.menu .menu-item.two .mi-l', { hasText: new RegExp(`^${name}$`) }).click()
-    await sleep(400)
+    await win.locator('.aipk-menu [role=menuitemradio]').filter({ has: win.locator('.nm', { hasText: new RegExp(`^${name}$`) }) }).first().click()
+    await sleep(600)
   }
-  ok('DeepSeek 第一次用：「思考 · 关」', (await chip.innerText()).includes('思考 · 关'))
+  ok('DeepSeek 第一次用：想多久「关」', await chipIs('关'))
   await chip.click()
   await sleep(200)
   let items = await menuItems()
-  ok('DeepSeek 只有 关 / 开 两档，每档一句说明', items.length === 2 && /^关\n/.test(items[0]) && /^开\n/.test(items[1]) && (await win.locator('.pop.menu .menu-note', { hasText: '只能开或关' }).count()) === 1, items.join(' | '))
+  ok('DeepSeek 只有 关 / 开 两档，每档一句说明', items.length === 2 && /^关\n./.test(items[0]) && /^开\n./.test(items[1]), items.join(' | '))
   console.log(await shot(win, 'rc-09-think-deepseek'))
   await win.keyboard.press('Escape')
   await pickLevel('开')
-  ok('选「开」：按钮写「思考 · 开」，设置里 deepseek-flash 记成 on', (await chip.innerText()).includes('思考 · 开') && (await settings()).thinkLevels['deepseek-flash'] === 'on')
+  ok('选「开」：按钮写「开」，设置里 deepseek-flash 记成 on', (await chipIs('开')) && (await settings()).thinkLevels['deepseek-flash'] === 'on')
 
   // 真发一次：开着时有思考过程，回答上面写「已思考（开 · …）」
   const st = { text: '', reasoning: '', done: 0, err: '' }
@@ -230,43 +235,40 @@ try {
   await win.locator('.col-right textarea').press('Enter')
   for (let i = 0; i < 240 && !st.done && !st.err; i++) await sleep(500)
   await sleep(800)
-  const thinkLine = await win.locator('.msg-ai.last .think').innerText().catch(() => '')
-  ok('DeepSeek「开」真发一次：先想再答，回答上面写已思考（开 …）', !st.err && st.reasoning.length > 50 && st.text.length > 5 && /已思考（开/.test(thinkLine), `${st.err}思考 ${st.reasoning.length} 字｜${thinkLine}｜${st.text.slice(0, 40)}`)
+  const last = win.locator('.col-right [data-testid=pr-answer]').last()
+  const thinkLine = `${await last.locator('.read .by').innerText().catch(() => '')}｜${await last.locator('.think-row').innerText().catch(() => '')}`
+  ok('DeepSeek「开」真发一次：先想再答，回答头写「· 开」，下面有「已思考」', !st.err && st.reasoning.length > 50 && st.text.length > 5 && /· 开/.test(thinkLine) && /已思考/.test(thinkLine), `${st.err}思考 ${st.reasoning.length} 字｜${thinkLine}｜${st.text.slice(0, 40)}`)
   console.log(await shot(win, 'rc-10-think-sent'))
 
   await ev(() => window.api.setSettings({ provider: 'zhipu', textModel: 'glm-5.3-flash', visionModel: 'glm-4.6v' }))
   await sleep(600)
-  ok('换 glm-5.3：「思考 · 低」', (await chip.innerText()).includes('思考 · 低'))
+  ok('换 glm-5.3：想多久「低」', await chipIs('低'))
   await chip.click()
   await sleep(200)
   items = await menuItems()
-  ok('glm-5.3 三档 低 / 高 / 最高，写明关不掉', items.length === 3 && items.map((x) => x.split('\n')[0]).join('') === '低高最高' && (await win.locator('.pop.menu .menu-note', { hasText: '关不掉' }).count()) === 1, items.map((x) => x.split('\n')[0]).join(','))
+  ok('glm-5.3 三档 低 / 高 / 最高', items.length === 3 && items.map((x) => x.split('\n')[0]).join('') === '低高最高', items.map((x) => x.split('\n')[0]).join(','))
   console.log(await shot(win, 'rc-11-think-glm'))
   await win.keyboard.press('Escape')
   await pickLevel('最高')
-  ok('glm-5.3 选「最高」记成 max', (await settings()).thinkLevels['glm-5.3-flash'] === 'max' && (await chip.innerText()).includes('思考 · 最高'))
+  ok('glm-5.3 选「最高」记成 max', (await settings()).thinkLevels['glm-5.3-flash'] === 'max' && (await chipIs('最高')))
 
   await ev(() => window.api.setSettings({ provider: 'kimi', textModel: 'kimi-k3', visionModel: 'kimi-k3' }))
   await sleep(600)
-  ok('换 kimi-k3：按钮写「总会先想」', (await chip.innerText()).trim() === '总会先想')
-  await chip.click()
-  await sleep(200)
-  ok('kimi-k3 菜单里只有一条「总会先想」，点不了，带说明', (await win.locator('.pop.menu .menu-item.two').count()) === 1 && (await win.locator('.pop.menu .menu-item.two').isDisabled()) && (await win.locator('.pop.menu').innerText()).includes('接口没有档位'))
+  ok('换 kimi-k3：没有能选的档，「想多久」那一颗不出', (await chip.count()) === 0)
   console.log(await shot(win, 'rc-12-think-kimi'))
-  await win.keyboard.press('Escape')
 
   await ev(() => window.api.setSettings({ provider: 'claude-code', textModel: 'haiku', visionModel: 'haiku' }))
   await sleep(600)
   await chip.click()
   await sleep(200)
   items = await menuItems()
-  ok('本机 Claude Code 五档 低 / 中 / 高 / 很高 / 最高，从低开始', items.map((x) => x.split('\n')[0]).join(',') === '低,中,高,很高,最高' && (await win.locator('.pop.menu .menu-item.two .tick svg').count()) === 1, items.map((x) => x.split('\n')[0]).join(','))
+  ok('本机 Claude Code 五档 低 / 中 / 高 / 很高 / 最高，从低开始', items.map((x) => x.split('\n')[0]).join(',') === '低,中,高,很高,最高' && (await win.locator('.aipk-menu [role=menuitemradio][aria-checked=true]').count()) === 1, items.map((x) => x.split('\n')[0]).join(','))
   console.log(await shot(win, 'rc-13-think-cc'))
   await win.keyboard.press('Escape')
 
   await ev(() => window.api.setSettings({ provider: 'deepseek', textModel: 'deepseek-flash', visionModel: 'deepseek-flash' }))
   await sleep(600)
-  ok('换回 DeepSeek：还是记着的「开」', (await chip.innerText()).includes('思考 · 开'))
+  ok('换回 DeepSeek：还是记着的「开」', await chipIs('开'))
 
   // 设置 › AI 服务：同一个值；在设置里改，问答框跟着变
   await ev(() => window.api.openSettings('ai'))
@@ -284,7 +286,7 @@ try {
   ok('设置里改成「关」、各家档位表展开', (await sw.locator('.vtable tr').count()) === 7 && (await settings()).thinkLevels['deepseek-flash'] === 'off')
   console.log(await shot(sw, 'rc-14-settings-ai'))
   await sleep(300)
-  ok('问答框跟着变成「思考 · 关」', (await chip.innerText()).includes('思考 · 关'))
+  ok('问答框跟着变成「关」', await chipIs('关'))
   // 设置 › 翻译：十二格、预览、意群三态
   await sw.locator('.nav-item', { hasText: '翻译' }).click()
   await sleep(500)
@@ -328,7 +330,7 @@ try {
     const r = (sel) => document.querySelector(sel)?.getBoundingClientRect()
     return { mid: Math.round(mid.right), show: Math.round(r('button[title="显示设置"]').right), sense: !!r('.sense-split'), segText: document.querySelector('.mode-seg').innerText.replace(/\s/g, '') }
   })
-  ok('窄窗口：对照两格只留图标，显示按钮还在标题栏里', bar.segText === '原文速览' && bar.show <= bar.mid && bar.sense, JSON.stringify(bar))
+  ok('窄窗口：看法五格还在、排法只留一格，显示按钮还在标题栏里', bar.segText === '原文对照译文重排速览' && (await win.locator('.mid-bar .lay-seg .seg-item').count()) === 1 && bar.show <= bar.mid && bar.sense, JSON.stringify(bar))
   console.log(await shot(win, 'rc-20-narrow'))
 } catch (e) {
   fails.push(String(e))

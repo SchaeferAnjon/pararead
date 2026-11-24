@@ -20,12 +20,14 @@ const only = process.argv.includes('--lang') ? process.argv[process.argv.indexOf
 
 const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : /\.(ts|tsx)$/.test(e.name) ? [path.join(d, e.name)] : []))
 const keys = new Set()
-for (const f of walk(path.join(ROOT, 'src'))) {
+// 和画布笔记共用的 AI 包里的字（它们用 t，组件里要「说的那一刻」的语言时叫 tNow）也进 ParaRead 的表
+const SHARED = ['ai-engines', 'ai-chat'].map((p) => path.join(ROOT, '..', '..', 'packages', p, 'src'))
+for (const f of [path.join(ROOT, 'src'), ...SHARED].flatMap(walk)) {
   const ast = parse(fs.readFileSync(f, 'utf8'), { sourceType: 'module', plugins: ['typescript', 'jsx'] })
   traverse(ast, {
     CallExpression(p) {
       const c = p.node.callee
-      if (c.type !== 'Identifier' || (c.name !== 't' && c.name !== 'i18n')) return
+      if (c.type !== 'Identifier' || (c.name !== 't' && c.name !== 'i18n' && c.name !== 'tNow')) return
       const a = p.node.arguments[0]
       const v = a?.type === 'StringLiteral' ? a.value : a?.type === 'TemplateLiteral' && !a.expressions.length ? a.quasis[0].value.cooked : null
       if (v === null) return
@@ -39,6 +41,12 @@ console.log(`源码里 ${all.length} 条文案`)
 
 // 单看字面翻不对的文案：告诉翻译它用在哪。改了这里的说明后 --renote 重翻这些条
 const NOTES = {
+  "用上了画布笔记里的 {0} Key": '另一个软件的名字「画布笔记」，英文正式名 Canvas Notes：各种语言里都原样写 Canvas Notes，不要意译',
+  "用画布笔记那把 {0} Key": '另一个软件的名字「画布笔记」，英文正式名 Canvas Notes：各种语言里都原样写 Canvas Notes，不要意译',
+  "用画布笔记里存的 {0} Key？": '另一个软件的名字「画布笔记」，英文正式名 Canvas Notes：各种语言里都原样写 Canvas Notes，不要意译',
+  "画布笔记里有": '另一个软件的名字「画布笔记」，英文正式名 Canvas Notes：各种语言里都原样写 Canvas Notes，不要意译',
+  "画布笔记里有这一家的 Key，第一次用时问一句": '另一个软件的名字「画布笔记」，英文正式名 Canvas Notes：各种语言里都原样写 Canvas Notes，不要意译',
+  "软件自带的OpenCode不在，{name}只能聊天、不能动手：重新装一遍画布笔记。": '另一个软件的名字「画布笔记」，英文正式名 Canvas Notes：各种语言里都原样写 Canvas Notes，不要意译',
   '疑问': '阅读页右栏顶上分段的一项，和「AI 问答」并列：这篇里打了「看不懂」「有质疑」标签的地方都攒在这里，回头一条条讲。一个词（如 Questions）',
   '过一遍': '按钮：把攒下的「看不懂」「有质疑」一条条过一遍、看讲解。一两个词（如 Walk through）',
   '过一遍（{0} 条）': '按钮：把攒下的「看不懂」「有质疑」一条条过一遍，{0} 是条数（如 Walk through ({0})）',

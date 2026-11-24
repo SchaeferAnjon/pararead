@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3'
-import type { Annotation, ExplainRecord, LabelStatus, ChatMessage, Folder, Glance, Paper, ReadMode, ReadPosition, ReflowState, Tier, JobStatus, Ink } from '../shared/types'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import type { Annotation, ExplainRecord, LabelStatus, ChatMessage, ChatMeta, Folder, Glance, Paper, ReadMode, ReadPosition, ReflowState, Tier, JobStatus, Ink, ChatBox } from '../shared/types'
 import { t } from '../shared/i18n'
 
 export type DB = Database.Database
@@ -138,6 +140,14 @@ CREATE TABLE IF NOT EXISTS ai_messages (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ai_messages_session ON ai_messages(session_id);
+-- 右栏 AI 问答接着聊用的会话号：一篇一家一个（命令行自己的会话，换家另开）；full_in 是读过全文的那个会话
+CREATE TABLE IF NOT EXISTS chat_sessions (
+  paper_id TEXT NOT NULL,
+  engine TEXT NOT NULL,
+  session TEXT NOT NULL,
+  full_in INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (paper_id, engine)
+);
 CREATE TABLE IF NOT EXISTS sync_tombstones (
   kind TEXT NOT NULL,
   key TEXT NOT NULL,
@@ -168,7 +178,9 @@ const PAPER_COLS: [string, string][] = [
   ['engine', 'TEXT'],
   ['read_ms', 'INTEGER NOT NULL DEFAULT 0'],
   ['updated_at', 'INTEGER NOT NULL DEFAULT 0'], // 文献信息、文件夹、删除的改动时间（同步按它合并）
-  ['read_updated_at', 'INTEGER NOT NULL DEFAULT 0'] // 阅读进度、位置、模式的改动时间（和上面分开合并）
+  ['read_updated_at', 'INTEGER NOT NULL DEFAULT 0'], // 阅读进度、位置、模式的改动时间（和上面分开合并）
+  ['vault', 'TEXT'], // 画布笔记库里的一篇：库的根目录（PDF 不拷贝，读库里那份）
+  ['vault_path', 'TEXT'] // 库里的相对路径
 ]
 
 // 灵感库（读到的好句子，写论文时引用）：和标注分开存，同一句可以既是高亮或「有质疑」，又在灵感库里
@@ -213,8 +225,14 @@ export function openDb(file: string): DB {
   if (!annCols.has('label')) db.exec('ALTER TABLE annotations ADD COLUMN label TEXT')
   if (!annCols.has('label_status')) db.exec('ALTER TABLE annotations ADD COLUMN label_status TEXT')
   if (!annCols.has('explain')) db.exec('ALTER TABLE annotations ADD COLUMN explain TEXT')
+  // 对照、译文看法里在译页上划的（2026-11-23）：页码和框照原页，side 记 tr
+  if (!annCols.has('side')) db.exec('ALTER TABLE annotations ADD COLUMN side TEXT')
+  if (!annCols.has('kind')) db.exec('ALTER TABLE annotations ADD COLUMN kind TEXT')
+  if (!annCols.has('hl')) db.exec('ALTER TABLE annotations ADD COLUMN hl TEXT')
   if (!chatCols.has('paper_ids')) db.exec('ALTER TABLE chats ADD COLUMN paper_ids TEXT')
   if (!chatCols.has('think_ms')) db.exec('ALTER TABLE chats ADD COLUMN think_ms INTEGER')
+  if (!chatCols.has('box')) db.exec('ALTER TABLE chats ADD COLUMN box TEXT')
+  if (!chatCols.has('meta')) db.exec('ALTER TABLE chats ADD COLUMN meta TEXT')
   migrateTagsToFolders(db)
   return db
 }
@@ -268,6 +286,8 @@ interface PaperRow {
   scanned: number
   engine: string | null
   read_ms: number
+  vault: string | null
+  vault_path: string | null
 }
 
 interface ReflowRow {
@@ -327,7 +347,8 @@ export function rowToPaper(db: DB, r: PaperRow): Paper {
     kind: r.kind === 'epub' || r.kind === 'link' ? r.kind : 'pdf',
     scanned: !!r.scanned,
     engine: (r.engine as Paper['engine']) ?? null,
-    readMs: r.read_ms
+    readMs: r.read_ms,
+    cn: r.vault && r.vault_path ? { root: r.vault, path: r.vault_path, missing: !existsSync(join(r.vault, r.vault_path)) } : null
   }
 }
 
@@ -420,6 +441,9 @@ interface AnnRow {
   label: string | null
   label_status: string | null
   explain: string | null
+  side: string | null
+  kind: string | null
+  hl: string | null
   text: string
   note: string
   page: number | null
@@ -443,6 +467,9 @@ function rowToAnn(r: AnnRow): Annotation {
     label: r.label === 'confused' || r.label === 'doubt' ? r.label : null,
     labelStatus: (r.label_status as LabelStatus | null) ?? null,
     explain: r.explain ? (JSON.parse(r.explain) as ExplainRecord) : null,
+    ...(r.side === 'tr' ? { side: 'tr' as const } : {}),
+    kind: r.kind,
+    hl: r.hl,
     text: r.text,
     note: r.note,
     page: r.page,
@@ -466,17 +493,21 @@ export function listAnnotations(db: DB, paperId: string): Annotation[] {
 // 只在标签换了或去掉时清空（换了标签，原来的讲解就不对了）
 export function saveAnnotation(db: DB, a: Annotation, sourceId: string | null = null): void {
   db.prepare(
-    `INSERT INTO annotations (id, paper_id, mode, color, style, label, label_status, explain, text, note, page, rects, block_id, block_hash, start, "end", section, source_id, created_at, updated_at)
-     VALUES (@id, @paperId, @mode, @color, @style, @label, @labelStatus, @explain, @text, @note, @page, @rects, @blockId, @blockHash, @start, @end, @section, @sourceId, @createdAt, @updatedAt)
+    `INSERT INTO annotations (id, paper_id, mode, color, style, label, label_status, explain, side, kind, hl, text, note, page, rects, block_id, block_hash, start, "end", section, source_id, created_at, updated_at)
+     VALUES (@id, @paperId, @mode, @color, @style, @label, @labelStatus, @explain, @side, @kind, @hl, @text, @note, @page, @rects, @blockId, @blockHash, @start, @end, @section, @sourceId, @createdAt, @updatedAt)
      ON CONFLICT(id) DO UPDATE SET color = excluded.color, style = excluded.style, label = excluded.label, note = excluded.note, section = excluded.section, page = COALESCE(excluded.page, page),
+       kind = excluded.kind, hl = COALESCE(excluded.hl, hl), text = excluded.text,
        label_status = CASE WHEN excluded.label IS label THEN label_status END, explain = CASE WHEN excluded.label IS label THEN explain END,
        rects = excluded.rects, updated_at = excluded.updated_at`
   ).run({
     ...a,
     style: a.style ?? 'highlight',
+    side: a.side === 'tr' ? 'tr' : null,
     label: a.label ?? null,
     labelStatus: a.label ? (a.labelStatus ?? null) : null,
     explain: a.label && a.explain ? JSON.stringify(a.explain) : null,
+    kind: a.kind ?? null,
+    hl: a.hl ?? null,
     rects: a.rects ? JSON.stringify(a.rects) : null,
     sourceId
   })
@@ -529,6 +560,8 @@ interface ChatRow {
   reasoning: string | null
   paper_ids: string | null
   think_ms: number | null
+  box: string | null
+  meta: string | null
 }
 
 export function listChats(db: DB, paperId: string): ChatMessage[] {
@@ -543,12 +576,14 @@ export function listChats(db: DB, paperId: string): ChatMessage[] {
     createdAt: r.created_at,
     reasoning: r.reasoning,
     paperIds: r.paper_ids ? (JSON.parse(r.paper_ids) as string[]) : [],
-    thinkMs: r.think_ms
+    thinkMs: r.think_ms,
+    ...(r.box ? { box: JSON.parse(r.box) as ChatBox } : {}),
+    ...(r.meta ? { meta: JSON.parse(r.meta) as ChatMeta } : {})
   }))
 }
 
 export function addChat(db: DB, m: ChatMessage): void {
-  db.prepare('INSERT INTO chats (id, paper_id, role, content, quote, image, created_at, reasoning, paper_ids, think_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+  db.prepare('INSERT INTO chats (id, paper_id, role, content, quote, image, created_at, reasoning, paper_ids, think_ms, box, meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
     m.id,
     m.paperId,
     m.role,
@@ -558,8 +593,25 @@ export function addChat(db: DB, m: ChatMessage): void {
     m.createdAt,
     m.reasoning ?? null,
     m.paperIds?.length ? JSON.stringify(m.paperIds) : null,
-    m.thinkMs ?? null
+    m.thinkMs ?? null,
+    m.box ? JSON.stringify(m.box) : null,
+    m.meta ? JSON.stringify(m.meta) : null
   )
+}
+
+/** 这一篇这一家接着聊的会话号；fullIn：这个会话里给过全文 */
+export function chatSession(db: DB, paperId: string, engine: string): { session: string; fullIn: boolean } | null {
+  const r = db.prepare('SELECT session, full_in FROM chat_sessions WHERE paper_id = ? AND engine = ?').get(paperId, engine) as { session: string; full_in: number } | undefined
+  return r ? { session: r.session, fullIn: !!r.full_in } : null
+}
+
+export function setChatSession(db: DB, paperId: string, engine: string, session: string, fullIn: boolean): void {
+  db.prepare('INSERT OR REPLACE INTO chat_sessions (paper_id, engine, session, full_in) VALUES (?, ?, ?, ?)').run(paperId, engine, session, fullIn ? 1 : 0)
+}
+
+/** 开始新对话：这一篇各家的会话都不接了 */
+export function dropChatSessions(db: DB, paperId: string): void {
+  db.prepare('DELETE FROM chat_sessions WHERE paper_id = ?').run(paperId)
 }
 
 export function getGlance(db: DB, paperId: string): Glance | null {

@@ -1,0 +1,15 @@
+{
+  "name": "@cn/ai-engines",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AI 引擎（主进程那一层）：起本机命令行（Claude Code、Codex、Gemini、OpenCode）和 API 服务商，画布笔记、ParaRead 共用。只依赖 Node，不引 Electron",
+  "license": "GPL-3.0-or-later",
+  "exports": {
+    ".": "./src/index.ts",
+    "./shared": "./src/shared/index.ts"
+  },
+  "dependencies": {
+    "@cn/atomic": "workspace:*"
+  }
+}

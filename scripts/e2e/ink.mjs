@@ -10,7 +10,7 @@ let ev = (fn, ...a) => win.evaluate(fn, ...a)
 const openPdf = async (id) => {
   await win.dblclick(`[data-paper="${id}"]`)
   await sleep(1500)
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][0]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][0]?.click())
   await sleep(2500)
 }
 const page1 = () => ev(() => { const q = document.querySelector('.page[data-page="1"]').getBoundingClientRect(); return { x: q.x, y: q.y, w: q.width, h: q.height } })

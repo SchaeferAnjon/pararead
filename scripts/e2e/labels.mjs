@@ -25,15 +25,15 @@ try {
   for (let i = 0; i < 90 && !(await ev((x) => window.api.getPaper(x), id)).reflow.ready; i++) await sleep(1000)
   await win.dblclick(`[data-paper="${id}"]`)
   await sleep(1500)
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
   await sleep(2000)
   await ev(() => { [...document.querySelectorAll('.blk.heading')].find((x) => /INTRODUCTION/.test(x.textContent)).scrollIntoView({ block: 'start' }); document.querySelector('.reflow-scroller').scrollTop -= 40 })
   await sleep(700)
 
   const p0 = await dragIn(0)
-  ok('划词工具条里有「看不懂」「有质疑」', (await win.locator('.sel-toolbar .tb-label').count()) === 2)
+  ok('划词工具条里有「看不懂」（四种含义里的一种）和「有质疑」', (await win.locator('.sel-toolbar .tb-kind[data-kind="confused"]').count()) === 1 && (await win.locator('.sel-toolbar .tb-label[data-label="doubt"]').count()) === 1)
   console.log(await shot(win, 'labels-toolbar'))
-  await win.locator('.sel-toolbar .tb-label[data-label="confused"]').click()
+  await win.locator('.sel-toolbar .tb-kind[data-kind="confused"]').click()
   await sleep(600)
   await dragIn(1)
   await win.locator('.sel-toolbar .tb-label[data-label="doubt"]').click()
@@ -61,15 +61,16 @@ try {
   // 点已有的「看不懂」，再点「看不懂」去掉
   await win.mouse.click(p0.x + 120, p0.y + 14)
   await sleep(400)
-  ok('点已有的标注：标签按钮是选中的', (await win.locator('.sel-toolbar .tb-label.current[data-label="confused"]').count()) === 1)
-  await win.locator('.sel-toolbar .tb-label[data-label="confused"]').click()
+  ok('点已有的标注：「看不懂」那一颗是选中的', (await win.locator('.sel-toolbar .tb-kind.current[data-kind="confused"]').count()) === 1)
+  // 换成「重点」就不是看不懂了
+  await win.locator('.sel-toolbar .tb-kind[data-kind="key"]').click()
   await sleep(600)
   anns = await ev((x) => window.api.annList(x), id)
-  ok('再点一次去掉标签：波浪线没了，变回普通高亮', anns.length === 2 && anns.filter((a) => a.label).length === 1 && (await ev(() => CSS.highlights.get('lb-confused')?.size ?? 0)) === 0 && (await ev(() => ['yellow', 'green', 'blue', 'red'].reduce((n, c) => n + (CSS.highlights.get(`hl-${c}`)?.size ?? 0), 0))) === 1)
+  ok('换成重点：波浪线没了，变回普通高亮', anns.length === 2 && anns.filter((a) => a.label).length === 1 && (await ev(() => CSS.highlights.get('lb-confused')?.size ?? 0)) === 0 && (await ev(() => ['yellow', 'green', 'blue', 'red'].reduce((n, c) => n + (CSS.highlights.get(`hl-${c}`)?.size ?? 0), 0))) === 1)
   await win.keyboard.press('Escape')
 
   // 原文模式里打标签
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][0]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][0]?.click())
   await sleep(2500)
   const line = await ev(() => { const sp = [...document.querySelectorAll('.textLayer span')].find((s) => s.textContent.length > 40 && s.getBoundingClientRect().top > 150 && s.getBoundingClientRect().top < 700); const q = sp.getBoundingClientRect(); return { x: q.x, y: q.y, w: q.width, h: q.height } })
   await win.mouse.move(line.x + 4, line.y + line.h / 2)
@@ -77,7 +78,7 @@ try {
   await win.mouse.move(line.x + Math.min(240, line.w - 6), line.y + line.h / 2, { steps: 8 })
   await win.mouse.up()
   await sleep(500)
-  await win.locator('.sel-toolbar .tb-label[data-label="confused"]').click()
+  await win.locator('.sel-toolbar .tb-kind[data-kind="confused"]').click()
   await sleep(800)
   ok('原文模式也能打标签，页面上有虚线、没有底色', (await win.locator('.pdf-hl.lb-confused').count()) >= 1 && (await win.locator('.pdf-hl.lb-confused').first().evaluate((n) => getComputedStyle(n).backgroundImage + getComputedStyle(n).backgroundColor)).includes('rgba(0, 0, 0, 0)'))
 

@@ -1,0 +1,74 @@
+/* AI 没答出来那一块（ai-error.tsx）：从画布笔记 ai.css 搬来（ParaRead 联动） */
+/* AI 没答出来（CN-75）：一行中文 + 下一步，原话收起来 */
+.aierr .t {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--t1, var(--text));
+}
+/* 窄栏里折行时别让最后一两个字单独掉一行 */
+.aierr .t > span {
+  text-wrap: pretty;
+}
+.aierr .t .ic {
+  flex: none;
+  color: var(--red);
+  transform: translateY(1px);
+}
+/* 没做完的那一轮做到哪一步：和说明对齐（让出图标那一格）；照步骤行拼，命令、路径等宽、左边 3px，放不下省略号 */
+.aierr .at {
+  margin-left: 18px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--t2, var(--text-2));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aierr .at .sc {
+  margin-left: 3px;
+  font: 12px/18px var(--mono, var(--font-mono));
+  color: inherit;
+  background: none;
+  padding: 0;
+}
+/* 接在说到一半的字后面：空 8，和回答里段与段之间一样 */
+.am .txt + .aierr {
+  margin-top: 8px;
+}
+.aierr .acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.aierr .raw-tg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  color: var(--t2, var(--text-2));
+  cursor: pointer;
+}
+/* 能点的字 ≥ 4.5：静止 --t2（第 5 轮美学，以前 --t3 天青 3.70） */
+.aierr .raw-tg:hover {
+  color: var(--t1, var(--text));
+}
+.aierr .raw {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--fill, var(--fill-1));
+  font: 12px/1.55 var(--mono, var(--font-mono));
+  color: var(--t2, var(--text-2));
+  white-space: pre-wrap;
+  /* 按单词折行，只有一个词长过整行（长网址、Request ID）才在词里断 */
+  overflow-wrap: anywhere;
+  user-select: text;
+}

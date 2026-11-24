@@ -34,8 +34,83 @@ export class Ai {
   constructor(
     private settings: SettingsStore,
     private memberAuth: () => { provider: string; token: string } | null = () => null,
-    private localDir = ''
+    private localDir = '',
+    private memberToken: () => string | null = () => null
   ) {}
+
+  /**
+   * 翻译、意群这类批量小请求用哪家（设置 › 翻译 › 翻译用，trService）。2026-11-23 定：默认走会员或 DeepSeek，不占 Claude 订阅；
+   * 能改成本机 Claude Code，或跟「AI 服务」一样。空是自动：会员 → DeepSeek（有 Key）→「AI 服务」里选的（不是本机命令行时）。
+   */
+  trConf(): AiConf {
+    const s = this.settings.get()
+    const want = s.trService
+    const tok = this.memberToken()
+    const deep = this.settings.apiKey('deepseek').key
+    const dsModel = s.provider === 'deepseek' ? s.textModel : providerOf('deepseek').text!
+    if (want === 'member' || (!want && tok)) {
+      if (!tok) throw new Error(t('翻译用 ParaRead 会员，但还没登录会员：设置 › 会员'))
+      const p = providerOf('member')
+      return { provider: 'member', apiKey: tok, baseUrl: p.baseUrl!, model: p.text!, serial: false, headers: {} }
+    }
+    if (want === 'deepseek' || (!want && deep)) {
+      if (!deep) throw new Error(t('翻译用 DeepSeek，但没填 DeepSeek 的 Key：设置 › AI 服务'))
+      return { provider: 'deepseek', apiKey: deep, baseUrl: providerOf('deepseek').baseUrl!, model: dsModel, serial: false, headers: {} }
+    }
+    if (want === 'claude-code') return { provider: 'claude-code', apiKey: '', baseUrl: '', model: providerOf('claude-code').text!, serial: false, headers: {} }
+    const c = this.conf()
+    if (!want && providerOf(c.provider).local) throw new Error(t('翻译要会员或 DeepSeek 的 Key；想用本机 Claude Code 翻，在设置 › 翻译里选'))
+    return c
+  }
+
+  /** 翻译用的那一家能不能用（界面上提示去设置） */
+  trReady(): string | null {
+    try {
+      const c = this.trConf()
+      if (providerOf(c.provider).local) return claudeFound() ? null : t('没找到本机的 claude 命令')
+      return c.apiKey ? null : t('翻译用的服务没填 Key：设置 › AI 服务')
+    } catch (e) {
+      return (e as Error).message
+    }
+  }
+
+  /** 批量翻译、意群走这里（trConf 选的那一家） */
+  trOnce(messages: ChatMsg[], o: AiCall = {}): Promise<string> {
+    const c = this.trConf()
+    if (providerOf(c.provider).local) return ccStream({ dir: this.localDir, model: c.model, messages, think: o.think, timeoutMs: o.timeoutMs, signal: o.signal })
+    if (!c.baseUrl) throw new Error(t('自定义服务没有填地址：在设置里填写'))
+    return chatOnce({
+      apiKey: c.apiKey,
+      baseUrl: c.baseUrl,
+      model: c.model,
+      serial: c.serial,
+      headers: c.provider === 'member' ? { 'X-Use-Id': o.useId ?? randomUUID() } : c.headers,
+      messages,
+      jsonMode: o.json,
+      timeoutMs: o.timeoutMs,
+      signal: o.signal,
+      maxTokens: o.maxTokens
+    })
+  }
+
+  /** 批量翻译的并发：串行化的账号、本机命令行 2 路，别家 4 路 */
+  trConcurrency(): number {
+    try {
+      const c = this.trConf()
+      return c.serial || providerOf(c.provider).local ? 2 : 4
+    } catch {
+      return 2
+    }
+  }
+
+  /** 翻译用的是哪家（设置页、标题栏菜单上写） */
+  trName(): string {
+    try {
+      return providerOf(this.trConf().provider).name
+    } catch {
+      return ''
+    }
+  }
 
   private local(messages: ChatMsg[], o: AiCall): CcCall | null {
     const c = this.conf(o.kind)

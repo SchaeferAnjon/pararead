@@ -14,7 +14,7 @@ let id
 const openPaper = async () => {
   await win.dblclick(`[data-paper="${id}"]`)
   await sleep(2000)
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
   await sleep(2000)
 }
 try {

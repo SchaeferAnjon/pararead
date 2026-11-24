@@ -10,7 +10,7 @@ import { MenuHost } from './lib/menu'
 import { ToastProvider, useToast } from './lib/ui'
 
 export function App() {
-  const [open, setOpen] = useState<{ id: string; mode?: ReadMode; ann?: string; at?: OpenAt; idea?: string } | null>(null)
+  const [open, setOpen] = useState<{ id: string; mode?: ReadMode; ann?: string; at?: OpenAt; idea?: string; back?: { root: string; folder: string } | null; nonce?: number } | null>(null)
   const [settings, setSettings] = useState<SettingsView | null>(null)
   const [route, setRoute] = useState<Route>({ kind: 'lib' })
   const [libState, setLibState] = useState<LibState>({ top: 0, selected: [] })
@@ -20,7 +20,17 @@ export function App() {
 
   useEffect(() => {
     void api.getSettings().then(setSettings)
-    const offs = [api.onSettings(setSettings), api.onOpenPaper((id) => setOpen({ id }))]
+    // 深链 pararead://open（画布笔记首页组件「继续读」）：翻到那一页、用那种看法，标题栏带「回画布笔记」
+    const offs = [
+      api.onSettings(setSettings),
+      api.onOpenPaper((id, x) =>
+        setOpen(
+          x
+            ? { id, mode: x.view === 'original' ? 'pdf' : x.view === 'bilingual' ? 'reflow' : undefined, at: x.page ? { page: x.page, blockId: x.blockId } : undefined, back: x.back, nonce: Date.now() }
+            : { id }
+        )
+      )
+    ]
     return () => offs.forEach((f) => f())
   }, [])
 
@@ -40,8 +50,9 @@ export function App() {
         <Onboarding settings={settings} onPricing={() => setPricing(true)} onDone={(then) => setStartWith(then ?? null)} />
       ) : open ? (
         <Reader
-          key={open.id}
+          key={`${open.id}:${open.nonce ?? 0}`}
           paperId={open.id}
+          back={open.back}
           initialMode={open.mode}
           initialAnn={open.ann}
           initialAt={open.at}

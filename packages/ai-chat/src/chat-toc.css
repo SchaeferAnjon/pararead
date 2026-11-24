@@ -1,0 +1,160 @@
+/* 对话目录（chat-toc.tsx）：从画布笔记 ai.css 搬来（ParaRead 联动） */
+/* ---------- AI 对话的目录条（task-3e53q「三、b」，照文档目录条 .doc-toc / CN-26 A）----------
+   对话那一格外面包一层 .msgs-box（目录条贴着它的右边）：横线右端离栏右边 20，回答和气泡右边离横线 10（右内边距 46） */
+.msgs-box {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.msgs-box.toc > .msgs {
+  /* 一直显示滚动条（系统设置）时滚动条占了 --sbw（chat-toc.tsx 量的），从内边距里扣掉，字到横线照样 10 */
+  padding-right: calc(46px - var(--sbw, 0px));
+}
+/* 右栏拉窄到 360 以下：横线往右挪 6（离栏右边 14），字照样离横线 10；省下的 6 留给回答里一行放不下的（草稿卡的文件名，r13） */
+.msgs-box {
+  container: chatbox / inline-size;
+}
+@container chatbox (max-width: 359.98px) {
+  .msgs-box.toc > .msgs {
+    padding-right: calc(40px - var(--sbw, 0px));
+  }
+  .chat-toc-wrap {
+    right: 8px;
+  }
+}
+.chat-toc-wrap {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  z-index: 6;
+  padding: 0 0 0 10px;
+}
+.chat-toc {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 9px;
+  padding: 8px 6px;
+  cursor: pointer;
+}
+.chat-toc.gone {
+  visibility: hidden;
+}
+.chat-toc i {
+  display: block;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--line2, var(--stroke));
+}
+.chat-toc i.d0 {
+  width: 16px;
+}
+.chat-toc i.d1 {
+  width: 10px;
+}
+/* 旁支：强调色的短横线（淡一半），正在看的是实的强调色 */
+.chat-toc i.ds {
+  width: 10px;
+  background: color-mix(in srgb, var(--acc, var(--accent)) 45%, transparent);
+}
+.chat-toc i.on {
+  background: var(--t1, var(--text));
+}
+.chat-toc i.ds.on {
+  background: var(--acc, var(--accent));
+}
+.chat-tocpop {
+  position: absolute;
+  right: -4px;
+  top: -6px;
+  width: 264px;
+  max-height: min(70vh, 520px);
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--pop, var(--bg-popover));
+  -webkit-backdrop-filter: var(--blur, var(--blur-pop));
+  backdrop-filter: var(--blur, var(--blur-pop));
+  box-shadow: var(--shadow-up, var(--shadow-pop));
+  animation: blk-in 0.12s ease;
+}
+.chat-tocpop .hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 6px;
+  font: 500 12px/1 var(--sans, var(--font-sans));
+  color: var(--t3, var(--text-3));
+  white-space: nowrap;
+}
+.chat-tocpop .hd span:last-child {
+  font-weight: 400;
+}
+.chat-tocpop .rows {
+  overflow-y: auto;
+}
+.chat-tocpop .r {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+  color: var(--t1, var(--text));
+  white-space: nowrap;
+}
+.chat-tocpop .r .tx {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-tocpop .r .no {
+  flex: none;
+  width: 18px;
+  font-size: 11px;
+  color: var(--t3, var(--text-3));
+  font-variant-numeric: tabular-nums;
+}
+/* 下面一级（回答里的小标题、旁支）：缩到问题的字那里，12 号 --t2 */
+.chat-tocpop .r.h,
+.chat-tocpop .r.s {
+  padding-left: 34px;
+  font-size: 12px;
+  color: var(--t2, var(--text-2));
+}
+.chat-tocpop .r.s svg {
+  flex: none;
+  color: var(--acc, var(--accent));
+}
+.chat-tocpop .r:hover,
+.chat-tocpop .r.kb {
+  background: var(--fill, var(--fill-1));
+  color: var(--t1, var(--text));
+}
+.chat-tocpop .r.on {
+  background: var(--fill2, var(--fill-2));
+  color: var(--t1, var(--text));
+  font-weight: 500;
+}
+/* 跳到的那一问：气泡外圈亮一下（1.4 秒） */
+.msgs .um.toc-hit {
+  animation: toc-hit 1.4s ease-out;
+}
+@keyframes toc-hit {
+  0%,
+  60% {
+    box-shadow: 0 0 0 2px var(--acc-ring, var(--accent-ring));
+  }
+  100% {
+    box-shadow: 0 0 0 2px transparent;
+  }
+}

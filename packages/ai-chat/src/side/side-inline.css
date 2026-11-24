@@ -1,0 +1,550 @@
+/*
+ * 旁支就地展开（task-4edsc，用户选的方向 A）。数值照原型（task-4edsc 的交付）用 DOM 量的
+ * （.inl、.sd-head、.ibn、.chips、.chip、.qa、.sq、.sa、.acts、.sin、.rec、.composer.slim）。
+ * 读 PDF、AI 对话、网页上框着问的回答、文档里的 AI 讲解块共用。
+ */
+
+/* 回答里挂它的那一格（那句所在的那一段后面）：React 往里画 .side-inl */
+.side-host,
+.cm-side-host {
+  display: block;
+}
+
+/* ---------- 那一块：左边 2px --acc 竖线、左内边距 12、上 6 下 8；和上下的段隔 2 / 12 ---------- */
+.side-inl {
+  margin: 2px 0 12px;
+  padding: 6px 0 8px 12px;
+  border-left: 2px solid var(--acc, var(--accent));
+  font: 13px/1.7 var(--sans, var(--font-sans));
+  color: var(--t1, var(--text));
+  text-align: left;
+  white-space: normal;
+  cursor: auto;
+  user-select: none;
+}
+
+/* ---------- 头 28 高：⌄ 收起 · comment-discussion 14 ·「旁支」500 ·「· 名字」12 --t3 …… + · ⋯ · × ---------- */
+.side-inl .sd-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  margin-left: -2px;
+  white-space: nowrap;
+}
+.side-inl .sd-head > svg {
+  flex: none;
+}
+.side-inl .sd-head b {
+  flex: none;
+  font-weight: 500;
+}
+.side-inl .sd-head .s {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--t3, var(--text-3));
+}
+.side-inl .sd-head .sp {
+  flex: 1;
+}
+/* 「全能 / 只在库里」（task-3e53q「四、c」）：灰底小标签，只显示、不能点，指着出说明 */
+.side-inl .sd-head .mode {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--fill, var(--fill-1));
+  font-size: 12px;
+  color: var(--t2, var(--text-2));
+  cursor: default;
+}
+.side-inl {
+  container-type: inline-size;
+}
+/* 太窄（右栏窄于约 358）：名字整个藏起来，不剩一个字加省略号；全名就是下面第一个问题气泡（设计复审） */
+@container (max-width: 280px) {
+  .side-inl .sd-head .s {
+    display: none;
+  }
+}
+/* 改名：名字那一处就地换成一格 */
+.side-inl .sd-head .rn {
+  flex: 0 1 220px;
+  min-width: 60px;
+  height: 22px;
+  padding: 0 6px;
+  border: 0;
+  outline: 0;
+  border-radius: 4px;
+  background: var(--card, var(--bg-elevated));
+  box-shadow: 0 0 0 1px var(--acc-ring, var(--accent-ring));
+  font: 12px var(--sans, var(--font-sans));
+  color: var(--t1, var(--text));
+  user-select: text;
+}
+/* 头上的小按钮：24 方、圆角 4、--t2，悬停 --fill */
+.side-inl .ib {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--t2, var(--text-2));
+}
+.side-inl .ib:hover,
+.side-inl .ib.open {
+  background: var(--fill, var(--fill-1));
+  color: var(--t1, var(--text));
+}
+.side-inl .ib:focus-visible,
+.side-inl .chip:focus-visible,
+.side-inl .acts .cn-ab-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--acc-ring, var(--accent-ring));
+}
+
+/* ---------- 一句好几条：头下面一排小签（22 高、左右 8、圆角 6、12 --t2；开着的 --fill2 底 --t1 500，序号 500 --t3） ---------- */
+.side-inl .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 2px 0 6px;
+}
+.side-inl .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 170px;
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: 12px/18px var(--sans, var(--font-sans));
+  color: var(--t2, var(--text-2));
+  white-space: nowrap;
+}
+.side-inl .chip:hover {
+  background: var(--fill, var(--fill-1));
+}
+.side-inl .chip.on {
+  background: var(--fill2, var(--fill-2));
+  color: var(--t1, var(--text));
+  font-weight: 500;
+}
+.side-inl .chip b {
+  flex: none;
+  font-weight: 500;
+  color: var(--t3, var(--text-3));
+}
+.side-inl .chip .nm {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- 问答：长了在块里滚（最高 min(34vh, 340)），被问的那句一直在块的正上方 ---------- */
+.side-inl .qa {
+  max-height: min(34vh, 340px);
+  overflow: auto;
+  margin-right: -4px;
+  padding-right: 4px;
+  user-select: text;
+}
+/* 问的话：右边的气泡（--fill2、圆角 14、内边距 5 11，最宽 85%） */
+.side-inl .sq {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0 6px;
+}
+.side-inl .sq > span {
+  max-width: 85%;
+  padding: 5px 11px;
+  border-radius: 14px;
+  background: var(--fill2, var(--fill-2));
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.side-inl .sq > .um {
+  max-width: 85%;
+}
+/* 回答：正文 13/1.7，段间 6 */
+.side-inl .sa .md > * + * {
+  margin-top: 6px;
+}
+/* 最后一段下面也留 6（原型 .sa p 的下边距），再加「放进主对话」那一行的 2，回答和按钮不贴着 */
+.side-inl .sa .md > :last-child {
+  margin-bottom: 6px;
+}
+.side-inl .sa + .sq {
+  margin-top: 8px;
+}
+/* 在答：扫光的灰字（下边距同回答的段） */
+.side-inl .wait {
+  margin: 0 0 6px;
+  background: linear-gradient(90deg, var(--t3, var(--text-3)) 0%, var(--t1, var(--text)) 50%, var(--t3, var(--text-3)) 100%) 0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: side-inl-shim 1.2s linear infinite;
+}
+@keyframes side-inl-shim {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* ---------- 答完：回答下面那排（task-eavzx，样子在 @cn/ai-chat/answer-bar：拷贝 · 插进文档 · ⋯ ｜ 快捷回复），这里只管上下边距 ---------- */
+/* 旁支挂在 AI 回答（.am）里：app.css 的 .am .acts（上边距 8）和这里一样具体，谁赢看两份 CSS 谁在后；
+   打包把这一份拆进 index.css 前面那个 CSS 以后它输了，回答最后一段到这一排成了 14。前面加 .am 不靠先后 */
+.side-inl .acts,
+.am .side-inl .acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 2px 0 8px;
+}
+.side-inl .acts .ans-row {
+  flex: 1;
+  min-width: 0;
+}
+.side-inl .acts .cn-ab {
+  margin-top: 0;
+}
+
+/* ---------- 输入框：共用的那个（composer.tsx），收成原型 .sin 的样子：圆角 10、内边距 6 6 4 10，一行字 24 高，底行左边对齐、发送 24 ----------
+ * 视频问框里钉在问框底部（.side-dock，task-5yp97 选法 2），样子一样 */
+:is(.side-inl, .side-dock) .aiin {
+  margin: 0;
+  padding: 6px 6px 4px 10px;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px var(--line2, var(--stroke));
+  user-select: auto;
+}
+:is(.side-inl, .side-dock) .aiin:focus-within {
+  box-shadow:
+    0 0 0 1px var(--acc-ring, var(--accent-ring)),
+    0 0 0 3px var(--acc-soft, var(--accent-soft));
+}
+:is(.side-inl, .side-dock) .aiin textarea {
+  min-height: 24px;
+  max-height: 120px;
+  padding: 0;
+  font: 13px/24px var(--sans, var(--font-sans));
+}
+:is(.side-inl, .side-dock) .aiin .ft {
+  min-height: 24px;
+  margin-left: -6px;
+}
+:is(.side-inl, .side-dock) .aiin .ft .k {
+  display: none;
+}
+:is(.side-inl, .side-dock) .aiin .send {
+  width: 24px;
+  height: 24px;
+}
+
+/* ---------- 记到哪：12 --t3，图标 12，离输入框 6 ---------- */
+:is(.side-inl, .side-dock) .rec {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--t3, var(--text-3));
+}
+:is(.side-inl, .side-dock) .rec > svg {
+  flex: none;
+}
+:is(.side-inl, .side-dock) .rec span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- 回答里选中一句：小框（300 宽、圆角 12、内边距 6；上面一格 32 高的问题，分隔线，下面两行 30 高） ---------- */
+/* 家族 ui.css 的 .menu 有 1px 边、弹出时缩放 0.98 的动画：小样的框没有，和输入框底行的菜单（.ai-menu）一样直接出来 */
+.menu.askbox {
+  position: fixed;
+  z-index: 60;
+  display: block;
+  width: 300px;
+  min-width: 0;
+  max-width: none;
+  padding: 6px;
+  border: 0;
+  border-radius: 12px;
+  animation: none;
+  background: var(--pop, var(--bg-popover));
+  -webkit-backdrop-filter: var(--blur, var(--blur-pop));
+  backdrop-filter: var(--blur, var(--blur-pop));
+  box-shadow: var(--shadow-up, var(--shadow-pop));
+  font-size: 13px;
+  color: var(--t1, var(--text));
+  user-select: none;
+}
+.askbox textarea {
+  display: block;
+  width: 100%;
+  height: 32px;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 0;
+  outline: 0;
+  resize: none;
+  border-radius: 6px;
+  background: var(--fill, var(--fill-1));
+  font: 13px/1.5 var(--sans, var(--font-sans));
+  color: var(--t1, var(--text));
+}
+.askbox textarea::placeholder {
+  color: var(--t3, var(--text-3));
+}
+.askbox .sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line, var(--stroke-soft));
+}
+.askbox .it {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font-size: 13px;
+  color: var(--t1, var(--text));
+  text-align: left;
+  white-space: nowrap;
+}
+.askbox .it:hover {
+  background: var(--fill, var(--fill-1));
+}
+.askbox .it .ck {
+  flex: none;
+  width: 14px;
+  display: grid;
+  place-items: center;
+}
+.askbox .it .r {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--t3, var(--text-3));
+}
+/* 「问这句」下面自己的 AI 命令（最多露 4 条，「更多…」就地展开，展开了最多 8 行高、再多在里面滚），最下面「调整…」灰一档 */
+.askbox .mine {
+  max-height: 240px;
+  overflow-y: auto;
+}
+.askbox .it .nm {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.askbox .it.sub {
+  color: var(--t2, var(--text-2));
+}
+/* ---------- 问过的那句：--acc 点线（1.5 粗、4 一个点，在字下面约 4），后面一个带数字的小标（17 高、圆角 5、--acc-soft 底 --acc-t 字 11px 500；开着的那条 --acc-bg 底 --acc-on 字） ---------- */
+/* 点线画成底边上重复的点，不用 text-decoration：那条线进不了行内公式（KaTeX 是 inline-block），一句里有公式时会断成几截 */
+.aicell .asked,
+.reading-notes .asked,
+.cm-content .asked,
+.side-text .asked {
+  padding-bottom: 2px;
+  background-image: radial-gradient(circle, var(--acc, var(--accent)) 0.75px, transparent 0.9px);
+  background-size: 4px 1.5px;
+  background-repeat: repeat-x;
+  background-position: 0 100%;
+}
+/* 指着引用片时、点了引用片回到这句时（亮 1.4 秒）：只换底色，点线留着；不要圆角（一句折成两行、或者有公式时一整块连着） */
+.aicell .asked.hov,
+.aicell .asked.lit {
+  background-color: color-mix(in srgb, var(--acc, var(--accent)) 24%, transparent);
+}
+.aicell .badge[data-side],
+.reading-notes .badge,
+.cm-content .badge[data-side],
+.side-text .badge[data-side] {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 17px;
+  margin: 0 2px;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: var(--acc-soft, var(--accent-soft));
+  color: var(--acc-t, var(--accent-text));
+  font-size: 11px;
+  font-weight: 500;
+  font-style: normal;
+  line-height: 1;
+  vertical-align: 1px;
+  cursor: pointer;
+  user-select: none;
+}
+.aicell .badge[data-side]:hover,
+.aicell .badge[data-side].cur,
+.reading-notes .badge:hover,
+.cm-content .badge[data-side]:hover,
+.cm-content .badge[data-side].cur,
+.side-text .badge[data-side]:hover,
+.side-text .badge[data-side].cur {
+  background: var(--acc-bg, var(--accent-bg));
+  color: var(--acc-on, #fff);
+}
+.aicell .badge[data-side]:focus-visible,
+.reading-notes .badge:focus-visible,
+.cm-content .badge[data-side]:focus-visible,
+.side-text .badge[data-side]:focus-visible {
+  outline: 2px solid var(--acc-ring, var(--accent-ring));
+  outline-offset: 1px;
+}
+
+/* ---------- 回答里问过的那句：开着的那条整句亮（强调色 24%，同指着引用片时）；刚收起时那句闪 1.4 秒、小标闪一圈 1.2 秒 ---------- */
+.asked.on {
+  background-color: color-mix(in srgb, var(--acc, var(--accent)) 24%, transparent);
+}
+.asked.flash {
+  animation: side-inl-flash 1.4s ease;
+}
+@keyframes side-inl-flash {
+  0%,
+  60% {
+    background-color: color-mix(in srgb, var(--acc, var(--accent)) 24%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.badge.pulse {
+  animation: side-inl-pulse 1.2s ease;
+}
+@keyframes side-inl-pulse {
+  0%,
+  50% {
+    box-shadow: 0 0 0 3px var(--acc-ring, var(--accent-ring));
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/*
+ * ---------- 文档里的 AI 讲解块：旁支长在讲解里那一段下面，接着提示块的底（--fill、左右 14）；在最后一段后面时它画提示块的下圆角 ----------
+ * 离上一段 8（原型段落的下边距 6 加旁支的 2）；flow-root 把旁支的上下边距关在这一格里，不然穿出去露一条页面底色
+ */
+.doc .cm-side-host {
+  display: flow-root;
+  padding: 8px 14px 0;
+  background: var(--fill, var(--fill-1));
+  cursor: auto;
+}
+.doc .cm-side-host .side-inl {
+  margin-top: 0;
+}
+/* 原型的提示块底下留 4，旁支自己下边距 12 */
+.doc .cm-side-host.last {
+  padding-bottom: 4px;
+  border-radius: 0 0 8px 8px;
+}
+.doc.doc .cm-callout-bot:has(+ .cm-side-host.last) {
+  padding-bottom: 0 !important;
+  border-radius: 0;
+}
+
+/* ---------- 开着旁支时主对话的输入框：缩成一行灰字（内边距 6 10，33.5 高），点它收起旁支、回到主对话 ---------- */
+.aiin-slim {
+  flex: none;
+  display: block;
+  margin: 8px 12px 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--line2, var(--stroke));
+  border-radius: 12px;
+  background: var(--card, var(--bg-elevated));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  font: 13px/1.5 var(--sans, var(--font-sans));
+  color: var(--t3, var(--text-3));
+  text-align: left;
+  cursor: text;
+}
+.aiin-slim:hover {
+  border-color: var(--acc-ring, var(--accent-ring));
+}
+.aiin-slim:focus-visible {
+  outline: none;
+  border-color: var(--acc-ring, var(--accent-ring));
+  box-shadow: 0 0 0 3px var(--acc-soft, var(--accent-soft));
+}
+.aiin-slim .ph {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * ---------- 白板上的 AI 讲解卡、问框里的回答（task-p90ra）：排好的字，选一句开旁支 ----------
+ * 字能选（白板卡上别处照旧不能选、按住拖卡；问框外面那一格整个不让选）；小标、旁支那一块里是正常的指针
+ */
+.side-text {
+  user-select: text;
+  cursor: text;
+}
+.side-text .side-host,
+.side-text .badge {
+  cursor: auto;
+  user-select: none;
+}
+.side-text .badge {
+  cursor: pointer;
+}
+/*
+ * 白板卡开着旁支时卡往下长高：列里的卡照常把下面的往下推；摆在空白处的卡（位置写在文件里）不挪别的卡，
+ * 浮在下面那几张上面（同数据库卡「展开」盖在上面），收起就回去
+ */
+.db-card:has(.side-inl) {
+  z-index: 6;
+}
+/* 旁支里的问答、输入框照样能选、能打（问框里钉在底部的那个输入框也是） */
+.side-text .side-inl .qa,
+.side-text .side-inl textarea,
+.side-dock textarea {
+  user-select: text;
+}
+
+/* 头上「记进笔记 / 不记」（AI 对话记笔记开关，原型 .tagbtn）：20 高、圆角 5、11.5px；记进时强调色浅底 */
+.side-inl .sd-head .tagbtn {
+  flex: none;
+  height: 20px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--fill, var(--fill-1));
+  font: 11.5px/20px var(--sans, var(--font-sans));
+  color: var(--t2, var(--text-2));
+  white-space: nowrap;
+}
+.side-inl .sd-head .tagbtn.on {
+  background: var(--acc-soft, var(--accent-soft));
+  color: var(--acc-t, var(--accent-text));
+}
+.side-inl .sd-head .tagbtn:hover {
+  box-shadow: inset 0 0 0 1px var(--line2, var(--stroke));
+}
+.side-inl .sd-head .tagbtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--acc-ring, var(--accent-ring));
+}

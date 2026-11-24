@@ -16,7 +16,8 @@ export interface PdfExportOpts {
   notes: boolean
 }
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
+// 不叫 __dirname：electron-vite 6 给 ESM 输出加的 CommonJS 垫片已经声明了它，再声明一次主进程起不来
+const mainDir = dirname(fileURLToPath(import.meta.url))
 
 export function registerExportPdf(c: Ctx, loadRenderer: (w: BrowserWindow, hash: string) => void): void {
   let busy = false
@@ -54,7 +55,7 @@ export function registerExportPdf(c: Ctx, loadRenderer: (w: BrowserWindow, hash:
         show: false,
         width: 900,
         height: 1200,
-        webPreferences: { preload: join(__dirname, '../preload/index.cjs'), sandbox: false, contextIsolation: true }
+        webPreferences: { preload: join(mainDir, '../preload/index.cjs'), sandbox: false, contextIsolation: true }
       })
       try {
         const ready = new Promise<void>((resolve, reject) => {

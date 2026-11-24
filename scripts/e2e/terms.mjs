@@ -11,7 +11,7 @@ let ev = (fn, ...a) => win.evaluate(fn, ...a)
 const open = async (id) => {
   await win.dblclick(`[data-paper="${id}"]`)
   await sleep(1500)
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
   await sleep(1500)
   await win.locator('.lp-tabs .seg-item', { hasText: '术语' }).click()
 }

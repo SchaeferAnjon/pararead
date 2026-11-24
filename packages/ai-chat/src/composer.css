@@ -1,0 +1,789 @@
+/*
+ * AI 的输入框（composer.tsx，第 2b 段）。数值照小样量的：CN-91 方向 C proto-c、多段引用方向 B proto-b、CN-92 方向 A proto-a（kit.css 的 .inp、.pick、.menu、.send、.shelf、.chipm、.fn、.tip、.cap）。
+ */
+
+/* ---------- 输入框：外边距 8 12 12、圆角 12、--card、1px --line2 + 投影、内边距 8 10 6；有焦点时 --acc-ring + --acc-soft ---------- */
+.aiin {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  margin: 8px 12px 12px;
+  padding: 8px 10px 6px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--card, var(--bg-elevated));
+  box-shadow:
+    0 0 0 1px var(--line2, var(--stroke)),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+  /* 底行按输入框的宽收：窄了先藏快捷键提示，再窄谁来答只留标志 */
+  container-type: inline-size;
+}
+.aiin:focus-within {
+  box-shadow:
+    0 0 0 1px var(--acc-ring, var(--accent-ring)),
+    0 0 0 3px var(--acc-soft, var(--accent-soft));
+}
+/* 拖图经过时（访达里的图、右栏网页里的图）：--acc-ring 外圈 + --acc-soft 光晕（同文件树里拖笔记经过文件夹），框里只露「松手附上这张图」 */
+.aiin.hot {
+  box-shadow:
+    0 0 0 1.5px var(--acc-ring, var(--accent-ring)),
+    0 0 0 4px var(--acc-soft, var(--accent-soft));
+}
+.aiin.hot > :not(.aiin-drop) {
+  visibility: hidden;
+}
+.aiin-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: inherit;
+  background: var(--acc-soft, var(--accent-soft));
+  color: var(--acc-t, var(--accent-text));
+  font-size: 13px;
+  font-weight: 500;
+  pointer-events: none;
+}
+/* 字：13/1.5，跟着字变高，最多 6 行（6 × 19.5 + 上下 2），第 7 行开始在框里滚 */
+.aiin textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  max-height: 121px;
+  field-sizing: content;
+  padding: 2px;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: none;
+  font: 13px/1.5 var(--sans, var(--font-sans));
+  color: var(--t1, var(--text));
+}
+.aiin textarea::placeholder {
+  color: var(--t3, var(--text-3));
+}
+/* 选中的字（框好一块时预填全选的「给我讲解一下」、回答里选的那段）：强调色 24%，和文档里一样（--acc-soft 只有 10%，看不出选了什么） */
+.aiin textarea::selection,
+.aicell .msgs ::selection {
+  background: color-mix(in srgb, var(--acc, var(--accent)) 24%, transparent);
+}
+
+/* ---------- 底行：「+」· 谁来答 · 模型 · effort · 快捷键提示 …… 发送 ---------- */
+.aiin .ft {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 28px;
+  font-size: 12px;
+  color: var(--t3, var(--text-3));
+}
+/* 三颗（和「+」）：24 高、左右 6、圆角 6、12px --t1，悬停和开着 --fill；放不下时字省略 */
+.aiin .pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: 12px/18px var(--sans, var(--font-sans));
+  color: var(--t1, var(--text));
+  white-space: nowrap;
+}
+.aiin .pick:hover,
+.aiin .pick.open {
+  background: var(--fill, var(--fill-1));
+}
+.aiin .pick.add {
+  flex: none;
+}
+.aiin .pick .lb {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aiin .pick .eng-logo,
+.aiin .pick .cv {
+  flex: none;
+}
+.aiin .pick .cv {
+  color: var(--t3, var(--text-3));
+}
+/* 三颗写全名放不下（composer.tsx 的 useTightRow）：谁来答只留标志、悬停看名字；effort 一直写全；模型名最后才省略 */
+.aiin .ft.tight .pick.eng .lb {
+  display: none;
+}
+/* 写得下全名时三颗都不缩（快捷键提示先省略、再藏）；tight 时只有模型名能缩 */
+.aiin .ft:not(.tight) .pick,
+.aiin .pick.eff {
+  flex-shrink: 0;
+}
+/* 快捷键提示：11 --t3，放不下省略号 */
+.aiin .ft .k {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 16.5px;
+  color: var(--t3, var(--text-3));
+}
+/* 发送圆钮 28：有字 --solid，没字 --fill2 / --t3；答着时是停下 */
+.aiin .send {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--solid, var(--text));
+  color: var(--solid-t, var(--bg));
+}
+.aiin .send:disabled {
+  background: var(--fill2, var(--fill-2));
+  color: var(--t3, var(--text-3));
+}
+/* 右栏窄于 420（输入框里头窄于 376）：快捷键提示先藏起来 */
+@container (max-width: 375.98px) {
+  .aiin .ft .k {
+    display: none;
+  }
+}
+/* 再窄（右栏窄于 348，三颗连名字放不下）：谁来答只留标志，悬停看名字 */
+@container (max-width: 303.98px) {
+  .aiin .pick.eng .lb {
+    display: none;
+  }
+}
+
+/* ---------- 输入框下面一行：全能模式（2026-11-19，照 Dispatch 输入框下面的权限那一行，12px） ---------- */
+/* 有这一行时输入框和它之间空 6，这一行到这一格底 6（原来输入框到底 12；悬停底色和输入框的焦点光圈之间留得出 3） */
+.aiin.with-omni {
+  margin-bottom: 6px;
+}
+.ai-omni {
+  flex: none;
+  display: flex;
+  min-width: 0;
+  margin: 0 16px 6px;
+}
+/* 整行是一颗开关：22 高、左右 6、圆角 6，悬停 --fill；方角小开关 +「全能模式」--t2 500 + 一句现在能做什么 --t2（放不下省略号） */
+.ai-omni .om {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: 12px/18px var(--sans, var(--font-sans));
+  color: var(--t2, var(--text-2));
+  white-space: nowrap;
+}
+.ai-omni .om:hover {
+  background: var(--fill, var(--fill-1));
+  color: var(--t1, var(--text));
+}
+.ai-omni .om:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--acc-ring, var(--accent-ring));
+}
+/*
+ * 方角开关（`方角开关`）：轨道 22×12 圆角 3，滑块 8×8 圆角 2。关着：轨道透明、1px --t3 框、滑块 --t3（浅深都看得清是「关」）；
+ * 开着：轨道 --acc-bg、滑块 --acc-on（开关是「选中」；石墨的 --acc-bg 是近白，滑块不能写死白色）
+ */
+.ai-omni .sw {
+  position: relative;
+  flex: none;
+  width: 22px;
+  height: 12px;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--t3, var(--text-3));
+  transition: background-color 0.15s;
+}
+.ai-omni .sw::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--t3, var(--text-3));
+  transition: left 0.15s;
+}
+.ai-omni .om[aria-checked='true'] .sw {
+  background: var(--acc-bg, var(--accent-bg));
+  box-shadow: none;
+}
+.ai-omni .om[aria-checked='true'] .sw::after {
+  left: 12px;
+  background: var(--acc-on, #fff);
+}
+.ai-omni .nm {
+  flex: none;
+  font-weight: 500;
+}
+.ai-omni .say {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- 全能模式上面那一排：记笔记 ·《记进哪篇》▾ ｜ 旁支（2026-11-24 AI 对话记笔记开关） ---------- */
+/* 和全能模式那行一样 22 高、12px；这一排到全能模式那行空 2 */
+.ai-note-sw {
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+.ai-note-sw .om {
+  flex: none;
+}
+.ai-note-sw .tgt {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  height: 22px;
+  padding: 0 4px 0 2px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: 12px/18px var(--sans, var(--font-sans));
+  color: var(--t2, var(--text-2));
+  white-space: nowrap;
+}
+/* 篇名能缩（.ai-omni .nm 是 flex: none，不改的话窄时篇名不省略、▾ 挤到按钮外面，面板横着多出来） */
+.ai-note-sw .tgt .nm {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ai-note-sw .tgt .dim {
+  color: var(--t3, var(--text-3));
+}
+.ai-note-sw .tgt svg {
+  flex: none;
+}
+.ai-note-sw .tgt:hover {
+  background: var(--fill, var(--fill-1));
+  color: var(--t1, var(--text));
+}
+.ai-note-sw .tgt:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--acc-ring, var(--accent-ring));
+}
+.ai-note-sw .gap {
+  flex: 1;
+}
+.ai-note-sw .vr {
+  flex: none;
+  width: 1px;
+  height: 12px;
+  margin: 0 4px;
+  background: var(--line, var(--stroke-soft));
+}
+
+/* ---------- 顶上一排材料：横着排、间距 6、横向滚，下边 1px --line，下内边距 6、下外边距 6 ---------- */
+/* 高定死 51（卡 44 + 下内边距 6 + 线 1）：放不下要横着滚时，滚动条落在下内边距里，不把输入框撑高 */
+.aiin .shelf {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: none;
+  box-sizing: border-box;
+  height: 51px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line, var(--stroke-soft));
+}
+.aiin .shelf::-webkit-scrollbar {
+  height: 5px;
+}
+.aiin .shelf::-webkit-scrollbar-thumb {
+  background: var(--line2, var(--stroke));
+  border-radius: 3px;
+}
+/* 小卡：44 高、最宽 220（task-6cxtc 复审：132 只露四五个字）、左 6 右 24（图片卡右 22）、圆角 6、--fill 底 */
+.aiin .chipm {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  max-width: 220px;
+  padding: 0 24px 0 6px;
+  border-radius: 6px;
+  background: var(--fill, var(--fill-1));
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+}
+.aiin .chipm.img {
+  padding-right: 22px;
+}
+/* 网页上拿来的图：缩略图右边两行，照引用卡上面网站 10.5 --t3、下面图号 12 --t2 */
+.aiin .chipm.web .cq {
+  max-width: 96px;
+}
+/* 编号圆 16：--acc 底、白字 10 600 */
+.aiin .chipm .nb {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--acc-bg, var(--accent-bg));
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+/* 引用卡两行：来源 10.5 --t3、原文 12 --t2，都省略号 */
+.aiin .chipm .cq {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.aiin .chipm .cs {
+  text-spacing-trim: trim-start;
+  font-size: 10.5px;
+  line-height: 15.75px;
+  color: var(--t3, var(--text-3));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aiin .chipm .ct {
+  text-spacing-trim: trim-start;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--t2, var(--text-2));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 图片卡：34 高的小图（太宽的裁边，不伸出卡外） */
+.aiin .chipm > img {
+  display: block;
+  height: 34px;
+  max-width: 82px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--line, var(--stroke-soft));
+  pointer-events: none;
+}
+/* 右上 ×：18、圆角 4、--t3，悬停 --fill2 / --t1 */
+.aiin .chipm .pxx {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--t3, var(--text-3));
+}
+.aiin .chipm .pxx:hover {
+  background: var(--fill2, var(--fill-2));
+  color: var(--t1, var(--text));
+}
+/* 拖着换顺序：拖的那张淡下去，放下去的地方一道 --acc 竖线 */
+.aiin .chipm.dragging {
+  opacity: 0.4;
+}
+.aiin .chipm.dropat {
+  box-shadow: inset 2px 0 0 var(--acc, var(--accent));
+}
+.aiin .chipm.dropend {
+  box-shadow: inset -2px 0 0 var(--acc, var(--accent));
+}
+/* 第一张：读 PDF 框好的那块（不带编号），左下角小牌「第 28 页」（照 CN-92 小样 .att .pg） */
+.aiin .chipm.lead {
+  max-width: 200px;
+  padding-left: 5px;
+}
+.aiin .chipm.lead.img {
+  padding-right: 22px;
+}
+.aiin .chipm.lead .lim {
+  position: relative;
+  flex: none;
+  display: block;
+}
+.aiin .chipm.lead .lim img {
+  display: block;
+  height: 34px;
+  /* 框接近方形时也不窄于 64（小牌「第2页」不把图整个盖住），裁边 */
+  min-width: 64px;
+  max-width: 120px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--line2, var(--stroke));
+}
+.aiin .chipm.lead .lim .wait {
+  display: block;
+  width: 60px;
+  height: 34px;
+  border-radius: 3px;
+  background: var(--fill2, var(--fill-2));
+}
+.aiin .chipm.lead .pg {
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 11px;
+  line-height: 15px;
+  white-space: nowrap;
+}
+/* 视频「接着问」那一帧 */
+.aiin .chipm.lead .fr {
+  flex: none;
+  height: 34px;
+  max-width: 60px;
+  object-fit: cover;
+  border-radius: 3px;
+}
+[data-tone='dark'] .aiin .chipm > img,
+[data-tone='dark'] .aiin .chipm.lead .lim img {
+  filter: brightness(0.92);
+}
+
+/* ---------- 点一张卡：上面弹 360 宽的小卡看全文（图看大图 + 来源） ---------- */
+.ai-peek {
+  position: fixed;
+  z-index: 1000;
+  width: 360px;
+  max-height: min(420px, 60vh);
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--pop, var(--bg-popover));
+  color: var(--t1, var(--text));
+  box-shadow: var(--shadow-up, var(--shadow-pop));
+  font: 12px/1.5 var(--sans, var(--font-sans));
+}
+.ai-peek .pt {
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  user-select: text;
+}
+.ai-peek .ps {
+  color: var(--t3, var(--text-3));
+}
+.ai-peek img {
+  display: block;
+  width: 100%;
+  border-radius: 6px;
+  background: #fff;
+}
+
+/* ---------- 谁来答 / 模型 / effort 的菜单：往上弹，引擎 320、另两个 280，圆角 12、--shadow-up、内边距 6；行 30、勾在左边 14 ---------- */
+.ai-menu {
+  position: fixed;
+  z-index: 1000;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--pop, var(--bg-popover));
+  color: var(--t1, var(--text));
+  box-shadow: var(--shadow-up, var(--shadow-pop));
+  font: 13px/1.5 var(--sans, var(--font-sans));
+  user-select: none;
+}
+.ai-menu .mh {
+  padding: 6px 8px 4px 30px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--t3, var(--text-3));
+}
+.ai-menu .it {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  white-space: nowrap;
+}
+.ai-menu .it:hover:not(:disabled) {
+  background: var(--fill, var(--fill-1));
+}
+.ai-menu .it.dim,
+.ai-menu .it:disabled {
+  color: var(--t3, var(--text-3));
+}
+.ai-menu .it:disabled .eng-logo {
+  opacity: 0.5;
+}
+.ai-menu .it .ck {
+  flex: none;
+  width: 14px;
+  display: grid;
+  place-items: center;
+}
+.ai-menu .it .nm {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ai-menu .it .r {
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--t3, var(--text-3));
+}
+.ai-menu .sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line, var(--stroke-soft));
+}
+.ai-menu .sub {
+  padding: 0 8px 6px 30px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--t3, var(--text-3));
+}
+
+/* ---------- 发出去的那一条：字里的编号是 15 的小圆点数字，下面一行一条列出每块 ---------- */
+.um.mq {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  white-space: normal;
+}
+.um.mq .mt {
+  white-space: pre-wrap;
+}
+.um.mq .fn {
+  display: inline-grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  margin: 0 2px;
+  border-radius: 50%;
+  background: var(--acc-bg, var(--accent-bg));
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.um.mq .fnl {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line2, var(--stroke));
+  font-size: 12px;
+  line-height: 18px;
+}
+.um.mq .fni {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.um.mq .fni .fn {
+  flex: none;
+  margin: 0;
+  vertical-align: 0;
+}
+.um.mq .fni img {
+  display: block;
+  flex: none;
+  height: 36px;
+  max-width: 160px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--line, var(--stroke-soft));
+}
+.um.mq .fni .fq {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.um.mq .fni .fs {
+  flex: none;
+  color: var(--t3, var(--text-3));
+  white-space: nowrap;
+}
+/* 网页上引的那块：来源点了回到那一段 */
+.um.mq .fni .fs.back {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.um.mq .fni .fs.back:hover {
+  color: var(--acc-t, var(--accent-text));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ---------- 黑色胶囊浮条（回答里选一段「引用 ⇧⌘L · 拷贝」、PDF 框一块的工具条）：34 高、圆角 9、13px 白字 ---------- */
+.capbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: light-dark(#1d2730, #0b1a20);
+  color: #fff;
+  font: 13px/19.5px var(--sans, var(--font-sans));
+  white-space: nowrap;
+  user-select: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  cursor: default;
+}
+.capbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  color: #fff;
+}
+.capbar button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.capbar button.main {
+  background: rgba(255, 255, 255, 0.14);
+}
+.capbar .sepv {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: rgba(255, 255, 255, 0.25);
+}
+.capbar kbd {
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.16);
+  font: 11px/1 var(--sans, var(--font-sans));
+  color: inherit;
+}
+/* 这一栏窄得带键帽放不下一整条：先藏键帽（键写在输入框底行的提示里），五颗照样整个露着（PDF、HTML 的小条，cap-place.ts） */
+.capbar.nokbd kbd {
+  display: none;
+}
+/* 「⋯」「×」只有图标（task-6cxtc 四处小条一个样）；「⋯」开着时同悬停的底 */
+.capbar button.icon {
+  padding: 0 8px;
+}
+.capbar button.icon.on {
+  background: rgba(255, 255, 255, 0.12);
+}
+/* 「⋯」里：拷贝这段 / 拷贝这块、翻译设置…（黑底，同网页小条的「⋯」）；右边和「⋯」对齐，在工具条下面 6 */
+.capbar .capmenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 36px;
+  z-index: 2;
+  min-width: 200px;
+  padding: 6px;
+  border-radius: 10px;
+  background: #1c1c1e;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+.capbar .capmenu button {
+  display: flex;
+  width: 100%;
+  height: 32px;
+  gap: 10px;
+  padding: 0 10px;
+}
+.capbar .capmenu .r {
+  margin-left: auto;
+  padding-left: 16px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+/* 选中小条能自定义（task-26nz7）：⋯ 里分组的细线、刚存好那颗描的一圈强调色 */
+.capbar .capmenu .ms {
+  height: 1px;
+  margin: 5px 4px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.capbar button.new {
+  box-shadow: 0 0 0 1.5px var(--acc, var(--accent)) inset;
+}
+.ai-cap {
+  position: fixed;
+  z-index: 1000;
+  animation: cap-in 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* 选中一段字时小条最前面的几颗颜色（ParaRead 联动）：8 的圆点 + 名字，看不懂是一小段红色波浪线 */
+.capbar button.hlp {
+  gap: 5px;
+  padding: 0 7px;
+}
+.capbar button.hlp i {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--hl, currentColor);
+}
+/* 放不下时先藏划线那几颗的名字、只留点（cap-place.ts 先试 .nohl，还放不下才 .nokbd 藏键帽） */
+.capbar.nohl button.hlp span {
+  display: none;
+}
+.capbar button.hlp i.wv {
+  width: 12px;
+  height: 4px;
+  border-radius: 0;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='4'%3E%3Cpath d='M0 3 Q1.5 0.5 3 2 T6 1.5' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E") repeat-x 0 0 / 6px 4px;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='4'%3E%3Cpath d='M0 3 Q1.5 0.5 3 2 T6 1.5' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E") repeat-x 0 0 / 6px 4px;
+}

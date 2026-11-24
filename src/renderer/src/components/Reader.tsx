@@ -1,12 +1,14 @@
-import { ALargeSmall, Check, ChevronDown, Columns2, Rows2, ChevronLeft, ChevronUp, Cloud, FileOutput, GripVertical, Highlighter, Info, Languages, Minimize2, PanelLeft, PanelRight, PictureInPicture2, RefreshCw, ScanText, Search, SquarePen, X, Zap, Eraser, Pencil } from 'lucide-react'
+import { ALargeSmall, BookMarked, Check, Undo2, ChevronDown, Columns2, Rows2, ChevronLeft, ChevronUp, Cloud, FileOutput, GripVertical, Highlighter, Info, Languages, Minimize2, PanelLeft, PanelRight, PictureInPicture2, RefreshCw, ScanText, Search, SquarePen, X, Zap, Eraser, Pencil } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type * as PdfJs from 'pdfjs-dist'
 import { sectionsOf, squash } from '@shared/chunk'
-import type { Annotation, Block, HlColor, Idea, MajorPoint, Paper, ReadMode, ReadPosition, ReflowDoc, SettingsView, Tier, Term, Ink, AnnLabel } from '@shared/types'
+import type { Annotation, Block, ChatBox, HlColor, Idea, MajorPoint, Paper, ReadMode, ReadPosition, ReflowDoc, SettingsView, Tier, Term, Ink, AnnLabel } from '@shared/types'
 import { recentTopics } from '@shared/ideas'
 import { pageOfText } from '@shared/refs'
+import { kindOfColor } from '@shared/cnLink'
 import type { IdeaDraft } from './IdeaCard'
-import { api, errText, type OpenAt, type ReflowProgress } from '../api'
+import { api, errText, type CnLinkOf, type HlKind, type OpenAt, type ReflowProgress } from '../api'
+import { DEFAULT_KINDS } from '@cn/format'
 import { showMenu } from '../lib/menu'
 import { loadPdf } from '../lib/pdf'
 import { useTranslations } from '../lib/translations'
@@ -19,7 +21,10 @@ import { ExportDialog } from './ExportDialog'
 import { GlanceView } from './GlanceView'
 import { LeftPane, type LeftTab } from './LeftPane'
 import { PaperInfo } from './PaperInfo'
-import { INK_COLORS, INK_WIDTH, PdfView, type InkTool } from './PdfView'
+import { INK_COLORS, INK_WIDTH, PdfView, type InkTool, type PageSide } from './PdfView'
+import { PendingCard, TrBanner } from './LayoutTrCards'
+import { cropPage, useBabelInstall, useLayoutTr } from '../lib/layoutTr'
+import { doneCount } from '@shared/layoutTr'
 import { ReflowView } from './ReflowView'
 import { RegionEditor } from './RegionEditor'
 import { SelectionLayer, type SelInfo } from './Selection'
@@ -31,13 +36,29 @@ export type Jump = { nonce: number; kind: 'block'; blockId: string; annId?: stri
 export type Density = 'less' | 'default' | 'more'
 
 let jumpSeq = 1
+/** 原文、对照、译文三种看法都是 PDF 页（pdf.js），跳页、框选、缩放一样 */
+const pdfLike = (m: ReadMode | null): boolean => m === 'pdf' || m === 'dual' || m === 'mono'
+// 对照里一页至少这么宽，窄了自动换成上下排
+const DUAL_MIN_PAGE = 480
 const TIER_NAME: Record<Tier, string> = { flash: t('快速'), basic: t('精细'), simple: t('简单'), edited: t('调整过') }
 // 正文那一列最少这么宽：窗口放不下时收侧栏，不压正文
 const MID_MIN = 480
 // 正文列比这个窄，标题栏的文字按钮只留图标
 const COMPACT_BAR = 700
 
-export function Reader(props: { paperId: string; initialMode?: ReadMode; initialAnn?: string; initialAt?: OpenAt; initialIdea?: string; settings: SettingsView; onBack: () => void; onOpenPaper: (id: string) => void; onOpenIdeas: (ideaId: string) => void }) {
+export function Reader(props: {
+  paperId: string
+  initialMode?: ReadMode
+  initialAnn?: string
+  initialAt?: OpenAt
+  initialIdea?: string
+  /** 从画布笔记哪个文件夹首页来的（深链 back=）：标题栏多一颗「回画布笔记」 */
+  back?: { root: string; folder: string } | null
+  settings: SettingsView
+  onBack: () => void
+  onOpenPaper: (id: string) => void
+  onOpenIdeas: (ideaId: string) => void
+}) {
   const { paperId, settings } = props
   const toast = useToast()
   const [paper, setPaper] = useState<Paper | null>(null)
@@ -45,6 +66,9 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
   const [doc, setDoc] = useState<ReflowDoc | null>(null)
   const [prog, setProg] = useState<ReflowProgress | null>(null)
   const [anns, setAnns] = useState<Annotation[]>([])
+  // 划线的含义（和画布笔记同一份，库里 .canvas-notes/划线颜色.json）；这篇在画布笔记库里时笔记在哪
+  const [kinds, setKinds] = useState<HlKind[]>(DEFAULT_KINDS)
+  const [cnLink, setCnLink] = useState<CnLinkOf | null>(null)
   // 灵感库里这篇的句子（正文左边的小灯泡）；收灵感的小卡里列的主题是全库最近用过的
   const [ideas, setIdeas] = useState<Idea[]>([])
   const [ideaTopics, setIdeaTopics] = useState<string[]>([])
@@ -82,7 +106,13 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
   }, [inkTool])
-  const [shot, setShot] = useState<{ page: number; frac: [number, number, number, number] } | null>(null)
+  const [shot, setShot] = useState<{ page: number; frac: [number, number, number, number]; side?: PageSide } | null>(null)
+  // 对照看法里左栏默认收起，把宽度让给两页（左上角按钮能开，不记进设置）
+  const [leftInDual, setLeftInDual] = useState(false)
+  // 「翻成对照」那张卡点了「以后再说」
+  const [trLater, setTrLater] = useState(false)
+  // 打开一篇没换过看法的：「论文看重排、课件看对照」要等 PDF 打开看页面横竖再定
+  const pendingOpen = useRef(false)
   const [zoom, setZoom] = useState(1)
   const [aaOpen, setAaOpen] = useState(false)
   const [trPreview, setTrPreview] = useState<TrStyle | null>(null)
@@ -111,6 +141,8 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
   const posRef = useRef<ReadPosition>({})
   const midRef = useRef<HTMLDivElement>(null)
   const tr = useTranslations(paperId, settings.targetLang)
+  const babel = useBabelInstall()
+  const lt = useLayoutTr(paperId, pdf?.numPages ?? 0)
   const floating = settings.chatFloat
 
   // 载入
@@ -125,8 +157,21 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
       const d = await api.getReflow(paperId)
       if (!alive) return
       setDoc(d)
-      // 新论文重排好之前停在原文，好了以后默认对照；之后记住上次的模式
-      setMode(props.initialMode ?? p.lastMode ?? (d ? 'reflow' : 'pdf'))
+      // 没换过看法的一篇：照「设置 › 翻译 › 打开 PDF 时」（默认对照）；扫描件看原文（保版面翻译对扫描件不准）；换过的记住上次的
+      // 画布笔记库里的一篇：先和配对笔记对一遍（那边划的、删的），读到哪那边更晚（最后是画布笔记记的）就翻到那里
+      const link = p.cn ? await api.cnLink(paperId) : null
+      if (!alive) return
+      setCnLink(link)
+      setKinds(await api.cnKinds(paperId))
+      if (link) {
+        await api.cnWatch(paperId).catch((e) => toast(t('读画布笔记里的笔记没成：{0}', errText(e))))
+        const r = props.initialAt ? null : await api.cnReadAt(paperId)
+        if (r && r.by !== 'pararead') cameAt.current = { page: r.page, blockId: r.blockId }
+      }
+      if (!alive) return
+      const want = props.initialMode ?? p.lastMode ?? (p.scanned || settings.openView === 'pdf' ? 'pdf' : settings.openView === 'dual' ? 'dual' : null)
+      if (want) setMode(want)
+      else pendingOpen.current = true
       setAnns(await api.annList(paperId))
       setIdeas(await api.ideaList(paperId))
       setInks(await api.inkList(paperId))
@@ -142,8 +187,35 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paperId])
+  // 画布笔记那边改了这篇的笔记（划了、换了含义、删了）：重读；关这篇时笔记属性「读到」「读了」跟上
+  useEffect(() => {
+    const off = api.onCnAnnChanged((id) => {
+      if (id === paperId) void api.annList(paperId).then(setAnns)
+    })
+    return () => {
+      off()
+      void api.cnClosed(paperId)
+    }
+  }, [paperId])
 
   useEffect(() => () => void pdf?.loadingTask.destroy(), [pdf])
+
+  // 「论文看重排、课件看对照」：第一页横版是课件
+  useEffect(() => {
+    if (!pendingOpen.current || !paper) return
+    if (pdfErr) {
+      pendingOpen.current = false
+      setMode(doc ? 'reflow' : 'pdf')
+      return
+    }
+    if (!pdf) return
+    void pdf.getPage(1).then((pg) => {
+      if (!pendingOpen.current) return
+      pendingOpen.current = false
+      const vp = pg.getViewport({ scale: 1 })
+      setMode(vp.width > vp.height ? 'dual' : doc ? 'reflow' : 'pdf')
+    })
+  }, [pdf, pdfErr, paper, doc])
 
   // 阅读时长：窗口在前台、这篇开着，每分钟记一次
   useEffect(() => {
@@ -165,8 +237,8 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     const d = await api.getReflow(paperId)
     setDoc(d)
     setPaper(await api.getPaper(paperId))
-    if (mode === 'pdf' && tier === 'flash') toast(t('重排好了'), { label: t('切到对照'), run: () => switchMode('reflow') })
-    if (mode === null) setMode('reflow')
+    if (mode === 'pdf' && tier === 'flash') toast(t('重排好了'), { label: t('切到重排'), run: () => switchMode('reflow') })
+    if (mode === null && !pendingOpen.current) setMode('reflow')
   })
   useEffect(() => {
     const offs = [
@@ -213,14 +285,23 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     void api.updatePaper(paperId, { lastMode: m })
   })
 
-  // 模式切换四格：上下对照、左右对照都是对照模式，换的是排法；点了就是要看双语
-  const pickMode = useEvent((v: ReadMode | 'stack' | 'side') => {
-    if (v !== 'stack' && v !== 'side') return switchMode(v)
+  // 重排里的上下 / 左右对照（2026-11-23 起并进「重排」一格，旁边两格换排法）：点了就是要看双语
+  const pickReflowLayout = useEvent((v: 'stack' | 'side') => {
     if (settings.trLayout !== v || settings.display !== 'both') void api.setSettings({ trLayout: v, display: 'both' })
     if (mode !== 'reflow') switchMode('reflow')
   })
-  // ⌘2 进对照（按上次的排法），已经在对照里再按一次在上下和左右之间换
-  const reflowCmd = useEvent(() => (mode === 'reflow' ? pickMode(settings.trLayout === 'side' ? 'stack' : 'side') : switchMode('reflow')))
+  // ⌘4 进重排（按上次的排法），已经在重排里再按一次在上下和左右之间换
+  const reflowCmd = useEvent(() => (mode === 'reflow' ? pickReflowLayout(settings.trLayout === 'side' ? 'stack' : 'side') : switchMode('reflow')))
+
+  // 对照、译文看法：告诉主进程在看第几页（先翻这几页，后面边看边翻）；离开这篇不再往后翻
+  const trFocus = useDebounced((page: number) => {
+    if (pdf && (mode === 'dual' || mode === 'mono')) void api.layoutTrFocus(paperId, page, pdf.numPages)
+  }, 400)
+  useEffect(() => {
+    if (pdf && (mode === 'dual' || mode === 'mono')) void api.layoutTrFocus(paperId, posRef.current.page ?? curPage, pdf.numPages)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, pdf, paperId, babel?.phase])
+  useEffect(() => () => void api.layoutTrBlur(paperId), [paperId])
 
   const sections = useMemo(() => (doc ? sectionsOf(doc.blocks) : new Map<string, string>()), [doc])
   const headings = useMemo(() => (doc ? doc.blocks.filter((b) => b.type === 'heading') : []), [doc])
@@ -264,7 +345,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
   )
 
   // 高亮
-  const createAnn = useEvent(async (info: SelInfo, color: HlColor, note: string = '', style: Annotation['style'] = 'highlight', label: AnnLabel | null = null): Promise<Annotation | null> => {
+  const createAnn = useEvent(async (info: SelInfo, color: HlColor, note: string = '', style: Annotation['style'] = 'highlight', label: AnnLabel | null = null, kind?: string): Promise<Annotation | null> => {
     const t_ = info.target
     if (!t_) return null
     const now = Date.now()
@@ -275,10 +356,12 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
       color,
       style,
       label,
+      kind: kind ?? kindOfColor(kinds, color),
       text: info.text,
       note,
       page: t_.mode === 'pdf' ? t_.page : null,
       rects: t_.mode === 'pdf' ? t_.rects : null,
+      ...(t_.mode === 'pdf' && t_.side === 'tr' ? { side: 'tr' as const } : {}),
       blockId: t_.mode === 'reflow' ? t_.blockId : null,
       blockHash: t_.mode === 'reflow' ? t_.blockHash : null,
       start: t_.mode === 'reflow' ? t_.start : null,
@@ -287,17 +370,29 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
       createdAt: now,
       updatedAt: now
     }
-    // 对照模式里做的标注，主进程会按这几个字去原文里找它在第几页，带着页码回来
-    a.page = (await api.annSave(a)) ?? a.page
+    // 对照模式里做的标注，主进程会按这几个字去原文里找它在第几页，带着页码回来；画布笔记库里的一篇写进笔记，写不进去报错
+    try {
+      a.page = (await api.annSave(a)) ?? a.page
+    } catch (e) {
+      toast(errText(e))
+      return null
+    }
     setAnns((l) => [...l, a])
+    if (cnLink) void api.annList(paperId).then(setAnns)
     void api.setSettings({ lastColor: color })
     window.getSelection()?.removeAllRanges()
     return a
   })
   const updateAnn = useEvent(async (a: Annotation) => {
     const n = { ...a, updatedAt: Date.now() }
-    await api.annSave(n)
+    try {
+      await api.annSave(n)
+    } catch (e) {
+      toast(errText(e))
+      return
+    }
     setAnns((l) => l.map((x) => (x.id === a.id ? n : x)))
+    if (cnLink) void api.annList(paperId).then(setAnns)
   })
   // 对照模式里给公式、图、表整块标记（用颜色框住）：没标过就新建，换颜色就改，color 为 null 是去掉
   const markBlock = useEvent(async (b: Block, text: string, color: HlColor | null) => {
@@ -308,12 +403,17 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     await createAnn({ text, paragraph: text, getRect: () => null, target: { mode: 'reflow', blockId: b.id, blockHash: b.hash, start: null as unknown as number, end: null as unknown as number, section: sections.get(b.id) ?? '' } }, color, '', 'box')
   })
   const deleteAnn = useEvent(async (a: Annotation) => {
-    await api.annDelete(a.id)
+    try {
+      await api.annDelete(a.id)
+    } catch (e) {
+      toast(errText(e))
+      return
+    }
     setAnns((l) => l.filter((x) => x.id !== a.id))
     toast(a.style === 'box' ? t('已去掉标记') : t('已删除高亮'), {
       label: t('撤销'),
       run: () => {
-        void api.annSave(a).then(() => setAnns((l) => [...l, a]))
+        void api.annSave({ ...a, hl: null }).then(() => (cnLink ? void api.annList(paperId).then(setAnns) : setAnns((l) => [...l, a])))
       }
     })
   })
@@ -357,8 +457,8 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
       if (mode !== 'reflow') switchMode('reflow')
       setTimeout(() => setJump({ nonce: jumpSeq++, kind: 'block', blockId: i.blockId! }), mode === 'reflow' ? 0 : 60)
     } else if (i.page) {
-      if (mode !== 'pdf') switchMode('pdf')
-      setTimeout(() => setJump({ nonce: jumpSeq++, kind: 'page', page: i.page!, frac: i.rects?.[0]?.[1] }), mode === 'pdf' ? 0 : 60)
+      if (!pdfLike(mode)) switchMode('pdf')
+      setTimeout(() => setJump({ nonce: jumpSeq++, kind: 'page', page: i.page!, frac: i.rects?.[0]?.[1] }), pdfLike(mode) ? 0 : 60)
     }
     setFocusIdea(i.id)
     setTimeout(() => setFocusIdea((x) => (x === i.id ? null : x)), 2600)
@@ -413,8 +513,8 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     setAttach({ quote, image: null, prefill: extra })
     showChat()
   })
-  const askImage = useEvent((image: string, context: string, prefill?: string) => {
-    setAttach({ quote: null, image, context, prefill })
+  const askImage = useEvent((image: string, context: string, prefill?: string, box?: ChatBox) => {
+    setAttach({ quote: null, image, context, prefill, ...(box ? { box } : {}) })
     showChat()
   })
 
@@ -423,7 +523,9 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
       if (mode !== 'reflow') switchMode('reflow')
       if (a.blockId) setJump({ nonce: jumpSeq++, kind: 'block', blockId: a.blockId.replace(/:tr$/, ''), annId: a.id })
     } else {
-      if (mode !== 'pdf') switchMode('pdf')
+      // 划在译页上的：原文看法里不画它，换到对照
+      if (a.side === 'tr' && mode !== 'dual' && mode !== 'mono') switchMode('dual')
+      else if (!pdfLike(mode)) switchMode('pdf')
       if (a.page) setJump({ nonce: jumpSeq++, kind: 'page', page: a.page, annId: a.id, frac: a.rects?.[0]?.[1] })
     }
   })
@@ -448,8 +550,8 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     const t_ = setTimeout(() => {
       if (mode === 'reflow' && at.blockId) setJump({ nonce: jumpSeq++, kind: 'block', blockId: at.blockId })
       else if (at.page) {
-        if (mode !== 'pdf') switchMode('pdf')
-        setTimeout(() => setJump({ nonce: jumpSeq++, kind: 'page', page: at.page! }), mode === 'pdf' ? 0 : 60)
+        if (!pdfLike(mode)) switchMode('pdf')
+        setTimeout(() => setJump({ nonce: jumpSeq++, kind: 'page', page: at.page! }), pdfLike(mode) ? 0 : 60)
       }
     }, 400)
     return () => clearTimeout(t_)
@@ -460,7 +562,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     setTimeout(() => setJump({ nonce: jumpSeq++, kind: 'block', blockId }), mode === 'reflow' ? 0 : 60)
   })
   const goHeading = useEvent((blockId: string) => {
-    if (mode === 'pdf') {
+    if (pdfLike(mode)) {
       const p = headingPages.get(blockId)
       if (p) setJump({ nonce: jumpSeq++, kind: 'page', page: p })
       return
@@ -551,6 +653,8 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
           if (!backHandle.current?.()) props.onBack()
         }
         if (cmd === 'mode-pdf') switchMode('pdf')
+        if (cmd === 'mode-dual') switchMode('dual')
+        if (cmd === 'mode-mono') switchMode('mono')
         if (cmd === 'mode-reflow') reflowCmd()
         if (cmd === 'mode-glance') switchMode('glance')
         if (cmd === 'toggle-left') toggleLeft()
@@ -560,7 +664,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
         if (cmd === 'translate-all') setTrAll(true)
         if (cmd === 'paper-info') setDialog('info')
         if (cmd === 'box-select') {
-          if (mode !== 'reflow' || !doc) switchMode('pdf')
+          if (!pdfLike(mode) && (mode !== 'reflow' || !doc)) switchMode('pdf')
           setBoxMode(true)
         }
         if (cmd === 'ask-ai') {
@@ -579,15 +683,20 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
     onPosition({ zoom: z })
   })
   const zoomCmd = useEvent((cmd: string) => {
-    if (mode === 'pdf') setZoomTo(cmd === 'zoom-reset' ? 1 : Math.min(3, Math.max(0.5, Math.round((zoom + (cmd === 'zoom-in' ? 0.1 : -0.1)) * 10) / 10)))
+    if (pdfLike(mode)) setZoomTo(cmd === 'zoom-reset' ? 1 : Math.min(3, Math.max(0.5, Math.round((zoom + (cmd === 'zoom-in' ? 0.1 : -0.1)) * 10) / 10)))
     else void api.setSettings({ readSize: cmd === 'zoom-reset' ? 18 : Math.min(24, Math.max(14, settings.readSize + (cmd === 'zoom-in' ? 1 : -1))) })
   })
 
   // 窗口放不下三栏时自动收一栏：刚点开的那一栏留着，收另一栏；窗口拉宽、放得下了再放回来。自动收的不记进设置
   const autoHid = useRef({ left: false, right: false })
   const lastOpened = useRef<'left' | 'right'>('right')
+  const leftOff = mode === 'dual' ? !leftInDual : leftCollapsed
   const toggleLeft = useEvent(() => {
     autoHid.current.left = false
+    if (mode === 'dual') {
+      if (!leftInDual) lastOpened.current = 'left'
+      return setLeftInDual(!leftInDual)
+    }
     if (leftCollapsed) lastOpened.current = 'left'
     setLeftCollapsed(!leftCollapsed)
     void api.setSettings({ leftCollapsed: !leftCollapsed })
@@ -609,22 +718,24 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
   const rightFit = Math.min(rightW, Math.max(320, winW - MID_MIN))
   useEffect(() => {
     const room = (l: boolean, r: boolean): boolean => winW - (l ? leftW : 0) - (r ? rightFit : 0) >= MID_MIN
-    const L = !leftCollapsed
+    const L = !leftOff
+    const hideLeft = (v: boolean): void => (mode === 'dual' ? setLeftInDual(!v) : setLeftCollapsed(v))
     const R = !rightCollapsed && !floating
     const hid = autoHid.current
     if (!room(L, R)) {
       if (R && lastOpened.current === 'left') ((hid.right = true), setRightCollapsed(true))
-      else ((hid.left = true), setLeftCollapsed(true))
-    } else if (hid.left && !L && room(true, R)) ((hid.left = false), setLeftCollapsed(false))
+      else ((hid.left = true), hideLeft(true))
+    } else if (hid.left && !L && room(true, R)) ((hid.left = false), hideLeft(false))
     else if (hid.right && rightCollapsed && !floating && room(L, true)) ((hid.right = false), setRightCollapsed(false))
-  }, [winW, leftCollapsed, rightCollapsed, leftW, rightFit, floating])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [winW, leftOff, rightCollapsed, leftW, rightFit, floating])
 
   const startResize = (side: 'left' | 'right') => (e: React.MouseEvent) => {
     e.preventDefault()
     const x0 = e.clientX
     const w0 = side === 'left' ? leftW : rightFit
     // 拖到正文只剩 MID_MIN 为止，不把另一栏挤掉
-    const cap = winW - MID_MIN - (side === 'left' ? (rightCollapsed || floating ? 0 : rightFit) : leftCollapsed ? 0 : leftW)
+    const cap = winW - MID_MIN - (side === 'left' ? (rightCollapsed || floating ? 0 : rightFit) : leftOff ? 0 : leftW)
     const move = (ev: MouseEvent): void => {
       const d = ev.clientX - x0
       if (side === 'left') setLeftW(Math.max(240, Math.min(400, cap, w0 + d)))
@@ -706,9 +817,32 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
   const reflowBusy = !doc && (paper.reflow.flash === 'queued' || paper.reflow.flash === 'running' || prog?.status === 'running')
   const showRight = !rightCollapsed && !floating
   const trPct = Math.round((trDone / Math.max(1, translatable.length)) * 100)
-  const gridCols = `${leftCollapsed ? 0 : leftW}px minmax(${MID_MIN}px, 1fr) ${showRight ? rightFit : 0}px`
+  const gridCols = `${leftOff ? 0 : leftW}px minmax(${MID_MIN}px, 1fr) ${showRight ? rightFit : 0}px`
+  const midW = winW - (leftOff ? 0 : leftW) - (showRight ? rightFit : 0)
   // 正文列窄的时候（13 寸屏幕开着 AI 栏）：标题栏里带字的按钮只留图标，不然搜索和显示设置会被挤出去
-  const compact = winW - (leftCollapsed ? 0 : leftW) - (showRight ? rightFit : 0) < COMPACT_BAR
+  const compact = midW < COMPACT_BAR
+  // 对照：一页不到 480 宽时自动上下排（不存）
+  const dualAuto = settings.dualLayout === 'side' && (midW - 64 - 16) / 2 < DUAL_MIN_PAGE
+  const dualLayout = dualAuto ? 'stack' : settings.dualLayout
+  const trSt = lt.state
+  const ltDone = trSt ? doneCount(trSt) : 0
+  const trMenu = async (e: React.MouseEvent): Promise<void> => {
+    if (!trSt) return
+    const stopped = trSt.paused || !!trSt.error
+    const act = await showMenu(
+      [
+        stopped ? { id: 'resume', label: trSt.error ? t('重试') : t('继续翻译'), checked: false } : { id: 'pause', label: t('暂停'), checked: false },
+        { id: 'redo', label: t('重翻第 {0} 页', curPage), enabled: !!trSt.pages[curPage], checked: false },
+        { type: 'separator' },
+        { id: 'service', label: t('换翻译服务…'), hint: settings.trServiceName, checked: false }
+      ],
+      { el: e.currentTarget }
+    )
+    if (act === 'resume') void api.layoutTrResume(paperId)
+    if (act === 'pause') void api.layoutTrPause(paperId)
+    if (act === 'redo') void api.layoutTrRedo(paperId, curPage)
+    if (act === 'service') void api.openSettings('translate')
+  }
   const meta = [paper.venue, paper.year, paper.progress >= 1 ? t('读完') : paper.progress > 0 ? t('读到 {0}%', Math.round(paper.progress * 100)) : ''].filter(Boolean).join(' · ')
 
   const chat = (
@@ -783,7 +917,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
   return (
     <div className="reader" style={{ gridTemplateColumns: gridCols }} data-mode={mode}>
       {/* 左栏 */}
-      {!leftCollapsed && (
+      {!leftOff && (
         <aside className="col-left">
           <div className="titlebar drag left-bar">
             <span className="spacer" />
@@ -813,7 +947,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
           </div>
           <LeftPane
             tab={leftTab}
-            mode={mode}
+            mode={pdfLike(mode) ? 'pdf' : mode}
             pdf={pdf}
             doc={doc}
             headings={headings}
@@ -823,6 +957,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
             curBlock={curBlock}
             curPage={curPage}
             anns={anns}
+            kinds={kinds}
             sections={sections}
             sectionForPage={sectionForPage}
             keys={keys}
@@ -850,7 +985,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
             onHeading={goHeading}
             onBlock={goBlock}
             onPage={(p) => {
-              if (mode !== 'pdf') switchMode('pdf')
+              if (!pdfLike(mode)) switchMode('pdf')
               setJump({ nonce: jumpSeq++, kind: 'page', page: p })
             }}
             onAnn={goTo}
@@ -863,8 +998,8 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
 
       {/* 中栏 */}
       <section className="col-mid">
-        <div className={'titlebar drag mid-bar' + (leftCollapsed ? ' no-left' : '') + (showRight ? '' : ' no-right')}>
-          {leftCollapsed && (
+        <div className={'titlebar drag mid-bar' + (leftOff ? ' no-left' : '') + (showRight ? '' : ' no-right')}>
+          {leftOff && (
             <button className="icon-btn" title={t('显示左栏 ⌃⌘S')} onClick={toggleLeft}>
               <PanelLeft size={16} />
             </button>
@@ -872,42 +1007,60 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
           <button className="icon-btn" title={t('回文献库 ⌘[')} onClick={props.onBack}>
             <ChevronLeft size={16} />
           </button>
-          {/* 2026-11-15 用户挑了方向 A：上下对照、左右对照直接放进模式切换，旁边一个意群按钮 */}
+          {props.back && (
+            <>
+              <button className="btn ghost cn-back" title={t('回画布笔记里的「{0}」首页', props.back.folder || t('库'))} onClick={() => void api.cnOpenInCn(null, 'folder', { folder: props.back!.folder })}>
+                <Undo2 size={16} />
+                {!compact && t('回画布笔记')}
+              </button>
+              <span className="tb-sep" />
+            </>
+          )}
+          {/* 2026-11-23 用户定看法五格：原文 / 对照 / 译文 / 重排 / 速览；以前的上下、左右对照并进「重排」，在重排里两格换排法 */}
           <Segmented
-            className="mode-seg"
-            value={mode === 'reflow' ? settings.trLayout : mode}
-            onChange={pickMode}
+            className={'mode-seg' + (compact ? ' compact' : '')}
+            value={mode}
+            onChange={switchMode}
             options={[
               { value: 'pdf', label: t('原文'), title: '⌘1' },
-              {
-                value: 'stack',
-                label: (
-                  <>
-                    <Rows2 size={14} />
-                    {!compact && <span className="seg-t">{t('上下对照')}</span>}
-                  </>
-                ),
-                busy: reflowBusy && settings.trLayout === 'stack',
-                title: compact ? t('上下对照：⌘2，再按一次换左右') : t('⌘2，再按一次换左右')
-              },
-              {
-                value: 'side',
-                label: (
-                  <>
-                    <Columns2 size={14} />
-                    {!compact && <span className="seg-t">{t('左右对照')}</span>}
-                  </>
-                ),
-                busy: reflowBusy && settings.trLayout === 'side',
-                title: compact ? t('左右对照：⌘2，再按一次换上下') : t('⌘2，再按一次换上下')
-              },
-              { value: 'glance', label: t('速览'), title: '⌘3' }
+              { value: 'dual', label: t('对照'), title: t('左边原页，右边同版面的译文页 ⌘2') },
+              { value: 'mono', label: t('译文'), title: t('只看同版面的译文页 ⌘3') },
+              { value: 'reflow', label: t('重排'), busy: reflowBusy, title: t('重排成网页：逐段对照、意群、AI 重点 ⌘4') },
+              { value: 'glance', label: t('速览'), title: '⌘5' }
             ]}
           />
+          {/* 排法两格；正文列窄时只留现在这一格，点一下换另一种（标题栏放得下搜索和显示设置） */}
+          {mode === 'dual' && (
+            <Segmented
+              className={'lay-seg' + (compact ? ' one' : '')}
+              value={dualLayout}
+              onChange={(v) => void api.setSettings({ dualLayout: compact ? (dualLayout === 'side' ? 'stack' : 'side') : v })}
+              options={[
+                { value: 'side' as const, label: <Columns2 size={14} />, title: dualAuto ? t('左右并排（窗口窄，现在自动上下排）') : t('左右并排') },
+                { value: 'stack' as const, label: <Rows2 size={14} />, title: t('上下交替：原页在上，译页在下') }
+              ].filter((o) => !compact || o.value === dualLayout)}
+            />
+          )}
+          {mode === 'reflow' && (
+            <Segmented
+              className={'lay-seg' + (compact ? ' one' : '')}
+              value={settings.trLayout}
+              onChange={(v) => pickReflowLayout(compact ? (settings.trLayout === 'side' ? 'stack' : 'side') : v)}
+              options={[
+                { value: 'stack' as const, label: <Rows2 size={14} />, title: t('上下对照：⌘4，再按一次换左右') },
+                { value: 'side' as const, label: <Columns2 size={14} />, title: t('左右对照：⌘4，再按一次换上下') }
+              ].filter((o) => !compact || o.value === settings.trLayout)}
+            />
+          )}
           {mode === 'reflow' && doc && settings.display === 'both' && <SenseButton settings={settings} compact={compact} />}
           {findOpen && <FindBar scroller={midRef} onClose={() => setFindOpen(false)} />}
           <div className="spacer" />
           <div className="bar-tools">
+          {cnLink && (
+            <button className="icon-btn cn-open" title={t('在画布笔记里看这篇的笔记（{0}）', cnLink.note)} onClick={() => void api.cnOpenInCn(paperId, 'note').catch((e) => toast(errText(e)))}>
+              <BookMarked size={16} />
+            </button>
+          )}
           {mode === 'reflow' && doc && (
             <>
               {!trAllDone && settings.display !== 'src' && (
@@ -949,7 +1102,15 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
               <ScanText size={16} />
             </button>
           )}
-          {mode === 'pdf' && (
+          {(mode === 'dual' || mode === 'mono') && babel?.phase === 'done' && trSt && trSt.started && ltDone < trSt.total && (
+            // 正文列窄时只留图标和小箭头（字放进悬停提示），放不下时它是最后一个收掉的
+            <button className={'btn tr-prog' + (compact ? ' compact' : '')} data-testid="tr-progress" title={[trSt.error ? t('翻译出错') : trSt.paused ? t('已暂停 {0} / {1} 页', ltDone, trSt.total) : t('翻译中 {0} / {1} 页', ltDone, trSt.total), trSt.error ?? t('翻译用 {0}', settings.trServiceName)].join(' · ')} onClick={(e) => void trMenu(e)}>
+              {trSt.error ? <span className="dot err sm" /> : trSt.paused ? <Languages size={16} /> : <span className="spin spin-12" />}
+              {!compact && <span className="num">{trSt.error ? t('翻译出错') : trSt.paused ? t('已暂停 {0} / {1} 页', ltDone, trSt.total) : t('翻译中 {0} / {1} 页', ltDone, trSt.total)}</span>}
+              <ChevronDown size={12} />
+            </button>
+          )}
+          {pdfLike(mode) && (
             <>
               <button
                 className={'btn' + (boxMode ? ' on' : '')}
@@ -961,8 +1122,9 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
                 }}
               >
                 <ScanText size={16} />
-                {!compact && t('截图翻译')}
+                {!compact && (mode === 'pdf' ? t('截图翻译') : t('框选'))}
               </button>
+              {mode === 'pdf' && (
               <button
                 className={'icon-btn' + (inkTool?.kind === 'pen' ? ' active' : '')}
                 title={t('笔：在页面上画（Esc 放下）')}
@@ -974,6 +1136,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
               >
                 <Pencil size={16} />
               </button>
+              )}
               {inkTool && (
                 <span className="ink-tools">
                   {INK_COLORS.map((c) => (
@@ -1022,11 +1185,13 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
             </button>
           )}
         </div>
-        {aaOpen && <AaPanel mode={mode} settings={settings} zoom={zoom} onZoom={setZoomTo} onPreview={setTrPreview} onClose={() => (setAaOpen(false), setTrPreview(null))} />}
+        {aaOpen && <AaPanel mode={pdfLike(mode) ? 'pdf' : mode} settings={settings} zoom={zoom} onZoom={setZoomTo} onPreview={setTrPreview} onClose={() => (setAaOpen(false), setTrPreview(null))} />}
         <div className="mid-body" ref={midRef}>
-          {mode === 'pdf' &&
+          {(mode === 'dual' || mode === 'mono') && <TrBanner inst={babel} state={trSt} total={pdf?.numPages ?? 0} settings={settings} paperId={paperId} onTrSide={mode === 'dual' && dualLayout === 'side'} onLater={() => (setTrLater(true), switchMode('pdf'))} />}
+          {pdfLike(mode) &&
             (pdf ? (
               <PdfView
+                tr={mode === 'dual' || mode === 'mono' ? { layout: mode === 'mono' ? 'mono' : dualLayout, state: trSt, docs: lt.docs, pending: (n) => <PendingCard n={n} inst={babel} state={trSt} paperId={paperId} /> } : undefined}
                 backHandle={backHandle}
                 pdf={pdf}
                 paper={paper}
@@ -1045,21 +1210,25 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
                 onPosition={(page, frac, progress) => {
                   setCurPage(page)
                   onPosition({ page, pageFrac: frac }, progress)
+                  trFocus(page)
                 }}
                 onSelect={(s) => {
                   setShot(null)
                   setSel(s)
                 }}
-                onBox={(img, page, frac, text) => {
+                onBox={(img, page, frac, text, side) => {
                   setBoxMode(false)
-                  setShot({ page, frac })
+                  setShot({ page, frac, side })
+                  // 对照、译文看法：两边同一块都截下来，小条里能换截哪一边（默认你框的那边）
+                  const other = mode === 'pdf' ? null : cropPage(page, side === 'src' ? 'tr' : 'src', frac)
                   setSel({
                     text,
                     paragraph: pageTexts[page - 1] ?? '',
                     image: img,
                     target: null,
+                    ...(mode === 'pdf' ? {} : { shot: { page, frac, side, src: side === 'src' ? img : other, tr: side === 'tr' ? img : other } }),
                     getRect: () => {
-                      const el = document.querySelector(`.page[data-page="${page}"]`)
+                      const el = document.querySelector(`.page[data-page="${page}"][data-side="${side}"]`)
                       if (!el) return null
                       const r = el.getBoundingClientRect()
                       return new DOMRect(r.left + frac[0] * r.width, r.top + frac[1] * r.height, frac[2] * r.width, frac[3] * r.height)
@@ -1067,8 +1236,8 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
                   })
                 }}
                 onRectsFound={(a, rects) => void api.annSave({ ...a, rects })}
-                inkTool={inkTool}
-                inks={inks}
+                inkTool={mode === 'pdf' ? inkTool : null}
+                inks={mode === 'pdf' ? inks : []}
                 onInkAdd={(d) => {
                   if (inkTool?.kind !== 'pen') return
                   const k: Ink = { id: crypto.randomUUID().slice(0, 12), paperId, page: d.page, color: inkTool.color, width: INK_WIDTH, points: d.points, createdAt: Date.now() }
@@ -1142,6 +1311,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
           sel={sel}
           paper={paper}
           lastColor={settings.lastColor}
+          kinds={kinds}
           midRef={midRef}
           onClose={() => {
             setSel(null)
@@ -1150,6 +1320,7 @@ export function Reader(props: { paperId: string; initialMode?: ReadMode; initial
           onCreate={createAnn}
           onUpdate={updateAnn}
           onDelete={deleteAnn}
+          onExplain={(a) => openQuestions({ ids: [a.id], start: a.id, auto: true })}
           onAsk={askAi}
           onAskImage={askImage}
           ideaTopics={ideaTopics}

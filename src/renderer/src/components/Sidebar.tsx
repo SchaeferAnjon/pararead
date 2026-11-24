@@ -1,8 +1,9 @@
-import { BookOpen, BookOpenCheck, ChevronDown, ChevronRight, CircleDashed, FlaskConical, Folder as FolderIcon, FolderPlus, Hash, KeyRound, LibraryBig, Lightbulb, MessagesSquare, Network, NotebookPen, PanelLeft, Pencil, Plus, ScrollText, Search, Settings, Sheet, SquarePen, SquareTerminal, Telescope, Trash2 } from 'lucide-react'
+import { BookMarked, BookOpen, BookOpenCheck, ChevronDown, ChevronRight, CircleDashed, FlaskConical, Folder as FolderIcon, FolderPlus, Hash, KeyRound, LibraryBig, Lightbulb, MessagesSquare, Network, NotebookPen, PanelLeft, Pencil, Plus, ScrollText, Search, Settings, Sheet, SquarePen, SquareTerminal, Telescope, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { Folder, Paper, SettingsView } from '@shared/types'
 import { providerOf } from '@shared/providers'
-import { api, errText, type Project, type ResearchKind, type ResearchSession, type SyncStatus } from '../api'
+import { api, errText, type CnState, type Project, type ResearchKind, type ResearchSession, type SyncStatus } from '../api'
+import { cnFilter, inCnFolder } from '@shared/cnLink'
 import { showMenu } from '../lib/menu'
 import { Kbd, useToast } from '../lib/ui'
 import { t } from '@shared/i18n'
@@ -50,6 +51,16 @@ export function Sidebar(props: {
     const load = (): void => void api.ideaAll().then((l) => setIdeaN(l.length))
     load()
     return api.onIdeasChanged(load)
+  }, [])
+  // 第二个来源：连上的画布笔记库，列勾上的文件夹（设置 › 画布笔记 里连库、勾文件夹）
+  const [cn, setCn] = useState<CnState | null>(null)
+  const [cnOpen, setCnOpen] = useState(true)
+  const [cnShut, setCnShut] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    const load = (): void => void api.cnState().then(setCn)
+    load()
+    const offs = [api.onSettings(load), api.onLibraryChanged(load)]
+    return () => offs.forEach((f) => f())
   }, [])
   const [foldersOpen, setFoldersOpen] = useState(true)
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set())
@@ -260,7 +271,7 @@ export function Sidebar(props: {
           onDragLeave={() => setDropOn(null)}
           onDrop={(e) => void onDrop(e, null)}
         >
-          <span onClick={() => setFoldersOpen((v) => !v)}>{t('文件夹')}</span>
+          <span onClick={() => setFoldersOpen((v) => !v)}>{t('我的文件夹')}</span>
           <span className="spacer" />
           <button className="icon-btn" title={t('新建文件夹')} onClick={() => void newFolder(null)}>
             <FolderPlus size={14} />
@@ -277,6 +288,58 @@ export function Sidebar(props: {
               </button>
             )}
           </div>
+        )}
+
+        {/* 画布笔记库：每个库一行灰字，下面是勾上的文件夹；没连上的库灰掉 */}
+        {cn && cn.vaults.length > 0 && (
+          <>
+            <div className="nav-sec">
+              <span onClick={() => setCnOpen((v) => !v)}>{t('画布笔记库')}</span>
+              <span className="spacer" />
+              <button className="icon-btn" title={t('连库、勾文件夹')} onClick={() => void api.openSettings('cn')}>
+                <Plus size={14} />
+              </button>
+            </div>
+            {cnOpen && (
+              <div className="nav cn-nav">
+                {cn.vaults.map((v) => (
+                  <div key={v.root} className={'cn-vault' + (v.missing ? ' missing' : '')} title={v.root}>
+                    <div
+                      className="nav-item cn-vault-name"
+                      role="button"
+                      style={{ paddingLeft: 8 }}
+                      onClick={() =>
+                        setCnShut((x) => {
+                          const n = new Set(x)
+                          if (n.has(v.root)) n.delete(v.root)
+                          else n.add(v.root)
+                          return n
+                        })
+                      }
+                    >
+                      <span className="chev">{cnShut.has(v.root) ? <ChevronRight size={12} /> : <ChevronDown size={12} />}</span>
+                      <BookMarked size={16} />
+                      <span className="l">{v.name}</span>
+                      {v.missing ? <span className="cn-miss">{t('没连上')}</span> : <span className="count">{props.papers.filter((p) => p.cn?.root === v.root).length || ''}</span>}
+                    </div>
+                    {!v.missing &&
+                      !cnShut.has(v.root) &&
+                      v.folders.map((f) => {
+                        const id = cnFilter(v.root, f)
+                        return (
+                          <button key={f} className={'nav-item' + (libOn && props.filter === id ? ' on' : '')} style={{ paddingLeft: 28 }} data-cn-folder={f} onClick={() => props.onFilter(id)}>
+                            <span className="chev-sp" />
+                            <FolderIcon size={16} />
+                            <span className="l">{f ? f.split('/').pop() : t('最外层')}</span>
+                            <span className="count">{props.papers.filter((p) => inCnFolder(p.cn, v.root, f)).length || ''}</span>
+                          </button>
+                        )
+                      })}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {/* 标签：论文上打的自定义标签，点一个只看带它的论文（在「文献信息」里给论文加标签） */}

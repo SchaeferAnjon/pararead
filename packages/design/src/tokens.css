@@ -1,0 +1,231 @@
+/*
+ * canvas-notes 设计变量。起点是会议字幕（MeetCaption）v3 的 tokens.css，家族共用的那部分原样保留；
+ * 改了的：强调色换成李子紫，去掉会议专用的颜色，文末加 canvas-notes 自己的变量（名字和 DESIGN.md、原型 proto-b 一致）。
+ * 以下是原文件说明：会议字幕 v3 设计变量。暗色优先，跟随系统；html[data-theme="dark" | "light"] 强制主题。
+ * 每个颜色用 light-dark(浅色值, 深色值) 写一次，由 color-scheme 决定取哪一个，
+ * 所以某个区域写 color-scheme: dark（比如悬浮窗 .hud）就会整块换成深色变量。
+ * 用法和变量表见 docs/v3-ui-kit.md。
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* 字体 */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI',
+    'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, Menlo, 'Cascadia Mono', Consolas, monospace;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs: 13px;
+  --fs-md: 14px;
+  --fs-lg: 15px;
+  --fs-xl: 17px;
+  --fs-2xl: 22px;
+  --lh-tight: 1.25;
+  --lh: 1.4;
+  --lh-prose: 1.6;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+
+  /* 背景：窗口、侧栏、内陷区、弹层 */
+  --bg: light-dark(#ffffff, #1b1b1d);
+  --bg-sidebar: light-dark(#f3f3f5, #202023);
+  --bg-inset: light-dark(#f6f6f8, #161618);
+  --bg-elevated: light-dark(#ffffff, #252528);
+  --bg-popover: light-dark(rgba(252, 252, 253, 0.9), rgba(37, 37, 40, 0.88));
+  --bg-backdrop: light-dark(rgba(20, 20, 30, 0.16), rgba(0, 0, 0, 0.42));
+  /* Windows mica 时内容区的半透明层 */
+  --bg-layer: light-dark(rgba(255, 255, 255, 0.72), rgba(32, 32, 34, 0.7));
+
+  /* 叠加在背景上的表面：由弱到强 */
+  --fill-1: light-dark(rgba(0, 0, 0, 0.028), rgba(255, 255, 255, 0.04));
+  --fill-2: light-dark(rgba(0, 0, 0, 0.048), rgba(255, 255, 255, 0.07));
+  --fill-3: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.1));
+  --fill-4: light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.14));
+
+  /* 描边 */
+  --stroke-soft: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.05));
+  --stroke: light-dark(rgba(0, 0, 0, 0.09), rgba(255, 255, 255, 0.08));
+  --stroke-strong: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.14));
+
+  /* 文字 */
+  --text: light-dark(#1d1d1f, #ececec);
+  --text-2: light-dark(#6c6c72, #9a9aa0);
+  --text-3: light-dark(#9c9ca2, #6b6b70);
+  --text-on-accent: #ffffff;
+
+  /* 普通按钮：浅色模式是白底加描边，深色模式是半透明白 */
+  --btn-bg: light-dark(#ffffff, rgba(255, 255, 255, 0.07));
+  --btn-bg-hover: light-dark(#f6f6f8, rgba(255, 255, 255, 0.1));
+  --btn-bg-active: light-dark(#ececef, rgba(255, 255, 255, 0.14));
+  --btn-stroke: light-dark(rgba(0, 0, 0, 0.12), rgba(255, 255, 255, 0.08));
+
+  /* 输入框 */
+  --field-bg: light-dark(#ffffff, rgba(255, 255, 255, 0.045));
+  --field-stroke: light-dark(rgba(0, 0, 0, 0.13), rgba(255, 255, 255, 0.09));
+  --field-stroke-hover: light-dark(rgba(0, 0, 0, 0.22), rgba(255, 255, 255, 0.16));
+
+  /* 强调色：李子紫，只给选中和标记（DESIGN.md「强调色」） */
+  --accent: light-dark(#9a48ad, #c98bdb);
+  --accent-bg: light-dark(#9a48ad, #a656b9);
+  --accent-bg-hover: light-dark(#8c3f9f, #b064c2);
+  --accent-bg-active: light-dark(#7e3690, #9a4cad);
+  --accent-text: light-dark(#8a3b9d, #d9a8e6);
+  --accent-soft: light-dark(rgba(154, 72, 173, 0.1), rgba(201, 139, 219, 0.16));
+  --accent-ring: light-dark(rgba(154, 72, 173, 0.38), rgba(201, 139, 219, 0.5));
+
+  /* 语义色 */
+  --green: light-dark(#1d9a54, #3fcf7f);
+  --green-soft: light-dark(rgba(29, 154, 84, 0.1), rgba(63, 207, 127, 0.14));
+  --yellow: light-dark(#b87400, #f5b83d);
+  --yellow-soft: light-dark(rgba(214, 140, 0, 0.12), rgba(245, 184, 61, 0.14));
+  --red: light-dark(#dc3545, #ff6369);
+  --red-soft: light-dark(rgba(220, 53, 69, 0.1), rgba(255, 99, 105, 0.14));
+  --blue: light-dark(#2272e8, #5aa9ff);
+  --blue-soft: light-dark(rgba(34, 114, 232, 0.1), rgba(90, 169, 255, 0.14));
+
+  /* 图标方块和项目颜色（实色底配白色图标） */
+  --c-gray: #8e8e96;
+  --c-red: #f2555a;
+  --c-orange: #f5883a;
+  --c-yellow: #e9a820;
+  --c-green: #34b86c;
+  --c-teal: #22b3a6;
+  --c-blue: #3a8ef6;
+  --c-indigo: #6166f5;
+  --c-purple: #a168f2;
+  --c-pink: #ec5b9e;
+
+  /* 圆角 */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 10px;
+  --r-xl: 12px;
+  --r-full: 999px;
+
+  /* 间距（4px 网格） */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* 尺寸 */
+  --control-h: 28px;
+  --control-h-sm: 24px;
+  --control-h-lg: 36px;
+  --row-h: 40px;
+  --row-h-sm: 32px;
+  --nav-h: 30px;
+  --sidebar-w: 232px;
+  --titlebar-h: 52px; /* ui.applyChrome() 会按红绿灯位置或 Windows 标题栏高度改写 */
+  --traffic-end: 84px; /* Mac 红绿灯右边缘再留 12px，同一行放内容时用 */
+  --icon-stroke: 1.75;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px light-dark(rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.3));
+  --shadow-control: 0 1px 1px light-dark(rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.25)),
+    inset 0 1px 0 light-dark(rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.04));
+  --shadow-pop: 0 0 0 0.5px light-dark(rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.6)),
+    0 10px 30px -4px light-dark(rgba(20, 20, 40, 0.16), rgba(0, 0, 0, 0.5)),
+    0 2px 6px light-dark(rgba(20, 20, 40, 0.06), rgba(0, 0, 0, 0.25));
+  --shadow-modal: 0 0 0 0.5px light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.7)),
+    0 24px 64px -8px light-dark(rgba(20, 20, 40, 0.24), rgba(0, 0, 0, 0.6));
+  --blur-pop: saturate(1.6) blur(24px);
+
+  /* 动效：克制，120 到 180ms */
+  --dur-fast: 120ms;
+  --dur: 150ms;
+  --dur-slow: 180ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* 层级 */
+  --z-sticky: 10;
+  --z-popover: 1000;
+  --z-modal: 1100;
+  --z-palette: 1200;
+  --z-toast: 1300;
+  --z-tip: 1400;
+
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+/* 强制某一块用深色或浅色变量 */
+.scheme-dark {
+  color-scheme: dark;
+}
+
+.scheme-light {
+  color-scheme: light;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+    --dur-slow: 0ms;
+  }
+}
+
+/* ---------- canvas-notes 自己的变量（DESIGN.md「颜色」「尺寸」） ---------- */
+:root {
+  --sans: var(--font-sans);
+  --serif: 'Songti SC', 'STSong', 'Noto Serif SC', 'Source Han Serif SC', Georgia, serif;
+  /* 文档大标题：数字、字母用 macOS 自带的西文衬线 Charter（没有汉字，汉字仍落到宋体），粗细、高矮和汉字一样；宋体自带的西文字形细一圈、矮一截。New York 在 Chromium 里按名字取不到 */
+  --serif-title: Charter, var(--serif);
+  --mono: var(--font-mono);
+
+  --win: light-dark(#fbfbfc, #0f0f11);
+  --side: light-dark(#f3f3f5, #161618);
+  --bar: light-dark(#fbfbfc, #0f0f11);
+  --board: light-dark(#f1f1f3, #0f0f11);
+  --dotc: light-dark(rgba(17, 17, 19, 0.1), rgba(255, 255, 255, 0.07));
+  --card: light-dark(#ffffff, #1d1d20);
+  --clip: light-dark(#f6f6f8, #18181b);
+  --clip-bar: light-dark(#c7c7cc, #48484e);
+  --t1: light-dark(#111113, #f2f2f4);
+  --t2: light-dark(#6e6e73, #9a9aa0);
+  --t3: light-dark(#a1a1a6, #6a6a70);
+  --line: light-dark(rgba(17, 17, 19, 0.08), rgba(255, 255, 255, 0.08));
+  --line2: light-dark(rgba(17, 17, 19, 0.14), rgba(255, 255, 255, 0.14));
+  --fill: light-dark(rgba(17, 17, 19, 0.045), rgba(255, 255, 255, 0.05));
+  --fill2: light-dark(rgba(17, 17, 19, 0.075), rgba(255, 255, 255, 0.09));
+  --solid: light-dark(#111113, #f2f2f4);
+  --solid-t: light-dark(#ffffff, #111113);
+  --acc: var(--accent);
+  --acc-bg: var(--accent-bg);
+  --acc-t: var(--accent-text);
+  --acc-soft: var(--accent-soft);
+  --acc-ring: var(--accent-ring);
+  --wire: light-dark(#b4b4ba, #4a4a50);
+  --shadow: 0 0 0 1px light-dark(rgba(17, 17, 19, 0.06), rgba(255, 255, 255, 0.06)),
+    0 1px 2px light-dark(rgba(17, 17, 19, 0.04), rgba(0, 0, 0, 0.3)),
+    0 8px 24px light-dark(rgba(17, 17, 19, 0.06), rgba(0, 0, 0, 0.32));
+  --shadow-up: 0 0 0 1px light-dark(rgba(17, 17, 19, 0.08), rgba(255, 255, 255, 0.1)),
+    0 2px 6px light-dark(rgba(17, 17, 19, 0.06), rgba(0, 0, 0, 0.3)),
+    0 24px 56px -12px light-dark(rgba(17, 17, 19, 0.22), rgba(0, 0, 0, 0.6));
+
+  /* 家族组件（ui.css）用的名字指到本软件的颜色上 */
+  --bg: var(--win);
+  --bg-sidebar: var(--side);
+  --text: var(--t1);
+  --text-2: var(--t2);
+  --text-3: var(--t3);
+
+  --side-w: 236px;
+  --right-w: 420px;
+  --tabs-h: 40px;
+  --tool-h: 48px;
+  --gitbar-h: 32px;
+}

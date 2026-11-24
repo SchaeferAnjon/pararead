@@ -2,7 +2,8 @@
 // 发一个新版本（照会议字幕的 scripts/release.mjs）。安装包放在公开的发布仓库 SchaeferAnjon/pararead，
 // 装着的正式版从那里查更新（src/main/updater.ts）。Mac 包在这台电脑上打；Windows 包由公开仓库的
 // GitHub Actions（.github/workflows/windows.yml）在 windows-latest 上打、真打开走一遍，这里取它的产物。
-//   1. 改 package.json 的 version，提交，sh scripts/public-sync.sh --push，等公开仓库的 windows 工作流跑完（成功）。
+//   1. 改 package.json 的 version，提交；用 scripts/public-export.mjs 导出、换进公开仓库、提交「sync: 同步到 <私有仓库的提交号>（<版本>）」、推，
+//      等公开仓库的 windows 工作流跑完（成功）。步骤见 canvas-notes 的 docs/DEVELOPMENT.md「ParaRead」一节。
 //   2. node scripts/release.mjs：用钥匙串里的 Developer ID 打 dmg + zip（自动更新要求新旧版本同一张证书），
 //      核对签名和更新要的文件，放在 release/<版本>/。
 //   3. 发布说明写在 release/<版本>/notes.md，看过没问题：node scripts/release.mjs --publish，
@@ -11,10 +12,11 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { SHARED } from './public-export.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const TEAM = '3H5S5NXPXS' // Developer ID Application: zonghan jia
-const REPO = 'SchaeferAnjon/pararead'
+const REPO = JSON.parse(fs.readFileSync(path.join(ROOT, 'brand.json'), 'utf8')).repo
 const publish = process.argv.includes('--publish')
 const { version } = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
 const tag = `v${version}`
@@ -28,7 +30,7 @@ const fail = (msg) => {
   process.exit(1)
 }
 
-// 打的包要和提交对得上：工作区干净，发布仓库里还没有这个版本
+// 打的包要和提交对得上：工作区干净（整个 canvas-notes 仓库，共用包也打进包里），发布仓库里还没有这个版本
 if (run('git', ['status', '--porcelain'])) fail('工作区有没提交的改动')
 const head = run('git', ['rev-parse', 'HEAD'])
 if (spawnSync('gh', ['release', 'view', tag, '--repo', REPO], { cwd: ROOT }).status === 0) fail(`${REPO} 里已经有 ${tag}`)
@@ -79,14 +81,15 @@ files.push('ParaRead-mac-arm64.dmg')
 
 // Windows：公开仓库里同步到这个提交的那次 windows 工作流，要跑成功；取它打的 nsis 安装包、blockmap 和 latest.yml
 console.log('取 Windows 包（公开仓库的 GitHub Actions）…')
-// 只改了不公开的 docs/、design/、DESIGN.md（或者这个脚本自己、发布说明）的提交不会再同步、不会再跑一遍：认最近一次同步的那个提交，只要别的文件和现在一样
+// 只改了不公开的 docs/、design/、DESIGN.md（或者这个脚本自己、发布说明）的提交不会再同步、不会再跑一遍：认最近一次同步的那个提交，只要别的文件和现在一样。
+// 导出的除了 ParaRead 还有它引的共用包（public-export.mjs 的 SHARED），也要一样；ParaRead 并进 canvas-notes 仓库以前同步的提交里没有 apps/pararead，认不上，要先同步一次
 const runs = JSON.parse(run('gh', ['run', 'list', '--repo', REPO, '--workflow', 'windows.yml', '--limit', '20', '--json', 'databaseId,displayTitle,conclusion,status']))
-const same = (c) => spawnSync('git', ['diff', '--quiet', c, head, '--', '.', ':!docs', ':!design', ':!DESIGN.md', ':!tests/fixtures/simpler-*.md', ':!scripts/release.mjs', ':!release'] , { cwd: ROOT }).status === 0
+const same = (c) => spawnSync('git', ['diff', '--quiet', c, head, '--', '.', ...SHARED.map((p) => `../../${p}`), ':!docs', ':!design', ':!DESIGN.md', ':!tests/fixtures/simpler-*.md', ':!scripts/release.mjs', ':!scripts/public-export.mjs', ':!release'] , { cwd: ROOT }).status === 0
 const ci = runs.find((r) => {
   const c = /同步到 ([0-9a-f]{7,})/.exec(r.displayTitle)?.[1]
   return c && spawnSync('git', ['cat-file', '-e', c], { cwd: ROOT }).status === 0 && same(c)
 })
-if (!ci) fail(`公开仓库里没有和 ${head.slice(0, 7)} 内容一样的 windows 工作流：先 sh scripts/public-sync.sh --push`)
+if (!ci) fail(`公开仓库里没有和 ${head.slice(0, 7)} 内容一样的 windows 工作流：先导出、同步到公开仓库（docs/DEVELOPMENT.md「ParaRead」一节）`)
 if (ci.status !== 'completed' || ci.conclusion !== 'success') fail(`windows 工作流 ${ci.databaseId} 还没成功（${ci.status} ${ci.conclusion ?? ''}）`)
 const winDir = path.join(out, 'win')
 run('gh', ['run', 'download', String(ci.databaseId), '--repo', REPO, '-n', 'windows-installer', '-D', winDir])

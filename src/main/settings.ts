@@ -53,7 +53,16 @@ export const DEFAULT_SETTINGS: Settings = {
   autoUpdate: true,
   wordStyle: 'gbt',
   wordCheck: true,
-  bibDir: ''
+  bibDir: '',
+  openView: 'dual',
+  trOnOpen: true,
+  trService: '',
+  dualLayout: 'side',
+  cnVaults: [],
+  cnLastPlace: null,
+  chatPick: { engine: 'pararead' },
+  omni: true,
+  borrowAsked: []
 }
 
 // 设置文件明文存放，权限 0600。不用 safeStorage：没正式签名的应用每次读都会弹钥匙串框。
@@ -110,10 +119,13 @@ export class SettingsStore {
     this.set({ keys: { ...this.data.keys, [provider]: key } })
   }
 
+  /** 设置页要看、但不在设置文件里的：翻译实际用哪家（index.ts 接上 Ai） */
+  viewExtra: () => { trServiceName: string; trServiceError: string | null } = () => ({ trServiceName: '', trServiceError: null })
+
   view(): SettingsView {
     const { keys: _omit, ...rest } = this.data
     const k = this.apiKey()
-    return { ...rest, apiKeyMasked: maskKey(k.key), apiKeySource: k.source, apiKeyEnv: k.env, mineruInstalled: existsSync(this.data.mineruPath) }
+    return { ...rest, apiKeyMasked: maskKey(k.key), apiKeySource: k.source, apiKeyEnv: k.env, mineruInstalled: existsSync(this.data.mineruPath), ...this.viewExtra() }
   }
 }
 

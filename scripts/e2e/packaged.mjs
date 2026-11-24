@@ -64,19 +64,19 @@ try {
   await shot(win, 'pkg-library')
   await win.locator('.row').first().dblclick()
   await sleep(2000)
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
   let trs = 0
   for (let i = 0; i < 40 && trs < 5; i++) (await sleep(1000), (trs = await win.locator('.tr-text').count()))
   ok('对照模式出译文', trs >= 5, `${trs} 段`)
   await shot(win, 'pkg-reader')
   // 问 AI：真在输入框里打字、回车
-  await win.locator('.inbox textarea').last().fill('这篇论文解决什么问题？一句话')
+  await win.locator('.col-right [data-testid=ai-input] textarea').fill('这篇论文解决什么问题？一句话')
   await win.keyboard.press('Enter')
   let ans = ''
   for (let i = 0; i < 60; i++) {
     await sleep(1000)
-    ans = (await win.locator('.msg-ai').last().innerText().catch(() => '')).trim()
-    if (ans.length > 20 && (await win.locator('.inbox .send.stop').count()) === 0) break
+    ans = (await win.locator('[data-testid=pr-answer] .txt').last().innerText().catch(() => '')).trim()
+    if (ans.length > 20 && (await win.locator('[data-testid=pr-answer-live]').count()) === 0) break
   }
   ok('AI 回答', ans.length > 20, ans.slice(0, 60).replace(/\n/g, ' '))
   await shot(win, 'pkg-ai')

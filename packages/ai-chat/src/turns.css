@@ -1,0 +1,128 @@
+/* 对话里的一来一回（turns.tsx）：从画布笔记 app.css、reading/reading.css 搬来（ParaRead 联动）。
+   上面一段两种对话都用；.reading-ai 下面那一段是读 PDF 那一套（气泡里的图、问的那句、分隔行、闪一下），ParaRead 的对话那一格也带 .reading-ai */
+.um {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: var(--fill2, var(--fill-2));
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.am {
+  font-size: 13px;
+  line-height: 1.7;
+}
+.am .read {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--t3, var(--text-3));
+}
+/* 「✓ 读了第4页 · Claude Code · Opus 5.5」一行：放不下时先省略引擎名，再省略「读了…」，不折成两行碎字 */
+.am .read > .rd,
+.am .read > .by {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.am .read > .rd {
+  flex: 0 1 auto;
+}
+.am .read > .by {
+  flex: 0 1000 auto;
+}
+.am .read > .ci {
+  flex: none;
+}
+/* 「· [标志] Claude Code · Opus 5.5」：标志跟在点后面，和字一起省略 */
+.am .read .by-logo {
+  vertical-align: -2px;
+  margin-right: 3px;
+}
+.am .txt {
+  user-select: text;
+}
+.am .thinking {
+  color: var(--t3, var(--text-3));
+}
+.reading-ai .daysep {
+  text-align: center;
+  font-size: 12px;
+  color: var(--t3, var(--text-3));
+  margin: 2px 0 -4px;
+}
+.reading-ai .um-wrap {
+  align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 86%;
+  border-radius: 10px;
+}
+.reading-ai .um-wrap .um {
+  max-width: 100%;
+}
+.reading-ai .um-wrap.flash {
+  animation: note-ring 2s ease-out;
+}
+@keyframes note-ring {
+  0%,
+  60% {
+    box-shadow: 0 0 0 2px var(--acc-ring, var(--accent-ring));
+  }
+  100% {
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+.reading-ai .um-wrap .att {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--line2, var(--stroke));
+  background: #fff;
+}
+[data-tone='dark'] .reading-ai .um-wrap .att {
+  filter: brightness(0.92);
+}
+.reading-ai .um-wrap .att img {
+  display: block;
+  max-width: 200px;
+  max-height: 120px;
+}
+/* 框的那块在这一问的气泡里（照小样 .um .th）：气泡内边距 6，图圆角 6、1px --line、下面空 6，字左右再让 6 */
+.reading-ai .um.wimg,
+.reading-ai .um.mq:has(> .att) {
+  padding: 6px;
+}
+.reading-ai .um .att {
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--line, var(--stroke-soft));
+}
+.reading-ai .um.wimg .att {
+  margin-bottom: 6px;
+}
+.reading-ai .um.wimg .ut,
+.reading-ai .um.mq:has(> .att) > .mt,
+.reading-ai .um.mq:has(> .att) > .fnl {
+  margin: 0 6px;
+}
+.reading-ai .um.wimg .ut {
+  margin-bottom: 2px;
+}
+.reading-ai .um-wrap .uq {
+  max-width: 100%;
+  padding: 4px 10px;
+  border-left: 2px solid var(--clip-bar, var(--stroke-strong));
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--t2, var(--text-2));
+}
+.reading-ai .am .txt {
+  font-size: 13px;
+  line-height: 1.7;
+}

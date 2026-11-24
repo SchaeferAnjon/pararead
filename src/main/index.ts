@@ -11,6 +11,7 @@ import {
   addChat,
   createFolder,
   deleteAnnotation,
+  getAnnotation,
   listFolders,
   setPaperFolders,
   tombstone,
@@ -52,6 +53,7 @@ import type { Ctx } from './ctx'
 import { registerLibrary } from './ipcLibrary'
 import { registerImport } from './ipcImport'
 import { registerPaper } from './ipcPaper'
+import { registerChat } from './ipcChat'
 import { registerResearch } from './research'
 import { registerMatrix } from './matrix'
 import { registerIdeas } from './ipcIdeas'
@@ -59,10 +61,13 @@ import { allIdeas, listIdeas } from './ideasDb'
 import { registerAgent } from './agent'
 import { registerExportPdf } from './exportPdf'
 import { registerLayout } from './ipcLayout'
+import { registerPairedNote } from './pairedNote'
+import { CnLink } from './cnLink'
 import { registerExplain } from './explain'
 import { makeStreamer, type Streamer } from './stream'
 import { Member } from './member'
 import { MineruInstaller } from './mineruInstall'
+import { LayoutTranslator, registerLayoutTr } from './babeldoc'
 import { Updater } from './updater'
 import { WordAddin } from './wordAddin'
 import { BibExport } from './bibExport'
@@ -72,7 +77,8 @@ import { randomUUID } from 'node:crypto'
 import { IS_WIN, keyMatches, openExtensionsPage, quitWatchdog, winAcc } from './platform'
 import { E2E, e2eDataDir, guardScreen } from './testMode'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
+// 不叫 __dirname：electron-vite 6 给 ESM 输出加的 CommonJS 垫片已经声明了它，再声明一次主进程起不来
+const mainDir = dirname(fileURLToPath(import.meta.url))
 
 // 测试实例用 --data-dir=<目录> 把数据放到临时目录，不碰真实的 ~/Library/Application Support/ParaRead
 app.setName('ParaRead')
@@ -106,8 +112,10 @@ const ai = new Ai(
     const t_ = member.token()
     return settings.get().provider === 'member' && t_ ? { provider: 'member', token: t_ } : null
   },
-  join(dataDir, 'claude-code')
+  join(dataDir, 'claude-code'),
+  () => member.token()
 )
+settings.viewExtra = () => ({ trServiceName: ai.trName(), trServiceError: ai.trReady() })
 // 选的是本机 Claude Code：先把 claude 命令找好（导入论文时要同步地问 AI 能不能用）
 if (providerOf(settings.get().provider).local) void findClaude().catch((e: Error) => log(`找 claude 命令出错：${e.message}`))
 const db = openDb(join(dataDir, 'library.sqlite'))
@@ -217,9 +225,10 @@ const translator = new Translator({
   lang: () => settings.get().targetLang,
   getCached: (k) => getCachedTranslation(db, k),
   putCached: (k, t_) => putTranslation(db, k, settings.get().targetLang, t_, ai.model()),
-  call: (messages) => ai.once(messages, { timeoutMs: 120_000 }),
+  // 翻译、意群这类批量小请求走「设置 › 翻译 › 翻译用」（默认会员或 DeepSeek，不占 Claude 订阅）
+  call: (messages) => ai.trOnce(messages, { timeoutMs: 120_000 }),
   onResult: (r) => broadcast('translate:result', r),
-  concurrency: () => ai.concurrency(),
+  concurrency: () => ai.trConcurrency(),
   maxBatchItems: 8,
   maxBatchChars: 4000
 })
@@ -228,11 +237,27 @@ const translator = new Translator({
 const senses = new SenseQueue({
   getCached: (k) => getAiCache(db, k),
   putCached: (k, json) => putAiCache(db, k, json),
-  call: (messages) => ai.once(messages, { json: true, timeoutMs: 120_000 }),
+  call: (messages) => ai.trOnce(messages, { json: true, timeoutMs: 120_000 }),
   onResult: (r) => broadcast('senses:result', r),
-  concurrency: () => ai.concurrency()
+  concurrency: () => ai.trConcurrency()
 })
 
+
+// 保版面翻译（对照、译文看法）：BabelDOC 组件放用户缓存里（约 950 MB，不进安装包，第一次点「对照」时装）；
+// 测试用 PARAREAD_BABELDOC_DIR 指到装好的一份，测试模式没给时放临时数据目录里
+const babelDir =
+  process.env.PARAREAD_BABELDOC_DIR ||
+  (E2E ? join(dataDir, 'babeldoc') : IS_WIN ? join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'ParaRead', 'babeldoc') : join(homedir(), 'Library', 'Caches', 'ParaRead', 'babeldoc'))
+const layoutTr = new LayoutTranslator({
+  dataDir,
+  componentDir: babelDir,
+  settings,
+  ai,
+  pdfPath: (id) => library.pdfPath(id),
+  broadcast,
+  log,
+  mineruUv: () => join(dataDir, 'mineru', IS_WIN ? 'uv.exe' : 'uv')
+})
 
 const ctx: Ctx = {
   db,
@@ -246,7 +271,15 @@ const ctx: Ctx = {
   enqueueReflow,
   afterImport,
   mainWindow: () => mainWin,
-  streamer: null as unknown as Streamer
+  streamer: null as unknown as Streamer,
+  cn: null as unknown as Ctx['cn']
+}
+// 画布笔记联动（两个来源、配对笔记是唯一一份、读到哪合一、放到画布笔记、深链）
+const cnLink = new CnLink(ctx)
+ctx.cn = {
+  explained: (id) => cnLink.explained(id),
+  chatChanged: (id) => cnLink.chatChanged(id),
+  readTime: (id, ms) => cnLink.readAtPut(id, { addMs: ms })
 }
 
 if (!settings.get().syncDevice) settings.set({ syncDevice: randomUUID() })
@@ -265,10 +298,12 @@ let urlImporter: ReturnType<typeof registerImport> | null = null
 let explainer: ReturnType<typeof registerExplain> | null = null
 let ideasIpc: ReturnType<typeof registerIdeas> | null = null
 let connector: Connector | null = null
+let chatAi: ReturnType<typeof registerChat> | null = null
 
 function registerIpc(): void {
   registerLibrary(ctx)
   registerPaper(ctx)
+  chatAi = registerChat(ctx)
   registerResearch(ctx)
   bibExport.register()
   registerMatrix(ctx, { word: () => wordAddin, bib: () => bibExport.status() })
@@ -276,6 +311,9 @@ function registerIpc(): void {
   registerAgent(ctx, (input) => urlImporter!.fromInput(input))
   registerExportPdf(ctx, loadRenderer)
   registerLayout(ctx)
+  registerPairedNote(ctx)
+  registerLayoutTr(layoutTr)
+  cnLink.register()
   explainer = registerExplain(ctx, () => sync.touch())
   urlImporter = registerImport(ctx)
   // 浏览器插件：接收口随应用开着；插件的文件放一份到数据目录（应用包里的浏览器读不了），每次启动更新
@@ -289,14 +327,18 @@ function registerIpc(): void {
       else writeFileSync(join(to, e.name), readFileSync(join(from, e.name)))
     }
   }
-  copyDir(join(__dirname, '../renderer/extension'), extDir)
+  copyDir(join(mainDir, '../renderer/extension'), extDir)
   ipcMain.handle('connector:status', () => ({ running: connector!.running, port: CONNECTOR_PORT, error: connector!.error, dir: extDir }))
   ipcMain.handle('connector:reveal', () => shell.showItemInFolder(join(extDir, 'manifest.json')))
   ipcMain.handle('connector:openBrowser', (_e, name: 'Google Chrome' | 'Microsoft Edge') => {
     openExtensionsPage(name)
   })
   // 文献库
-  ipcMain.handle('papers:list', () => listPapers(db).map((p) => withProgress(p)))
+  ipcMain.handle('papers:list', () =>
+    listPapers(db)
+      .filter((p) => !cnLink.isHidden(p))
+      .map((p) => withProgress(p))
+  )
   ipcMain.handle('papers:get', (_e, id: string) => {
     const p = getPaper(db, id)
     return p ? withProgress(p) : null
@@ -312,6 +354,11 @@ function registerIpc(): void {
   })
   ipcMain.handle('papers:update', (_e, id: string, patch: PaperPatch) => {
     updatePaper(db, id, patch)
+    // 画布笔记库里的一篇：读到哪写进库里两边共用的那份
+    if (patch.progress !== undefined || patch.lastPosition) {
+      const p = getPaper(db, id)
+      if (p?.cn) cnLink.readAtPut(id, cnLink.positionToReadAt(id, p))
+    }
     if (patch.tags || patch.title) broadcast('library:changed', null)
     else bibExport.schedule()
   })
@@ -400,7 +447,7 @@ function registerIpc(): void {
     if (hit) return sendCached(e.sender, reqId, hit)
     streamTo(e.sender, reqId, messages, { cacheKey })
   })
-  ipcMain.handle('ai:abort', (_e, reqId: string) => aborts.get(reqId)?.abort())
+  ipcMain.handle('ai:abort', (_e, reqId: string) => (aborts.get(reqId)?.abort(), chatAi?.stop(reqId)))
 
   // AI 问答
   ipcMain.handle('chat:list', (_e, paperId: string) => listChats(db, paperId))
@@ -458,13 +505,17 @@ function registerIpc(): void {
       for (let d = 1; i >= 0 && d < 6 && a.page === null; d++)
         for (const b of [blocks[i - d], blocks[i + d]]) if (b?.type === 'paragraph' && a.page === null) a.page = pageOfText(library.pageTexts(a.paperId), plainMd(b.md).slice(0, 200))
     }
-    saveAnnotation(db, a)
+    // 画布笔记库里的一篇：先写进配对笔记（写不进去就报错，这一条不存），带着它在笔记里的身份存
+    const saved = cnLink.annSaved(getAnnotation(db, a.id), a)
+    saveAnnotation(db, saved)
     sync.touch()
-    explainer?.saved(a)
+    explainer?.saved(saved)
     if (a.color !== settings.get().lastColor) settings.set({ lastColor: a.color })
     return a.page
   })
   ipcMain.handle('ann:delete', (_e, id: string) => {
+    const cur = getAnnotation(db, id)
+    if (cur) cnLink.annDeleted(cur)
     deleteAnnotation(db, id)
     sync.touch()
   })
@@ -520,10 +571,13 @@ function registerIpc(): void {
       const p = providerOf(patch.provider)
       patch = { ...patch, textModel: p.text ?? '', visionModel: p.vision ?? p.text ?? '' }
     }
+    if (patch.trService === 'claude-code') void findClaude().catch((e: Error) => log(`找 claude 命令出错：${e.message}`))
     if (patch.provider && providerOf(patch.provider).local) void findClaude().catch((e: Error) => log(`找 claude 命令出错：${e.message}`))
     const engineWas = settings.get().defaultEngine
     settings.set(patch)
     if (patch.theme) nativeTheme.themeSource = patch.theme
+    // 问答框底下「谁来答」那一格跟着设置里那家、它的思考档、Key 变
+    if (patch.provider || patch.textModel || patch.thinkLevels || patch.chatPick || patch.omni !== undefined) broadcast('chat:enginesChanged', null)
     // 换了默认的重排档：开着的论文换成新的那档；改成精细时，还没有精细结果的论文排队补上
     if (patch.defaultEngine && patch.defaultEngine !== engineWas) {
       for (const p of listPapers(db)) {
@@ -544,6 +598,7 @@ function registerIpc(): void {
   })
   ipcMain.handle('settings:setKey', (_e, key: string) => {
     settings.setKey(key.trim())
+    broadcast('chat:enginesChanged', null)
     broadcast('settings:changed', settings.view())
     return settings.view()
   })
@@ -773,7 +828,7 @@ function saveWinState(w: BrowserWindow): void {
 
 function loadRenderer(w: BrowserWindow, hash = ''): void {
   if (process.env.ELECTRON_RENDERER_URL) void w.loadURL(process.env.ELECTRON_RENDERER_URL + (hash ? `#${hash}` : ''))
-  else void w.loadFile(join(__dirname, '../renderer/index.html'), hash ? { hash } : undefined)
+  else void w.loadFile(join(mainDir, '../renderer/index.html'), hash ? { hash } : undefined)
 }
 
 // 标题栏 52 高。Mac：红绿灯 16 高，2 × y + 16 = 52；侧栏是毛玻璃，内容区自己画底色。
@@ -802,7 +857,7 @@ function createMainWindow(): void {
     ...chrome(),
     show: false,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.cjs'),
+      preload: join(mainDir, '../preload/index.cjs'),
       sandbox: false,
       contextIsolation: true,
       spellcheck: false
@@ -847,7 +902,7 @@ function openSettings(section?: string): void {
     title: t('设置'),
     ...chrome(),
     show: false,
-    webPreferences: { preload: join(__dirname, '../preload/index.cjs'), sandbox: false, contextIsolation: true }
+    webPreferences: { preload: join(mainDir, '../preload/index.cjs'), sandbox: false, contextIsolation: true }
   })
   settingsWin.once('ready-to-show', () => settingsWin?.show())
   winKeys(settingsWin)
@@ -891,8 +946,10 @@ function buildMenu(): void {
       c('', 'Cmd+F', 'find'),
       c('', 'Cmd+K', 'quick-search'),
       c('', 'Cmd+1', 'mode-pdf'),
-      c('', 'Cmd+2', 'mode-reflow'),
-      c('', 'Cmd+3', 'mode-glance'),
+      c('', 'Cmd+2', 'mode-dual'),
+      c('', 'Cmd+3', 'mode-mono'),
+      c('', 'Cmd+4', 'mode-reflow'),
+      c('', 'Cmd+5', 'mode-glance'),
       c('', 'Cmd+=', 'zoom-in'),
       c('', 'Cmd+-', 'zoom-out'),
       c('', 'Cmd+0', 'zoom-reset'),
@@ -955,8 +1012,10 @@ function buildMenu(): void {
       label: t('显示'),
       submenu: [
         c(t('原文'), 'Cmd+1', 'mode-pdf'),
-        c(t('对照'), 'Cmd+2', 'mode-reflow'),
-        c(t('速览'), 'Cmd+3', 'mode-glance'),
+        c(t('对照'), 'Cmd+2', 'mode-dual'),
+        c(t('译文'), 'Cmd+3', 'mode-mono'),
+        c(t('重排'), 'Cmd+4', 'mode-reflow'),
+        c(t('速览'), 'Cmd+5', 'mode-glance'),
         { type: 'separator' },
         c(t('全文翻译'), undefined, 'translate-all'),
         c(t('框选提问'), undefined, 'box-select'),
@@ -1034,6 +1093,19 @@ async function handleProtocol(raw: string): Promise<void> {
   } catch {
     return
   }
+  // 画布笔记首页组件「继续读」：pararead://open?file=<绝对路径>&page=&vault=&back=&view=
+  if (u.hostname === 'open') {
+    if (!mainWin) createMainWindow()
+    if (!E2E) mainWin?.show()
+    try {
+      const o = await cnLink.open(raw)
+      if (!o) broadcast('app:toast', t('打不开这个链接：找不到那份 PDF'))
+      else mainWin?.webContents.send('app:openPaper', o.id, o)
+    } catch (err) {
+      broadcast('app:toast', t('打不开 {0}：{1}', '', (err as Error).message))
+    }
+    return
+  }
   const target = u.searchParams.get('url')
   if (u.hostname !== 'add' || !target || !urlImporter) return
   if (!mainWin) createMainWindow()
@@ -1052,7 +1124,7 @@ async function handleProtocol(raw: string): Promise<void> {
 // Word 引用插件：本机 HTTPS 服务和清单（src/main/wordAddin.ts）
 const wordAddin = new WordAddin({
   dir: join(dataDir, 'word'),
-  staticDir: join(__dirname, '../renderer'),
+  staticDir: join(mainDir, '../renderer'),
   papers: () => listPapers(db),
   prefs: () => ({ style: settings.get().wordStyle, check: settings.get().wordCheck }),
   ideas: () => allIdeas(db),
@@ -1076,12 +1148,22 @@ void app.whenReady().then(() => {
   resumeReflow()
   void purgeDeleted()
   if (IS_WIN) openArgs(process.argv)
+  // 画布笔记联动：老数据迁一次（撤回过就不再迁），勾上的文件夹里新放的 PDF 列进来；回到窗口时再看一眼
+  try {
+    cnLink.migrate()
+  } catch (e) {
+    log(`从旧版迁到画布笔记的写法失败：${(e as Error).message}`)
+  }
+  void cnLink.scan().catch((e: Error) => log(`列画布笔记库里的 PDF 失败：${e.message}`))
+  app.on('browser-window-focus', () => void cnLink.scan().catch((e: Error) => log(`列画布笔记库里的 PDF 失败：${e.message}`)))
   ready = true
   sync.start()
   updater.start()
   void (process.env.PARAREAD_WORD_SERVE ? wordAddin.serveForTest() : wordAddin.startIfInstalled())
   // 没有 MinerU 的电脑：第一次打开就自己开始下载；上次没装完的接着装
   if (!mineruReady() && (!settings.get().onboarded || mineruInstaller.pending())) void mineruInstaller.start()
+  // 保版面组件装到一半退出了：接着装（用户自己点了暂停的不接着装）
+  if (layoutTr.installer.pending()) void layoutTr.installer.start()
   mainWin?.webContents.once('did-finish-load', () => {
     for (const f of pendingOpen.splice(0)) void openExternalFile(f)
     for (const u of pendingUrls.splice(0)) void handleProtocol(u)
@@ -1099,6 +1181,7 @@ app.on('window-all-closed', () => {
 // 退出：记日志；3 秒还没退完（有窗口或请求挡着）就直接退
 app.on('before-quit', () => {
   log('退出：before-quit')
+  chatAi?.dispose()
   setTimeout(() => {
     log('退出：3 秒没退完，强制退出')
     app.exit(0)
@@ -1109,10 +1192,12 @@ app.on('will-quit', () => {
   log('退出：will-quit')
   mineru.stopAll()
   mineruInstaller.stop()
+  layoutTr.stop()
   wordAddin.stop()
   translator.stop()
   senses.stop()
   connector?.stop()
+  cnLink.closeAll()
   for (const c of aborts.values()) c.abort()
   db.close()
   // 到这里要存的都存好了（数据库已关，设置、会员、窗口位置是同步写的文件；界面不用 localStorage、Cookie）。

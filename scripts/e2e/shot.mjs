@@ -30,7 +30,7 @@ try {
   for (let i = 0; i < 90 && !(await ev((x) => window.api.getPaper(x), r.paper.id)).reflow.ready; i++) await sleep(1000)
   await win.dblclick(`[data-paper="${r.paper.id}"]`)
   await sleep(1500)
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
   await sleep(2000)
 
   // 1. 对照模式：点按钮，出遮罩和提示
@@ -71,7 +71,7 @@ try {
   ok('点一下不拖：取消', (await win.locator('.shot-layer').count()) === 0 && (await win.locator('.sel-toolbar').count()) === 0)
 
   // 4. 原文（PDF）模式的截图翻译
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][0]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][0]?.click())
   await sleep(2500)
   await win.locator('.mid-bar button', { hasText: '截图翻译' }).click()
   const pg = await ev(() => { const q = [...document.querySelectorAll('.page')].find((p) => p.getBoundingClientRect().top > -50).getBoundingClientRect(); return { x: q.x + q.width * 0.1, y: Math.max(q.y, 120) + 40, w: q.width * 0.8, h: 160 } })

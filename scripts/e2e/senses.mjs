@@ -11,7 +11,12 @@ const ok = (name, pass, info = '') => (console.log(pass ? '通过' : '没过', n
 // 上下、左右在标题栏的模式切换里
 const pick = async (label) => {
   if (await win.locator('.aa-pop').count()) await win.keyboard.press('Escape')
-  await win.locator('.mid-bar .mode-seg .seg-item').nth(label === '上下' ? 1 : 2).click()
+  if (!(await win.locator('.mid-bar .mode-seg .seg-item.on', { hasText: '重排' }).count())) await win.locator('.mid-bar .mode-seg .seg-item', { hasText: '重排' }).click()
+    // 正文列窄时排法只留现在那一格，点一下换另一种
+    const cells = win.locator('.mid-bar .lay-seg .seg-item')
+    if ((await cells.count()) === 1) {
+      if ((await ev(() => window.api.getSettings())).trLayout !== (label === '上下' ? 'stack' : 'side')) await cells.click()
+    } else await cells.nth(label === '上下' ? 0 : 1).click()
   await sleep(500)
 }
 const toggleSense = async () => {
@@ -31,7 +36,7 @@ try {
   for (let i = 0; i < 90 && !(await ev((x) => window.api.getPaper(x), id)).reflow.ready; i++) await sleep(1000)
   await win.dblclick(`[data-paper="${id}"]`)
   await sleep(1500)
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
   // 滚到引言，等这一屏的译文都到
   const toIntro = async () => { await ev(() => { [...document.querySelectorAll('.blk.heading')].find((x) => /INTRODUCTION/.test(x.textContent)).scrollIntoView({ block: 'start' }); document.querySelector('.reflow-scroller').scrollTop -= 40 }); await sleep(600) }
   await sleep(2000)
@@ -49,7 +54,7 @@ try {
   await win.mouse.move(firstPara.x + 330, firstPara.y + 14, { steps: 8 })
   await win.mouse.up()
   await sleep(400)
-  await win.locator('.sel-toolbar .dot-btn').first().click({ timeout: 5000 })
+  await win.locator('.sel-toolbar .tb-kind[data-kind="key"]').click({ timeout: 5000 })
   await sleep(700)
   const hl0 = await hlText()
   ok('普通显示下画了一条高亮', hl0.length === 1 && hl0[0].length > 5, hl0[0])
@@ -124,7 +129,7 @@ try {
   await win.mouse.move(sen.x + 260, sen.y + 14, { steps: 8 })
   await win.mouse.up()
   await sleep(400)
-  await win.locator('.sel-toolbar .dot-btn').nth(1).click({ timeout: 5000 })
+  await win.locator('.sel-toolbar .tb-kind[data-kind="def"]').click({ timeout: 5000 })
   await sleep(700)
   const anns = await ev((x) => window.api.annList(x), id)
   const green = await ev(() => [...(CSS.highlights.get('hl-green') ?? [])].map((q) => q.toString()))

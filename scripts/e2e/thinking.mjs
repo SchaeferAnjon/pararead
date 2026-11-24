@@ -27,7 +27,8 @@ try {
     if (e.error) st.err = e.error
   })
   await ev(() => window.api.onStream((e) => window.__th(e)))
-  const chip = win.locator('.col-right .think-chip')
+  // 思考档在输入框底行「想多久」那一颗（@cn/ai-chat，2026-11-23 起）
+  const chip = win.locator('.col-right [data-testid=ai-effort]')
   const ask = async () => {
     Object.assign(st, { text: '', reasoning: '', err: '' })
     const was = st.done
@@ -35,13 +36,13 @@ try {
     await win.locator('.col-right textarea').press('Enter')
     for (let i = 0; i < 240 && st.done === was && !st.err; i++) await sleep(500)
     await sleep(300)
-    return { text: st.text, reasoning: st.reasoning.length, err: st.err, badge: (await win.locator('.msg-ai.last .think').count()) > 0 }
+    return { text: st.text, reasoning: st.reasoning.length, err: st.err, badge: (await win.locator('.col-right [data-testid=pr-answer]').last().locator('.think-row').count()) > 0 }
   }
-  // 从输入框的「思考 · 档位」菜单里选一档
+  // 从输入框底行「想多久」的菜单里选一档
   const setLevel = async (name) => {
     await chip.click()
     await sleep(200)
-    await win.locator('.pop.menu .menu-item.two .mi-l', { hasText: new RegExp(`^${name}$`) }).click()
+    await win.locator('.aipk-menu [role=menuitemradio]').filter({ has: win.locator('.nm', { hasText: new RegExp(`^${name}$`) }) }).first().click()
     await sleep(300)
   }
 
@@ -56,8 +57,8 @@ try {
     ok(`${prov}「${low}」：界面上没有思考`, !off.err && off.text.length > 5 && off.reasoning === 0 && !off.badge, `${off.err}思考 ${off.reasoning} 字｜${off.text.slice(0, 40)}`)
     await setLevel(high)
     const on = await ask()
-    const line = await win.locator('.msg-ai.last .think').innerText().catch(() => '')
-    ok(`${prov}「${high}」：先思考再答，界面写「已思考（${high} …）」`, !on.err && on.text.length > 5 && on.reasoning > 50 && on.badge && line.includes(`已思考（${high}`), `${on.err}思考 ${on.reasoning} 字｜${line}｜${on.text.slice(0, 40)}`)
+    const line = await win.locator('.col-right [data-testid=pr-answer]').last().locator('.read .by').innerText().catch(() => '')
+    ok(`${prov}「${high}」：先思考再答，回答头写「· ${high}」、下面有「已思考」`, !on.err && on.text.length > 5 && on.reasoning > 50 && on.badge && line.includes(`· ${high}`), `${on.err}思考 ${on.reasoning} 字｜${line}｜${on.text.slice(0, 40)}`)
     console.log(await shot(win, `think-${prov}`))
   }
   if (!process.env.ZHIPU_API_KEY) console.log('跳过 智谱：没给 ZHIPU_API_KEY')
@@ -65,11 +66,7 @@ try {
   // 总会先想的模型：开关不显示；换回去又出来
   await ev(() => window.api.setSettings({ provider: 'kimi', textModel: 'kimi-k3', visionModel: 'kimi-k3' }))
   await sleep(800)
-  ok('Kimi K3：问答框写「总会先想」', (await chip.innerText()).trim() === '总会先想')
-  await chip.click()
-  await sleep(200)
-  ok('Kimi K3：菜单里没有能选的档', (await win.locator('.pop.menu .menu-item.two:not([disabled])').count()) === 0)
-  await win.keyboard.press('Escape')
+  ok('Kimi K3：没有能选的档，「想多久」那一颗不出', (await chip.count()) === 0)
   await ev(() => window.api.openSettings('ai'))
   await sleep(1500)
   const sw = app.windows().find((w) => w !== win)
@@ -79,7 +76,7 @@ try {
   await sw.close()
   await ev(() => window.api.setSettings({ provider: 'deepseek', textModel: 'deepseek-flash', visionModel: 'deepseek-flash' }))
   await sleep(800)
-  ok('换回 DeepSeek：还是记着的「开」', (await chip.innerText()).includes('思考 · 开'))
+  ok('换回 DeepSeek：还是记着的「开」', (await chip.innerText()).trim() === '开')
 } catch (e) {
   fails.push(String(e))
   console.log('出错', e)

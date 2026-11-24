@@ -1,0 +1,275 @@
+/**
+ * 软件自己带的那份家族名单（总站 apps.us-cloud.uk/family.json 放同样一份：包里的 family.json 由这里生成，
+ * `pnpm --filter @cn/family gen` 重写，测试比对两边一样）。没网、总站还没有名单时就用这份。
+ * 文字 zh 必有、en 可缺（缺了用 zh）；{vault} 换成库的名字。
+ */
+import type { FamilyList } from './index'
+
+const GH = 'https://github.com/SchaeferAnjon'
+
+export const BUILTIN: FamilyList = {
+  version: 1,
+  updated: '2026-11-23',
+  apps: [
+    {
+      id: 'canvas-notes',
+      name: { zh: '画布笔记', en: 'Canvas Notes' },
+      one: { zh: '本地Markdown加Git的白板笔记：白板和文档是同一个文件，旁边开网页随手剪。', en: 'Whiteboard notes on local Markdown and Git: a board and a document are one file, with the web beside it for clipping.' },
+      icon: 'canvas-notes.png',
+      download: 'https://canvas-note.us-cloud.uk',
+      mac: { bundleIds: ['com.jiazonghan.canvasnotes'], scheme: 'canvas-notes' },
+    },
+    {
+      id: 'canvas-today',
+      name: { zh: '画布今日', en: 'Canvas Today' },
+      one: { zh: '任务就是笔记里的一行「- [ ]」：今天、日历、四象限，到点在Mac上提醒。', en: 'A task is a “- [ ]” line in your notes: today, calendar, four quadrants, and reminders on your Mac.' },
+      icon: 'canvas-today.png',
+      download: 'https://canvas-note.us-cloud.uk/#today',
+      mac: { bundleIds: ['com.jiazonghan.canvastoday'], scheme: 'canvas-today' },
+    },
+    {
+      id: 'pararead',
+      name: { zh: 'ParaRead' },
+      one: { zh: '读英文论文：每段原文下面跟一段译文，问AI的回答带出处。', en: 'Read English papers with a translation under every paragraph; answers from AI cite where they come from.' },
+      icon: 'pararead.png',
+      download: 'https://pararead.us-cloud.uk',
+      mac: { bundleIds: ['com.jiazonghan.pararead'], scheme: 'pararead' },
+    },
+    {
+      id: 'meetcaption',
+      name: { zh: 'MeetCaption' },
+      one: { zh: '开会和网课的实时双语字幕，还能帮你写纪要和课堂笔记。', en: 'Live bilingual captions for meetings and online classes, plus minutes and class notes.' },
+      icon: 'meetcaption.png',
+      download: 'https://meetcaption.us-cloud.uk',
+      mac: { bundleIds: ['com.jiazonghan.meetcaption'], scheme: 'meetcaption' },
+    },
+    {
+      id: 'bookmarkkeeper',
+      name: { zh: 'BookmarkKeeper' },
+      one: { zh: '接管浏览器的新标签页：打开的标签按网站摆好，快捷书签经iCloud同步。', en: 'Takes over the browser’s new tab: open tabs sorted by site, quick bookmarks synced through iCloud.' },
+      icon: 'bookmarkkeeper.png',
+      download: `${GH}/bookmark/releases/latest`,
+      mac: { bundleIds: ['io.github.schaeferanjon.BookmarkKeeper'] },
+    },
+    {
+      id: 'chatcards',
+      name: { zh: 'ChatCards' },
+      one: { zh: '把和AI聊懂的、PDF和网页挑出值得记的做成问答卡，一键送进Anki。', en: 'Turns what you worked out with AI, and what is worth keeping from PDFs and web pages, into Q&A cards sent to Anki in one click.' },
+      icon: 'chatcards.png',
+      download: `${GH}/chatcards`,
+      // 以前叫 Anki Learn：改名前后两个身份号都认
+      mac: { bundleIds: ['io.github.schaeferanjon.chatcards', 'com.ankilearn.app'], scheme: 'chatcards' },
+    },
+    {
+      id: 'askfree',
+      name: { zh: 'Ask Free' },
+      one: { zh: '按一个键说出问题，AI看着你的屏幕回答。', en: 'Press a key and ask out loud; AI answers looking at your screen.' },
+      icon: 'askfree.png',
+      download: 'https://askfree.us-cloud.uk',
+      mac: { bundleIds: ['io.github.schaeferanjon.askfree'] },
+    },
+    {
+      id: 'getnewword',
+      name: { zh: 'GetNewWord' },
+      one: { zh: '框住外语词，马上出这句里的意思，一键记进Anki。', en: 'Box a foreign word to see what it means in this sentence, and save it to Anki in one click.' },
+      icon: 'getnewword.png',
+      download: 'https://getnewword.us-cloud.uk',
+      mac: { bundleIds: ['com.getnewword.app', 'com.getnewword.app.dev'] },
+    },
+    {
+      id: 'typeright',
+      name: { zh: 'TypeRight' },
+      one: { zh: 'Mac上的英文打字助手：拼错、不会说，按Tab改好。', en: 'An English typing helper for the Mac: misspelled or stuck, press Tab to fix it.' },
+      icon: 'typeright.png',
+      download: 'https://typeright.us-cloud.uk',
+      mac: { bundleIds: ['com.typeright.app'] },
+    },
+    {
+      id: 'dispatch',
+      name: { zh: 'Dispatch' },
+      one: { zh: '给Claude Code、Codex套的Mac窗口：每一步你都看得懂。', en: 'A Mac window around Claude Code and Codex: you can follow every step.' },
+      icon: 'dispatch.png',
+      download: 'https://dispatch.us-cloud.uk',
+      mac: { bundleIds: ['dev.schaefer.dispatch.ide'], scheme: 'dispatch-ide' },
+    },
+  ],
+  links: [
+    {
+      id: 'ct-open',
+      apps: ['canvas-notes', 'canvas-today'],
+      kind: 'toggle',
+      default: true,
+      pic: 'today',
+      in: {
+        'canvas-notes': {
+          label: { zh: '待办旁边放「在画布今日里打开」', en: 'Put “Open in Canvas Today” on to-dos' },
+          desc: { zh: '点开一条待办，最下面多一个按钮，跳到画布今日里的同一条', en: 'Open a to-do and a button at the bottom jumps to the same one in Canvas Today' },
+          off: { zh: '装了以后：待办点开能直接跳过去', en: 'Once installed: jump straight there from a to-do' },
+          on: { zh: '点开待办，最下面多了「在画布今日里打开」', en: 'To-dos now end with “Open in Canvas Today”' },
+          offDone: { zh: '待办里不再放「在画布今日里打开」', en: 'To-dos no longer show “Open in Canvas Today”' },
+        },
+      },
+    },
+    {
+      id: 'same-vault',
+      apps: ['canvas-notes', 'canvas-today'],
+      kind: 'status',
+      pic: 'vault',
+      in: {
+        'canvas-notes': {
+          label: { zh: '用同一个库', en: 'One shared vault' },
+          desc: { zh: '画布今日也在用「{vault}」：清单里每一条就是这边笔记里的一行', en: 'Canvas Today uses “{vault}” too: each item in its lists is a line in these notes' },
+          off: { zh: '装了以后：打开就认这个库，不用另外选', en: 'Once installed: it opens this vault, nothing to choose' },
+        },
+        'canvas-today': {
+          label: { zh: '用同一个库', en: 'One shared vault' },
+          desc: { zh: '画布笔记也在用「{vault}」：清单里每一条就是那边笔记里的一行', en: 'Canvas Notes uses “{vault}” too: each item in these lists is a line in its notes' },
+          off: { zh: '画布今日自己就能用这个库；装了画布笔记能在同一个库里写笔记', en: 'Canvas Today works with this vault on its own; with Canvas Notes you write notes in the same vault' },
+          go: 'vault',
+          goText: { zh: '去库', en: 'Go to Vault' },
+        },
+      },
+    },
+    {
+      id: 'cn-open',
+      apps: ['canvas-today', 'canvas-notes'],
+      kind: 'toggle',
+      default: true,
+      pic: 'open',
+      in: {
+        'canvas-today': {
+          label: { zh: '「打开笔记，到这一行」用画布笔记打开', en: 'Open “Open note at this line” in Canvas Notes' },
+          desc: { zh: '关了用系统里默认打开.md的软件', en: 'When off, the app your Mac uses for .md files opens it' },
+          off: { zh: '装了以后：详情里点一下跳到那篇笔记的那一行', en: 'Once installed: one click in a task jumps to that line of the note' },
+          on: { zh: '「打开笔记，到这一行」会跳进画布笔记', en: '“Open note at this line” now jumps into Canvas Notes' },
+          offDone: { zh: '「打开笔记，到这一行」改用系统默认的软件', en: '“Open note at this line” now uses your Mac’s default app' },
+        },
+      },
+    },
+    {
+      id: 'cn-look',
+      apps: ['canvas-today', 'canvas-notes'],
+      kind: 'goto',
+      pic: 'look',
+      in: {
+        'canvas-today': {
+          label: { zh: '外观跟着画布笔记', en: 'Look follows Canvas Notes' },
+          desc: { zh: '主题、界面风格、窗口背景和画布笔记一样，那边换了这边跟着换', en: 'Theme, layout style and window background match Canvas Notes and change when it does' },
+          off: { zh: '装了以后：主题和窗口背景跟着它', en: 'Once installed: theme and window background follow it' },
+          go: 'followNotes',
+          goText: { zh: '去外观', en: 'Go to Appearance' },
+        },
+      },
+    },
+    {
+      id: 'pr-menu',
+      apps: ['canvas-notes', 'pararead'],
+      kind: 'toggle',
+      default: true,
+      pic: 'prmenu',
+      in: {
+        'canvas-notes': {
+          label: { zh: 'PDF的「⋯」里放「在ParaRead里读（双语）」', en: 'Put “Read in ParaRead (bilingual)” in the PDF “⋯” menu' },
+          desc: { zh: '同一份PDF在ParaRead里打开，原文下面跟着译文读', en: 'Opens the same PDF in ParaRead, with a translation under each paragraph' },
+          off: { zh: '装了以后：PDF能一键换到ParaRead读双语', en: 'Once installed: switch a PDF to ParaRead for bilingual reading in one click' },
+          on: { zh: 'PDF的「⋯」里多了「在ParaRead里读（双语）」', en: 'The PDF “⋯” menu now has “Read in ParaRead (bilingual)”' },
+          offDone: { zh: 'PDF的「⋯」里不再放ParaRead', en: 'The PDF “⋯” menu no longer offers ParaRead' },
+        },
+        pararead: {
+          label: { zh: '画布笔记的PDF能一键换到这里读', en: 'Canvas Notes PDFs open here in one click' },
+          desc: { zh: '画布笔记里PDF的「⋯」多一项「在ParaRead里读（双语）」', en: 'The PDF “⋯” menu in Canvas Notes gets “Read in ParaRead (bilingual)”' },
+          off: { zh: '装了画布笔记以后：那边的PDF能一键换到这里读双语', en: 'With Canvas Notes installed: its PDFs switch here for bilingual reading in one click' },
+          on: { zh: '画布笔记PDF的「⋯」里多了「在ParaRead里读（双语）」', en: 'The PDF “⋯” menu in Canvas Notes now has “Read in ParaRead (bilingual)”' },
+          offDone: { zh: '画布笔记PDF的「⋯」里不再放ParaRead', en: 'The PDF “⋯” menu in Canvas Notes no longer offers ParaRead' },
+        },
+      },
+    },
+    {
+      id: 'pr-write',
+      apps: ['canvas-notes', 'pararead'],
+      kind: 'toggle',
+      default: false,
+      pic: 'prnote',
+      // 写进配对笔记是 ParaRead 那边的活，它 0.2.0 起才会
+      since: { pararead: '0.2.0' },
+      in: {
+        'canvas-notes': {
+          label: { zh: 'ParaRead能写进配对笔记', en: 'ParaRead can write into paired notes' },
+          desc: { zh: 'ParaRead里问的、划的线，写进同一篇「<名字> 笔记.md」，能撤回', en: 'Questions and highlights from ParaRead go into “<name> notes.md”, undoable' },
+          off: { zh: '装了以后：在ParaRead里问的也记进这边的笔记', en: 'Once installed: what you ask in ParaRead lands in these notes too' },
+          on: { zh: 'ParaRead问的和划的线会写进配对笔记；ParaRead里看到的也是开着', en: 'ParaRead questions and highlights now go into paired notes; ParaRead shows it on too' },
+          offDone: { zh: 'ParaRead不再往库里写', en: 'ParaRead no longer writes into the vault' },
+        },
+        pararead: {
+          label: { zh: '问的和划的线写进画布笔记的配对笔记', en: 'Write questions and highlights into Canvas Notes' },
+          desc: { zh: '在这里问的、划的线，写进画布笔记库里的「<名字> 笔记.md」，能撤回', en: 'Questions and highlights from here go into “<name> notes.md” in the Canvas Notes vault, undoable' },
+          off: { zh: '装了画布笔记以后：在这里问的也记进那边的笔记', en: 'With Canvas Notes installed: what you ask here lands in its notes too' },
+          on: { zh: '问的和划的线会写进配对笔记；画布笔记里看到的也是开着', en: 'Questions and highlights now go into paired notes; Canvas Notes shows it on too' },
+          offDone: { zh: '不再往画布笔记的库里写', en: 'No longer writes into the Canvas Notes vault' },
+        },
+      },
+    },
+    {
+      id: 'mc-write',
+      apps: ['canvas-notes', 'meetcaption'],
+      kind: 'toggle',
+      default: false,
+      pic: 'mc',
+      // MeetCaption 那边的联动还在做（另一位 designer），出了那一版再改这里的版本号和说法
+      since: { meetcaption: '0.7.0' },
+      in: {
+        'canvas-notes': {
+          label: { zh: 'MeetCaption能写进这个库', en: 'MeetCaption can write into this vault' },
+          desc: { zh: '上课、开会的双语字幕和纪要写成一篇笔记，放进「课程/<课名>/」，能接着问AI、出卡', en: 'Bilingual captions and minutes from classes and meetings become a note in “Courses/<course>/”, ready for AI and cards' },
+          off: { zh: '装了以后：课堂笔记、会议纪要直接进库', en: 'Once installed: class notes and meeting minutes go straight into the vault' },
+          on: { zh: 'MeetCaption的纪要和课堂笔记会写进「课程」', en: 'MeetCaption minutes and class notes now go into “Courses”' },
+          offDone: { zh: 'MeetCaption不再往库里写', en: 'MeetCaption no longer writes into the vault' },
+        },
+      },
+    },
+    {
+      id: 'mc-todo',
+      apps: ['canvas-today', 'meetcaption'],
+      kind: 'toggle',
+      default: false,
+      pic: 'mctodo',
+      since: { meetcaption: '0.7.0' },
+      in: {
+        'canvas-today': {
+          label: { zh: 'MeetCaption说到的待办进清单', en: 'To-dos from MeetCaption go into your lists' },
+          desc: { zh: '会上说「周三前交」这类话，在纪要里记成一行「- [ ]」；画布今日照样排进日子、到点提醒', en: 'Things like “due Wednesday” said in a meeting become a “- [ ]” line in the minutes; Canvas Today schedules and reminds as usual' },
+          off: { zh: '装了以后：会上答应的事自己进清单', en: 'Once installed: what you promise in a meeting lands in your lists' },
+          on: { zh: '会上说到的待办会进清单', en: 'To-dos said in meetings now go into your lists' },
+          offDone: { zh: 'MeetCaption不再往纪要里记待办', en: 'MeetCaption no longer writes to-dos into minutes' },
+        },
+      },
+    },
+    {
+      id: 'bk-tab',
+      apps: ['canvas-notes', 'bookmarkkeeper'],
+      kind: 'goto',
+      pic: 'bk',
+      in: {
+        'canvas-notes': {
+          label: { zh: '网页的新标签页用BookmarkKeeper', en: 'New web tabs use BookmarkKeeper' },
+          desc: { zh: '画布笔记里已经带着它；浏览器里也装了时，快捷书签经iCloud几边一样', en: 'Canvas Notes already includes it; with the browser one installed too, quick bookmarks match everywhere through iCloud' },
+          off: { zh: '画布笔记里已经带着它；装了浏览器那边的，快捷书签几边一样', en: 'Canvas Notes already includes it; install the browser one and quick bookmarks match everywhere' },
+          go: 'plBook',
+          goText: { zh: '在插件里设', en: 'Set in Plugins' },
+        },
+      },
+    },
+    {
+      id: 'cc-card',
+      apps: ['canvas-notes', 'chatcards'],
+      kind: 'info',
+      pic: 'cc',
+      in: {
+        'canvas-notes': {
+          label: { zh: '出的卡长一个样', en: 'Cards look the same' },
+          desc: { zh: '这边出卡和ChatCards用同一种卡片「学习卡 · 问答」，在Anki里一起复习', en: 'Cards made here and in ChatCards use the same note type, “Study card · Q&A”, so you review them together in Anki' },
+        },
+      },
+    },
+  ],
+}

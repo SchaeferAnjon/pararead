@@ -1,0 +1,745 @@
+/*
+ * canvas-notes 的十套主题（2026-11-16 用户定，`界面两种风格十套主题`）：四浅四深照 design-frame/spec.md 第 6 节（各照一个 VS Code 主题），
+ * 加两套照 Dispatch IDE 的黑白（石白、石墨，颜色取自 Dispatch IDE 自带的 theme-dispatch）。没有靛蓝、灰、米黄（`主题不要靛蓝灰米黄`）。
+ * 每套除了颜色，结构也不一样（`配色方案要真不同`）：当前标签的标记（data-tabmark，写在 appearance.ts 的 SKINS 里）、
+ * 底栏是不是彩色一条（--status）、卡片投影还是只描边（--shadow）、有没有分区细线（--seam）、圆角大小（--r-card）。
+ * 导入的 VS Code 主题由 apps/notes/src/shared/vscode-theme.ts 换算成同样的变量；改颜色后跑 test/themes-css.test.ts（变量齐全、对比度）。
+ * 浮层（--shadow-up）第一层那圈 1px 细边：浅色五套是各自的淡色，深色五套一律 --t3 60%（task-qkx1j：深湖里浮层 --pop 和数据库块同色，18% 的灰看不出边）。
+ * 变量挂在 [data-skin] 上：<html data-skin> 管整个窗口，任何元素也能单独套一套（外观页的小预览就是这么画的）。
+ */
+
+[data-skin] {
+  /* 家族组件（ui.css）的名字指到本套主题上 */
+  --bg: var(--win);
+  --bg-sidebar: var(--side);
+  --bg-elevated: var(--pop);
+  --bg-popover: var(--pop);
+  --text: var(--t1);
+  --text-2: var(--t2);
+  --text-3: var(--t3);
+  --accent: var(--acc);
+  --accent-bg: var(--acc-bg);
+  --accent-text: var(--acc-t);
+  --accent-soft: var(--acc-soft);
+  --accent-ring: var(--acc-ring);
+  --text-on-accent: var(--acc-on);
+  --btn-bg: var(--card);
+  --field-bg: var(--card);
+  color: var(--t1);
+  /* 强调色底上的字、四条栏之间的分区线：多数主题是白字、细线 */
+  --acc-on: #ffffff;
+  /* 红色的字（「写不进去，字只在内存里」、先给你看里少了整节）：--red 是点的颜色，12px 字对编辑区、侧栏、弹层（--pop，也算上铺 8% 红的横条）不够 4.5 的几套另给深一点 / 亮一点的；
+     A 底栏上那一项：多数主题照旧在底栏上写红字，底栏是彩色一条的另给红底白字 */
+  --red-t: var(--red);
+  /* 画在 PDF 纸上的强调色（读 PDF 纸里那一列问过的竖线，task-2onrm）：纸在深色主题里也是白的（压暗到 #ebebeb），
+     深色几套的 --acc 是亮色，画在纸上看不清，另给深一档的；浅色几套就是 --acc */
+  --acc-paper: var(--acc);
+  --status-err-bg: transparent;
+  --status-err-t: var(--red-t);
+  --seam: var(--line);
+  --bgart: none;
+  --blur: none;
+  --paper: transparent;
+  --paper-sh: none;
+  /* 浮岛书桌的岛：半透明、透出窗口背景图（2026-11-22 用户：「这个大白底能不能做成…半透明的」；画布今日 B 的三栏、画布笔记首页 B 的组件都用这几个），
+     配 backdrop-filter: var(--isle-blur)。透多少是每套的 --isle-k（默认，用户认可的「改后」那版），
+     再加设置 › 外观 ›「面板透明度」拉出来的 --isle-shift（<html> 上，正数更透，范围见 glass.ts，两头的对比度都量过） */
+  --isle-a: calc(var(--isle-k, 82%) - var(--isle-shift, 0%));
+  --isle: color-mix(in srgb, var(--win) var(--isle-a), transparent);
+  --isle-side: color-mix(in srgb, var(--side) var(--isle-a), transparent);
+  --isle-pop: color-mix(in srgb, var(--pop) var(--isle-a), transparent);
+  /* 岛里的卡片、当前标签：比岛实一点（跟着透明度一起变） */
+  --isle-card: color-mix(in srgb, var(--card) calc(72% - var(--isle-shift, 0%)), transparent);
+  /* 透明度往透那边拉时，透上来的照片按浅深压一压亮度（--isle-lum，下面 data-tone 那两条）：照片的颜色、轮廓看得更清楚，亮处、暗处不吃掉字；
+     饱和度每格少 2.5%（拉到头 120%：照片下面的树林、雪地透上来不发粉发灰）；默认和往实那边不变 */
+  --isle-blur: blur(24px) saturate(calc(150% - max(0, var(--isle-n, 0)) * 2.5%)) brightness(var(--isle-lum, 1));
+  /* 岛上的次要字、提示字往正文色靠（次要 45%、提示 55%）：照片最亮、最暗的地方次要字对岛底也有 4.5
+     （2026-11-23 画布笔记所有栏半透明时逐像素量过：靠 30% 时天青左栏「最近」里的灰字只有 3.5）；
+     面板透明度往透那边拉 n 格，再往正文色多靠 n × 1.5%（浅色主题在照片亮处次要字掉得最快） */
+  --isle-t2: color-mix(in srgb, var(--t2) calc(55% - max(0, var(--isle-n, 0)) * 1.5%), var(--t1));
+  --isle-t3: color-mix(in srgb, var(--t3) calc(45% - max(0, var(--isle-n, 0)) * 1.5%), var(--t1));
+  /* 勾选框没勾时的那圈边（task-gr4sx，用户嫌半透明面板上白色实心方框太硬，「按照推荐来」）：框不铺底、透出面板，只留这圈细边。
+     正文色按每套的 --cb-k 透明：叠在什么底上都跟着变，十套主题在 B 极光 / 冰洞 / 不用图 / A 上对框里框外的底色都 ≥ 3:1
+     （非文字元素；画布笔记、画布今日的 e2e/gr4sx-checkbox.spec.ts 逐像素量）。画布今日 .cb、画布笔记待办 .td-cb、文档里的 .cm-taskbox 共用；悬停换 --t2。
+     设置 › 外观「面板透明度」往透那边拉 n 格（--isle-n，@cn/design/glass；没拉、没这个设置时是 0），边每格再实 0.5%：拉到最透 +12 时浅色在极光图上也有 3:1 */
+  --cb-line: color-mix(in srgb, var(--t1) calc(var(--cb-k, 55%) + max(0, var(--isle-n, 0)) * 0.5%), transparent);
+  /* ⏫ 没勾的黄框：--yellow 往正文色靠 --cb-hi-k（设计复审：浅色在冰洞图上 --yellow 只有 2.96:1）；浅色靠 20%，深色五套 0% 不动（本来就 ≥ 3.7）；
+     面板往透拉 n 格同样每格多靠 0.5% */
+  --cb-hi: color-mix(in srgb, var(--t1) calc(var(--cb-hi-k, 20%) + max(0, var(--isle-n, 0)) * 0.5%), var(--yellow));
+  /* 窗口背景「主题渐变」（task-aph2j，设计稿 canvas-notes-visual/26-纯色背景渐变）：竖向垫底 --wall-base 上叠三块椭圆色块 --wall-glow
+     （基调色铺左上面积最大、邻近色右上、点缀色右下）。十套各给一份，这里是导入的 VS Code 主题用的：照它的强调色和底色混。
+     浓淡三档：<html data-wallmix> 改 --wall-k（色块浓度）、--wall-sat（色块饱和度），浓的那档面板也再透一点（下面）。画法在 wall.css */
+  --wall-k: 1;
+  --wall-sat: 1;
+  --wall-base: linear-gradient(180deg, var(--title) 0%, var(--side) 55%, var(--title) 100%);
+  --wall-glow:
+    radial-gradient(120% 70% at 18% 0%, color-mix(in srgb, var(--acc) 30%, var(--title)) 0%, transparent 60%),
+    radial-gradient(85% 60% at 88% 8%, color-mix(in srgb, var(--acc) 16%, var(--side)) 0%, transparent 55%);
+}
+
+/* 面板透明度（@cn/design/glass）往透那边拉了 n 格：浅色主题把透上来的照片提亮、深色主题压暗，每格 4% / 2.2%；<html data-tone> 由软件套主题时写上 */
+[data-tone='light'] {
+  --isle-lum: calc(1 + max(0, var(--isle-n, 0)) * 0.04);
+}
+[data-tone='dark'] {
+  --isle-lum: calc(1 - max(0, var(--isle-n, 0)) * 0.022);
+}
+
+/* ---------- 薄荷 · 浅（白天默认，GitHub Light 的结构 + Everforest 的绿） ---------- */
+[data-skin='mint'] {
+  color-scheme: light;
+  --title: #e4f1ea;
+  --bar: #e4f1ea;
+  --side: #eef7f2;
+  --win: #fafdfb;
+  --tabbar: #eef7f2;
+  --tab-on: #fafdfb;
+  --status: #d8ece1;
+  --status-t: #24453a;
+  --board: #f2f8f4;
+  --dotc: rgba(23, 70, 50, 0.13);
+  --card: #ffffff;
+  --clip: #f3f9f5;
+  --clip-bar: #b8cbc2;
+  --pop: #ffffff;
+  --t1: #15231d;
+  --t2: #4c6158;
+  --t3: #70857b;
+  --line: rgba(23, 70, 50, 0.1);
+  --line2: rgba(23, 70, 50, 0.18);
+  --fill: rgba(23, 100, 65, 0.06);
+  --fill2: rgba(23, 100, 65, 0.11);
+  --solid: #15231d;
+  --solid-t: #fafdfb;
+  --acc: #12805a;
+  --acc-bg: #12805a;
+  --acc-t: #0b6b4a;
+  --acc-soft: rgba(18, 128, 90, 0.1);
+  --acc-ring: rgba(18, 128, 90, 0.4);
+  --shadow: 0 0 0 1px rgba(23, 70, 50, 0.08), 0 1px 2px rgba(23, 70, 50, 0.05), 0 8px 24px rgba(23, 70, 50, 0.07);
+  --shadow-up: 0 0 0 1px rgba(23, 70, 50, 0.1), 0 2px 6px rgba(23, 70, 50, 0.06), 0 24px 56px -12px rgba(23, 70, 50, 0.24);
+  --glass: rgba(250, 253, 251, 0.86);
+  --isle-k: 80%;
+  --green: #1f8a4c;
+  --yellow: #a86b00;
+  --red: #cf3440;
+  --red-t: #be303b;
+  --wire: #afc1b9;
+  --w0: rgba(23, 70, 50, 0.05);
+  --w1: rgba(23, 70, 50, 0.14);
+  --w2: rgba(23, 70, 50, 0.28);
+  --w3: rgba(23, 70, 50, 0.48);
+  --w4: rgba(23, 70, 50, 0.72);
+  --r-card: 10px;
+  --r-wid: 14px;
+  --seg-on: var(--fill2);
+  /* 导图配色「彩虹」第一层每枝一个颜色（task-wuv05 第二批）：收着的低饱和色，没有靛蓝；线对白板底 ≥ 3:1 */
+  --mm-b0: #4f86a8;
+  --mm-b1: #c0784a;
+  --mm-b2: #5d9460;
+  --mm-b3: #9a6aa8;
+  --mm-b4: #a8892a;
+  --mm-b5: #c06478;
+  /* 主题渐变（窗口背景选「主题渐变」，task-aph2j）。薄荷：基调薄荷绿、邻近湖青、一点嫩黄 */
+  --wall-base: linear-gradient(180deg, #c6e2d3 0%, #e7f3ed 55%, #cfe3d9 100%);
+  --wall-glow:
+    radial-gradient(120% 70% at 18% 0%, #8fcdae 0%, transparent 60%),
+    radial-gradient(85% 60% at 88% 8%, #9ccdd8 0%, transparent 55%),
+    radial-gradient(70% 55% at 72% 100%, #e4e1a4 0%, transparent 60%);
+}
+
+/* ---------- 天青 · 浅（Light Owl / VS Code Light+）：底栏一条青色，卡片只描边，当前标签下沿 ---------- */
+[data-skin='sky'] {
+  color-scheme: light;
+  --title: #e2eff5;
+  --bar: #e2eff5;
+  --side: #edf5f9;
+  --win: #fbfdfe;
+  --tabbar: #edf5f9;
+  --tab-on: #fbfdfe;
+  --status: #0b7aa0;
+  --status-t: #ffffff;
+  --board: #f1f7fa;
+  --dotc: rgba(15, 70, 100, 0.13);
+  --card: #ffffff;
+  --clip: #f2f8fb;
+  --clip-bar: #b6c9d4;
+  --pop: #ffffff;
+  --t1: #0f2230;
+  --t2: #4a6272;
+  --t3: #658496;
+  --line: rgba(15, 70, 100, 0.1);
+  --line2: rgba(15, 70, 100, 0.18);
+  --fill: rgba(15, 100, 140, 0.06);
+  --fill2: rgba(15, 100, 140, 0.11);
+  --solid: #0f2230;
+  --solid-t: #fbfdfe;
+  --acc: #0a7ea4;
+  --acc-bg: #0a7ea4;
+  --acc-t: #076a8a;
+  --acc-soft: rgba(10, 126, 164, 0.1);
+  --acc-ring: rgba(10, 126, 164, 0.4);
+  --shadow: 0 0 0 1px rgba(15, 70, 100, 0.12);
+  --shadow-up: 0 0 0 1px rgba(15, 70, 100, 0.14), 0 18px 44px -14px rgba(15, 50, 80, 0.26);
+  --glass: rgba(251, 253, 254, 0.86);
+  --isle-k: 80%;
+  --green: #1c8a4e;
+  --yellow: #a86b00;
+  --red: #cf3440;
+  --red-t: #c7323d;
+  /* A 的底栏是深蓝一条：「写不进去」那一项红底白字 */
+  --status-err-bg: #cf3440;
+  --status-err-t: #ffffff;
+  --status-err-dot: none;
+  --wire: #adc1cb;
+  --w0: rgba(15, 70, 100, 0.05);
+  --w1: rgba(15, 70, 100, 0.14);
+  --w2: rgba(15, 70, 100, 0.28);
+  --w3: rgba(15, 70, 100, 0.48);
+  --w4: rgba(15, 70, 100, 0.72);
+  --r-card: 8px;
+  --r-wid: 10px;
+  --seg-on: var(--fill2);
+  /* 导图配色「彩虹」第一层每枝一个颜色（task-wuv05 第二批）：收着的低饱和色，没有靛蓝；线对白板底 ≥ 3:1 */
+  --mm-b0: #4f86a8;
+  --mm-b1: #c0784a;
+  --mm-b2: #5d9460;
+  --mm-b3: #9a6aa8;
+  --mm-b4: #a8892a;
+  --mm-b5: #c06478;
+  /* 主题渐变（窗口背景选「主题渐变」，task-aph2j）。天青：基调天青蓝、邻近薄荷绿、一点淡黄 */
+  --wall-base: linear-gradient(180deg, #bcd6e2 0%, #e3eef3 55%, #c8d8df 100%);
+  --wall-glow:
+    radial-gradient(120% 70% at 20% 0%, #7fb7cf 0%, transparent 60%),
+    radial-gradient(90% 60% at 85% 10%, #a9d6c6 0%, transparent 55%),
+    radial-gradient(70% 50% at 70% 100%, #e8dfa6 0%, transparent 60%);
+}
+
+/* ---------- 樱花 · 浅（Horizon Bright）：当前标签整块染色，卡片软投影，圆角大一号 ---------- */
+[data-skin='sakura'] {
+  color-scheme: light;
+  --title: #fae6ea;
+  --bar: #fae6ea;
+  --side: #fdf0f2;
+  --win: #fffbfc;
+  --tabbar: #fdf0f2;
+  --tab-on: #fffbfc;
+  --status: #fdf0f2;
+  --status-t: #6e525a;
+  --board: #fdf5f6;
+  --dotc: rgba(120, 40, 60, 0.13);
+  --card: #ffffff;
+  --clip: #fcf3f5;
+  --clip-bar: #dcbec4;
+  --pop: #ffffff;
+  --t1: #2b1a1f;
+  --t2: #6c5058;
+  --t3: #97777f;
+  --line: rgba(120, 40, 60, 0.1);
+  --line2: rgba(120, 40, 60, 0.18);
+  --fill: rgba(170, 50, 80, 0.06);
+  --fill2: rgba(170, 50, 80, 0.11);
+  --solid: #2b1a1f;
+  --solid-t: #fffbfc;
+  --acc: #d2336a;
+  --acc-bg: #c42a60;
+  --acc-t: #b32359;
+  --acc-soft: rgba(210, 51, 106, 0.1);
+  --acc-ring: rgba(210, 51, 106, 0.4);
+  --shadow: 0 0 0 1px rgba(120, 40, 60, 0.07), 0 10px 28px rgba(120, 40, 60, 0.08);
+  --shadow-up: 0 0 0 1px rgba(120, 40, 60, 0.1), 0 24px 56px -12px rgba(120, 40, 60, 0.26);
+  --glass: rgba(255, 251, 252, 0.86);
+  --isle-k: 80%;
+  --green: #2e8a57;
+  --yellow: #a86500;
+  --red: #c8302f;
+  --red-t: #c42f2e;
+  --wire: #d2b5bd;
+  --w0: rgba(120, 40, 60, 0.05);
+  --w1: rgba(120, 40, 60, 0.14);
+  --w2: rgba(120, 40, 60, 0.28);
+  --w3: rgba(120, 40, 60, 0.48);
+  --w4: rgba(120, 40, 60, 0.72);
+  --r-card: 12px;
+  --r-wid: 16px;
+  --seg-on: var(--fill2);
+  /* 导图配色「彩虹」第一层每枝一个颜色（task-wuv05 第二批）：收着的低饱和色，没有靛蓝；线对白板底 ≥ 3:1 */
+  --mm-b0: #4f86a8;
+  --mm-b1: #c0784a;
+  --mm-b2: #5d9460;
+  --mm-b3: #9a6aa8;
+  --mm-b4: #a8892a;
+  --mm-b5: #c06478;
+  /* 主题渐变（窗口背景选「主题渐变」，task-aph2j）。樱花：基调樱粉、邻近杏橘、一点淡紫 */
+  --wall-base: linear-gradient(180deg, #f1d6dd 0%, #fbf0f3 55%, #efd9df 100%);
+  --wall-glow:
+    radial-gradient(120% 70% at 18% 0%, #eeb0c2 0%, transparent 60%),
+    radial-gradient(85% 60% at 88% 8%, #f3c8a9 0%, transparent 55%),
+    radial-gradient(70% 55% at 72% 100%, #dac5e9 0%, transparent 60%);
+}
+
+/* ---------- 丁香 · 浅（Noctis Lilac，强调换成李子紫） ---------- */
+[data-skin='lilac'] {
+  color-scheme: light;
+  --title: #ece5f4;
+  --bar: #ece5f4;
+  --side: #f4f0f9;
+  --win: #fdfbff;
+  --tabbar: #f4f0f9;
+  --tab-on: #fdfbff;
+  --status: #e6dcf2;
+  --status-t: #4a3a5c;
+  --board: #f7f4fb;
+  --dotc: rgba(70, 40, 100, 0.13);
+  --card: #ffffff;
+  --clip: #f7f3fb;
+  --clip-bar: #c8bed4;
+  --pop: #ffffff;
+  --t1: #221a2b;
+  --t2: #5f5270;
+  --t3: #867798;
+  --line: rgba(70, 40, 100, 0.1);
+  --line2: rgba(70, 40, 100, 0.18);
+  --fill: rgba(100, 50, 140, 0.06);
+  --fill2: rgba(100, 50, 140, 0.11);
+  --solid: #221a2b;
+  --solid-t: #fdfbff;
+  --acc: #9a48ad;
+  --acc-bg: #9a48ad;
+  --acc-t: #8a3b9d;
+  --acc-soft: rgba(154, 72, 173, 0.1);
+  --acc-ring: rgba(154, 72, 173, 0.4);
+  --shadow: 0 0 0 1px rgba(70, 40, 100, 0.08), 0 8px 24px rgba(70, 40, 100, 0.08);
+  --shadow-up: 0 0 0 1px rgba(70, 40, 100, 0.1), 0 24px 56px -12px rgba(70, 40, 100, 0.26);
+  --glass: rgba(253, 251, 255, 0.86);
+  --isle-k: 80%;
+  --green: #1f8a4c;
+  --yellow: #a86b00;
+  --red: #cf3440;
+  --red-t: #b62e38;
+  --wire: #c1b5cc;
+  --w0: rgba(70, 40, 100, 0.05);
+  --w1: rgba(70, 40, 100, 0.14);
+  --w2: rgba(70, 40, 100, 0.28);
+  --w3: rgba(70, 40, 100, 0.48);
+  --w4: rgba(70, 40, 100, 0.72);
+  --r-card: 10px;
+  --r-wid: 14px;
+  --seg-on: var(--fill2);
+  /* 导图配色「彩虹」第一层每枝一个颜色（task-wuv05 第二批）：收着的低饱和色，没有靛蓝；线对白板底 ≥ 3:1 */
+  --mm-b0: #4f86a8;
+  --mm-b1: #c0784a;
+  --mm-b2: #5d9460;
+  --mm-b3: #9a6aa8;
+  --mm-b4: #a8892a;
+  --mm-b5: #c06478;
+  /* 主题渐变（窗口背景选「主题渐变」，task-aph2j）。丁香：基调丁香紫、邻近藕粉、一点天蓝 */
+  --wall-base: linear-gradient(180deg, #ded2eb 0%, #f5f0fa 55%, #ddd4e9 100%);
+  --wall-glow:
+    radial-gradient(120% 70% at 18% 0%, #c6a7dd 0%, transparent 60%),
+    radial-gradient(85% 60% at 88% 8%, #e9b9d1 0%, transparent 55%),
+    radial-gradient(70% 55% at 72% 100%, #bdd6ea 0%, transparent 60%);
+}
+
+/* ---------- 石白 · 浅（照 Dispatch Light）：没有分隔线、只靠两层底色；黑按钮，当前标签只靠白底 ---------- */
+[data-skin='stone'] {
+  color-scheme: light;
+  --title: #fafaf9;
+  --bar: #fafaf9;
+  --side: #fafaf9;
+  --win: #ffffff;
+  --tabbar: #fafaf9;
+  --tab-on: #ffffff;
+  --status: #fafaf9;
+  --status-t: #79716b;
+  --board: #fcfcfb;
+  --dotc: rgba(28, 25, 23, 0.13);
+  --card: #ffffff;
+  --clip: #fafaf9;
+  --clip-bar: #c2c2c0;
+  --pop: #ffffff;
+  --t1: #0c0a09;
+  --t2: #6f6863;
+  --t3: #8b837d;
+  --line: rgba(28, 25, 23, 0.08);
+  --line2: rgba(28, 25, 23, 0.13);
+  --fill: rgba(28, 25, 23, 0.045);
+  --fill2: rgba(28, 25, 23, 0.075);
+  --solid: #0c0a09;
+  --solid-t: #ffffff;
+  --acc: #1c1917;
+  --acc-bg: #252525;
+  --acc-t: #0c0a09;
+  --acc-soft: rgba(28, 25, 23, 0.1);
+  --acc-ring: rgba(28, 25, 23, 0.4);
+  --shadow: 0 0 0 1px rgba(28, 25, 23, 0.06), 0 1px 3px rgba(28, 25, 23, 0.06), 0 8px 24px rgba(28, 25, 23, 0.06);
+  --shadow-up: 0 0 0 1px rgba(28, 25, 23, 0.08), 0 24px 56px -12px rgba(28, 25, 23, 0.22);
+  --glass: rgba(255, 255, 255, 0.86);
+  --isle-k: 80%;
+  --cb-k: 50%;
+  --green: #008235;
+  --yellow: #c05a00;
+  --red: #e7000b;
+  --red-t: #d5000a;
+  --wire: #b4b3b2;
+  --w0: rgba(28, 25, 23, 0.05);
+  --w1: rgba(28, 25, 23, 0.14);
+  --w2: rgba(28, 25, 23, 0.28);
+  --w3: rgba(28, 25, 23, 0.48);
+  --w4: rgba(28, 25, 23, 0.72);
+  --r-card: 10px;
+  --r-wid: 12px;
+  --seg-on: var(--fill2);
+  --acc-on: #fafaf9;
+  --seam: transparent;
+  /* 导图配色「彩虹」第一层每枝一个颜色（task-wuv05 第二批）：收着的低饱和色，没有靛蓝；线对白板底 ≥ 3:1 */
+  --mm-b0: #4f86a8;
+  --mm-b1: #c0784a;
+  --mm-b2: #5d9460;
+  --mm-b3: #9a6aa8;
+  --mm-b4: #a8892a;
+  --mm-b5: #c06478;
+  /* 主题渐变（窗口背景选「主题渐变」，task-aph2j）。石白：白里留一抹（同石墨的「太极」，设计复审：原来暖灰冷灰看不出渐变），右上角一抹杏色，左下一小块晨雾蓝 */
+  --wall-base: linear-gradient(180deg, #f2f1ef 0%, #fbfbfa 55%, #f0efed 100%);
+  --wall-glow:
+    radial-gradient(120% 70% at 18% 0%, #f1efec 0%, transparent 60%),
+    radial-gradient(58% 72% at 97% 0%, #f2c8a2 0%, rgba(242, 200, 162, 0.35) 32%, transparent 70%),
+    radial-gradient(70% 55% at 30% 100%, #dde6ee 0%, transparent 60%);
+}
+
+/* ---------- 松林 · 深（夜里默认，Everforest Dark） ---------- */
+[data-skin='pine'] {
+  color-scheme: dark;
+  --title: #232a2e;
+  --bar: #232a2e;
+  --side: #272e33;
+  --win: #2d353b;
+  --tabbar: #272e33;
+  --tab-on: #2d353b;
+  --status: #232a2e;
+  --status-t: #9da9a0;
+  --board: #2a3237;
+  --dotc: rgba(211, 198, 170, 0.09);
+  --card: #343f44;
+  --clip: #30393e;
+  --clip-bar: #525451;
+  --pop: #343f44;
+  --t1: #e2d9c2;
+  --t2: #b0bab2;
+  --t3: #949d96;
+  --line: rgba(211, 198, 170, 0.09);
+  --line2: rgba(211, 198, 170, 0.17);
+  --fill: rgba(211, 198, 170, 0.06);
+  --fill2: rgba(211, 198, 170, 0.11);
+  --solid: #e2d9c2;
+  --solid-t: #232a2e;
+  --acc: #a7c080;
+  --acc-paper: #5f7a3a;
+  --acc-bg: #a7c080;
+  --acc-t: #bcd199;
+  --acc-soft: rgba(167, 192, 128, 0.15);
+  --acc-ring: rgba(167, 192, 128, 0.5);
+  --shadow: 0 0 0 1px rgba(211, 198, 170, 0.08), 0 10px 26px rgba(0, 0, 0, 0.28);
+  --shadow-up: 0 0 0 1px color-mix(in srgb, var(--t3) 60%, transparent), 0 24px 56px -12px rgba(0, 0, 0, 0.6);
+  --glass: rgba(39, 46, 51, 0.84);
+  --isle-k: 82%;
+  --cb-k: 60%;
+  --cb-hi-k: 0%;
+  --green: #a7c080;
+  --yellow: #dbbc7f;
+  --red: #e67e80;
+  --red-t: #ec9e9f;
+  --wire: #646560;
+  --w0: rgba(211, 198, 170, 0.06);
+  --w1: rgba(211, 198, 170, 0.16);
+  --w2: rgba(211, 198, 170, 0.3);
+  --w3: rgba(211, 198, 170, 0.5);
+  --w4: rgba(211, 198, 170, 0.78);
+  --r-card: 10px;
+  --r-wid: 14px;
+  --seg-on: var(--fill2);
+  --acc-on: #232a2e;
+  /* 导图配色「彩虹」第一层每枝一个颜色（task-wuv05 第二批）：收着的低饱和色，没有靛蓝；线对白板底 ≥ 3:1 */
+  --mm-b0: #6fa8c8;
+  --mm-b1: #d7976a;
+  --mm-b2: #86b882;
+  --mm-b3: #b98fc6;
+  --mm-b4: #c8bb5c;
+  --mm-b5: #d98a9b;
+  /* 主题渐变（窗口背景选「主题渐变」，task-aph2j）。松林：基调松绿、邻近湖蓝、一点苔黄 */
+  --wall-base: linear-gradient(180deg, #1d2528 0%, #262f34 55%, #1a2124 100%);
+  --wall-glow:
+    radial-gradient(120% 70% at 18% 0%, #2f5944 0%, transparent 60%),
+    radial-gradient(85% 60% at 88% 8%, #244659 0%, transparent 55%),
+    radial-gradient(70% 55% at 96% 100%, #55512b 0%, transparent 60%);
+}
+
+/* ---------- 深湖 · 深（Solarized Dark）：底栏一条深青，卡片只描边，当前标签下沿 ---------- */
+[data-skin='petrol'] {
+  color-scheme: dark;
+  --title: #001e27;
+  --bar: #001e27;
+  --side: #00252f;
+  --win: #002b36;
+  --tabbar: #00252f;
+  --tab-on: #002b36;
+  --status: #145a63;
+  --status-t: #d5dedb;
+  --board: #00303c;
+  --dotc: rgba(147, 161, 161, 0.09);
+  --card: #073642;
+  --clip: #04313c;
+  --clip-bar: #25444c;
+  --pop: #073642;
+  --t1: #d5dedb;
+  --t2: #93a1a1;
+  --t3: #718f95;
+  --line: rgba(147, 161, 161, 0.11);
+  --line2: rgba(147, 161, 161, 0.2);
+  --fill: rgba(147, 161, 161, 0.07);
+  --fill2: rgba(147, 161, 161, 0.13);
+  --solid: #d5dedb;
+  --solid-t: #001e27;
+  --acc: #2aa198;
+  --acc-paper: #1f7a74;
+  --acc-bg: #2aa198;
+  --acc-t: #52c4ba;
+  --acc-soft: rgba(42, 161, 152, 0.15);
+  --acc-ring: rgba(42, 161, 152, 0.5);
+  --shadow: 0 0 0 1px rgba(147, 161, 161, 0.14);
+  --shadow-up: 0 0 0 1px color-mix(in srgb, var(--t3) 60%, transparent), 0 24px 56px -12px rgba(0, 0, 0, 0.7);
+  --glass: rgba(0, 37, 47, 0.84);
+  --isle-k: 82%;
+  --cb-hi-k: 0%;
+  --green: #859900;
+  --yellow: #b58900;
+  --red: #dc322f;
+  --red-t: #e97c7a;
+  /* A 的底栏是深青一条：「写不进去」那一项红底白字 */
+  --status-err-bg: #dc322f;
+  --status-err-t: #ffffff;
+  --status-err-dot: none;
+  --wire: #315259;
+  --w0: rgba(147, 161, 161, 0.06);
+  --w1: rgba(147, 161, 161, 0.16);
+  --w2: rgba(147, 161, 161, 0.3);
+  --w3: rgba(147, 161, 161, 0.5);
+  --w4: rgba(147, 161, 161, 0.78);
+  --r-card: 8px;
+  --r-wid: 10px;
+  --seg-on: var(--fill2);
+  --acc-on: #002b36;
+  /* 导图配色「彩虹」第一层每枝一个颜色（task-wuv05 第二批）：收着的低饱和色，没有靛蓝；线对白板底 ≥ 3:1 */
+  --mm-b0: #6fa8c8;
+  --mm-b1: #d7976a;
+  --mm-b2: #86b882;
+  --mm-b3: #b98fc6;
+  --mm-b4: #c8bb5c;
+  --mm-b5: #d98a9b;
+  /* 主题渐变（窗口背景选「主题渐变」，task-aph2j）。深湖：基调深青、邻近海蓝、一点橄榄黄 */
+  --wall-base: linear-gradient(180deg, #06202a 0%, #0b2a33 55%, #03161d 100%);
+  --wall-glow:
+    radial-gradient(110% 70% at 25% 0%, #0f5a5a 0%, transparent 60%),
+    radial-gradient(80% 60% at 80% 20%, #1f4a6e 0%, transparent 60%),
+    radial-gradient(70% 50% at 96% 100%, #454716 0%, transparent 60%);
+}
+
+/* ---------- 可可 · 深（Monokai Pro Ristretto）：当前标签整块染色，卡片投影 ---------- */
+[data-skin='cocoa'] {
+  color-scheme: dark;
+  --title: #211c1c;
+  --bar: #211c1c;
+  --side: #262020;
+  --win: #2c2525;
+  --tabbar: #262020;
+  --tab-on: #2c2525;
+  --status: #211c1c;
+  --status-t: #c3b7b8;
+  --board: #2a2323;
+  --dotc: rgba(255, 241, 243, 0.09);
+  --card: #362e2e;
+  --clip: #312929;
+  --clip-bar: #5c5455;
+  --pop: #362e2e;
+  --t1: #fff1f3;
+  --t2: #c3b7b8;
+  --t3: #9a9091;
+  --line: rgba(255, 241, 243, 0.09);
+  --line2: rgba(255, 241, 243, 0.17);
+  --fill: rgba(255, 241, 243, 0.06);
+  --fill2: rgba(255, 241, 243, 0.11);
+  --solid: #fff1f3;
+  --solid-t: #211c1c;
+  --acc: #f38d70;
+  --acc-paper: #b5543a;
+  --acc-bg: #f38d70;
+  --acc-t: #f9a88f;
+  --acc-soft: rgba(243, 141, 112, 0.15);
+  --acc-ring: rgba(243, 141, 112, 0.5);
+  --shadow: 0 0 0 1px rgba(255, 241, 243, 0.07), 0 10px 26px rgba(0, 0, 0, 0.3);
+  --shadow-up: 0 0 0 1px color-mix(in srgb, var(--t3) 60%, transparent), 0 24px 56px -12px rgba(0, 0, 0, 0.65);
+  --glass: rgba(38, 32, 32, 0.84);
+  --isle-k: 82%;
+  --cb-k: 45%;
+  --cb-hi-k: 0%;
+  --green: #adda78;
+  --yellow: #f9cc6c;
+  --red: #fd6883;
+  --red-t: #fd778f;
+  --wire: #726869;
+  --w0: rgba(255, 241, 243, 0.06);
+  --w1: rgba(255, 241, 243, 0.16);
+  --w2: rgba(255, 241, 243, 0.3);
+  --w3: rgba(255, 241, 243, 0.5);
+  --w4: rgba(255, 241, 243, 0.78);
+  --r-card: 12px;
+  --r-wid: 16px;
+  --seg-on: var(--fill2);
+  --acc-on: #211c1c;
+  /* 导图配色「彩虹」第一层每枝一个颜色（task-wuv05 第二批）：收着的低饱和色，没有靛蓝；线对白板底 ≥ 3:1 */
+  --mm-b0: #6fa8c8;
+  --mm-b1: #d7976a;
+  --mm-b2: #86b882;
+  --mm-b3: #b98fc6;
+  --mm-b4: #c8bb5c;
+  --mm-b5: #d98a9b;
+  /* 主题渐变（窗口背景选「主题渐变」，task-aph2j）。可可：基调可可红、邻近梅紫、一点琥珀 */
+  --wall-base: linear-gradient(180deg, #1f1919 0%, #2a2222 55%, #1a1515 100%);
+  --wall-glow:
+    radial-gradient(120% 70% at 18% 0%, #5a3532 0%, transparent 60%),
+    radial-gradient(85% 60% at 88% 8%, #4b3047 0%, transparent 55%),
+    radial-gradient(70% 55% at 72% 100%, #5c4424 0%, transparent 60%);
+}
+
+/* ---------- 墨夜 · 深（Ayu Dark）：近黑底、橙色强调，卡片只描边，当前标签下沿 ---------- */
+[data-skin='ink'] {
+  color-scheme: dark;
+  --title: #08090d;
+  --bar: #08090d;
+  --side: #0b0e14;
+  --win: #0d1017;
+  --tabbar: #0b0e14;
+  --tab-on: #0d1017;
+  --status: #08090d;
+  --status-t: #8a8f98;
+  --board: #0d1017;
+  --dotc: rgba(230, 225, 207, 0.09);
+  --card: #141821;
+  --clip: #10141b;
+  --clip-bar: #424343;
+  --pop: #141821;
+  --t1: #e6e3da;
+  --t2: #a8a69e;
+  --t3: #6e747f;
+  --line: rgba(230, 225, 207, 0.08);
+  --line2: rgba(230, 225, 207, 0.15);
+  --fill: rgba(230, 225, 207, 0.05);
+  --fill2: rgba(230, 225, 207, 0.09);
+  --solid: #e6e3da;
+  --solid-t: #08090d;
+  --acc: #ff8f40;
+  --acc-paper: #b35c12;
+  --acc-bg: #ff8f40;
+  --acc-t: #ffa766;
+  --acc-soft: rgba(255, 143, 64, 0.15);
+  --acc-ring: rgba(255, 143, 64, 0.5);
+  --shadow: 0 0 0 1px rgba(230, 225, 207, 0.1);
+  --shadow-up: 0 0 0 1px color-mix(in srgb, var(--t3) 60%, transparent), 0 24px 56px -12px rgba(0, 0, 0, 0.85);
+  --glass: rgba(11, 14, 20, 0.84);
+  --isle-k: 82%;
+  --cb-k: 45%;
+  --cb-hi-k: 0%;
+  --green: #aad94c;
+  --yellow: #e6b450;
+  --red: #f26d78;
+  --wire: #555554;
+  --w0: rgba(230, 225, 207, 0.06);
+  --w1: rgba(230, 225, 207, 0.16);
+  --w2: rgba(230, 225, 207, 0.3);
+  --w3: rgba(230, 225, 207, 0.5);
+  --w4: rgba(230, 225, 207, 0.78);
+  --r-card: 8px;
+  --r-wid: 10px;
+  --seg-on: var(--fill2);
+  --acc-on: #0b0e14;
+  /* 导图配色「彩虹」第一层每枝一个颜色（task-wuv05 第二批）：收着的低饱和色，没有靛蓝；线对白板底 ≥ 3:1 */
+  --mm-b0: #6fa8c8;
+  --mm-b1: #d7976a;
+  --mm-b2: #86b882;
+  --mm-b3: #b98fc6;
+  --mm-b4: #c8bb5c;
+  --mm-b5: #d98a9b;
+  /* 主题渐变（窗口背景选「主题渐变」，task-aph2j）。墨夜：基调夜蓝、邻近墨青、一点余烬橙 */
+  --wall-base: linear-gradient(180deg, #07090e 0%, #0c1018 55%, #06080c 100%);
+  --wall-glow:
+    radial-gradient(120% 70% at 18% 0%, #183150 0%, transparent 60%),
+    radial-gradient(85% 60% at 88% 8%, #103b42 0%, transparent 55%),
+    radial-gradient(70% 55% at 75% 100%, #4a2a12 0%, transparent 60%);
+}
+
+/* ---------- 石墨 · 深（照 Dispatch Dark）：没有分隔线、只靠两层底色；白按钮黑字，当前标签只靠黑底 ---------- */
+[data-skin='graphite'] {
+  color-scheme: dark;
+  --title: #1c1917;
+  --bar: #1c1917;
+  --side: #1c1917;
+  --win: #0c0a09;
+  --tabbar: #1c1917;
+  --tab-on: #0c0a09;
+  --status: #1c1917;
+  --status-t: #a6a09b;
+  --board: #100e0d;
+  --dotc: rgba(255, 255, 255, 0.09);
+  --card: #1c1917;
+  --clip: #151311;
+  --clip-bar: #555251;
+  --pop: #1c1917;
+  --t1: #fafaf9;
+  --t2: #a6a09b;
+  --t3: #817972;
+  --line: rgba(255, 255, 255, 0.08);
+  --line2: rgba(255, 255, 255, 0.15);
+  --fill: rgba(255, 255, 255, 0.06);
+  --fill2: rgba(255, 255, 255, 0.1);
+  --solid: #fafaf9;
+  --solid-t: #1c1917;
+  --acc: #e7e5e4;
+  --acc-paper: #57534e;
+  --acc-bg: #fafaf9;
+  --acc-t: #fafaf9;
+  --acc-soft: rgba(231, 229, 228, 0.15);
+  --acc-ring: rgba(231, 229, 228, 0.5);
+  --shadow: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 10px 28px rgba(0, 0, 0, 0.45);
+  --shadow-up: 0 0 0 1px color-mix(in srgb, var(--t3) 60%, transparent), 0 24px 56px -12px rgba(0, 0, 0, 0.8);
+  --glass: rgba(28, 25, 23, 0.84);
+  --isle-k: 82%;
+  --cb-k: 40%;
+  --cb-hi-k: 0%;
+  --green: #0ca34c;
+  --yellow: #ff8904;
+  --red: #ff6467;
+  --wire: #5c5b5a;
+  --w0: rgba(255, 255, 255, 0.06);
+  --w1: rgba(255, 255, 255, 0.16);
+  --w2: rgba(255, 255, 255, 0.3);
+  --w3: rgba(255, 255, 255, 0.5);
+  --w4: rgba(255, 255, 255, 0.78);
+  --r-card: 10px;
+  --r-wid: 12px;
+  --seg-on: var(--fill2);
+  --acc-on: #1c1917;
+  --seam: transparent;
+  /* 导图配色「彩虹」第一层每枝一个颜色（task-wuv05 第二批）：收着的低饱和色，没有靛蓝；线对白板底 ≥ 3:1 */
+  --mm-b0: #6fa8c8;
+  --mm-b1: #d7976a;
+  --mm-b2: #86b882;
+  --mm-b3: #b98fc6;
+  --mm-b4: #c8bb5c;
+  --mm-b5: #d98a9b;
+  /* 主题渐变（窗口背景选「主题渐变」，task-aph2j）。石墨：黑底上留一抹亮（用户「太极」：黑的里面留一点亮色）。基调炭色在左上，右上角一道余烬琥珀，从标题栏右边和右图标栏顶上透出来；右下一小块夜雾蓝 */
+  --wall-base: linear-gradient(180deg, #0c0a09 0%, #151311 55%, #0a0908 100%);
+  --wall-glow:
+    radial-gradient(120% 70% at 18% 0%, #3a332d 0%, transparent 60%),
+    radial-gradient(58% 72% at 97% 0%, #9a5f2c 0%, rgba(154, 95, 44, 0.35) 32%, transparent 70%),
+    radial-gradient(70% 55% at 72% 100%, #1d2631 0%, transparent 60%);
+}

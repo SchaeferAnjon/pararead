@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronRight, Copy, Download, ExternalLink, FileText, Mail, Star, Users, Cloud, Eye, EyeOff, FolderOpen, Globe, HardDrive, Info, Languages, Layers, MessageCircleQuestion, Monitor, Moon, RefreshCw, Settings, SquareTerminal, Sun, Zap } from 'lucide-react'
+import { BookMarked, Check, ChevronDown, ChevronRight, Copy, Download, ExternalLink, FileText, Mail, Star, Users, Cloud, Eye, EyeOff, FolderOpen, Globe, HardDrive, Info, Languages, Layers, MessageCircleQuestion, Monitor, Moon, RefreshCw, Settings, SquareTerminal, Sun, Zap } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { PROVIDERS, providerOf } from '@shared/providers'
 import type { LocalCliStatus, SettingsView, WordStatus } from '@shared/types'
@@ -13,6 +13,9 @@ import { AppLogo } from '../lib/member'
 import { PHASE_NAME, useMineruInstall } from './Onboarding'
 import { MenuHost, showMenu } from '../lib/menu'
 import { Segmented, Switch, ToastProvider, useToast } from '../lib/ui'
+import { useBabelInstall } from '../lib/layoutTr'
+import { BABELDOC_MB, BABELDOC_VERSION } from '@shared/layoutTr'
+import { CnSettings } from './CnSettings'
 
 const LOGOS = import.meta.glob('../assets/providers/*', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
 // Claude Code 的安装和登录说明（官方文档）
@@ -23,7 +26,7 @@ export const logoOf = (icon?: string): string | null => (icon ? (LOGOS[`../asset
 export const TARGET_LANGS = ['简体中文', '繁體中文', 'English', '日本語', '한국어', 'Deutsch', 'Français', 'Español', 'Italiano']
 const LANGS = TARGET_LANGS
 
-type Sec = 'general' | 'ai' | 'member' | 'translate' | 'reflow' | 'storage' | 'sync' | 'browser' | 'word' | 'us' | 'about'
+type Sec = 'general' | 'ai' | 'member' | 'translate' | 'reflow' | 'storage' | 'sync' | 'cn' | 'browser' | 'word' | 'us' | 'about'
 const SECS: { id: Sec; name: string; icon: typeof Settings; color: string }[] = [
   { id: 'general', name: t('通用'), icon: Settings, color: 'var(--c-gray)' },
   { id: 'ai', name: t('AI 服务'), icon: MessageCircleQuestion, color: 'var(--c-indigo)' },
@@ -32,6 +35,7 @@ const SECS: { id: Sec; name: string; icon: typeof Settings; color: string }[] = 
   { id: 'reflow', name: t('重排'), icon: Layers, color: 'var(--c-teal)' },
   { id: 'storage', name: t('存储'), icon: HardDrive, color: 'var(--c-gray)' },
   { id: 'sync', name: t('同步'), icon: RefreshCw, color: 'var(--c-green)' },
+  { id: 'cn', name: t('画布笔记'), icon: BookMarked, color: 'var(--c-indigo)' },
   { id: 'browser', name: t('浏览器插件'), icon: Globe, color: 'var(--c-orange)' },
   { id: 'word', name: t('Word 插件'), icon: FileText, color: 'var(--c-blue)' },
   { id: 'us', name: t('关于我们'), icon: Users, color: 'var(--c-pink)' },
@@ -83,6 +87,7 @@ function Settings2() {
           {sec === 'reflow' && <Reflow s={s} setS={setS} set={set} />}
           {sec === 'storage' && <Storage s={s} set={set} />}
           {sec === 'sync' && <Sync s={s} set={set} />}
+          {sec === 'cn' && <CnSettings />}
           {sec === 'browser' && <BrowserPlugin />}
           {sec === 'word' && <WordPlugin s={s} set={set} />}
           {sec === 'us' && <AboutUs />}
@@ -247,6 +252,13 @@ function Ai({ s, set, setS }: P & { setS: (v: SettingsView) => void }) {
     if (prov.local) findCli()
   }, [prov.local, findCli])
 
+  // ParaRead 还没有、画布笔记存着的 Key：「用画布笔记那把」
+  const [notesKeys, setNotesKeys] = useState<{ id: string; provider: string; name: string }[]>([])
+  useEffect(() => {
+    void api.chatNotesKeys().then(setNotesKeys)
+  }, [s.provider, s.apiKeySource])
+  const borrowable = notesKeys.find((k) => k.provider === s.provider)
+
   const test = async (): Promise<void> => {
     setBusy(true)
     const r = await api.testKey()
@@ -257,7 +269,7 @@ function Ai({ s, set, setS }: P & { setS: (v: SettingsView) => void }) {
 
   return (
     <>
-      <FSec title={t('服务商')} desc={t('翻译、解释、问答、速览、学术 AI 和研究 Agent 都用它。你的 Key 直连服务商，费用走你的账户。')}>
+      <FSec title={t('服务商')} desc={t('翻译、意群、解释、速览这类大量小请求，和学术 AI、研究 Agent 都用它。右栏 AI 问答默认也用它，在问答框底下能一键换成本机 Claude Code、Codex 这些。你的 Key 直连服务商，费用走你的账户。')}>
         <div className="prov">
           {list.map((p) => {
             const logo = logoOf(p.icon)
@@ -282,6 +294,19 @@ function Ai({ s, set, setS }: P & { setS: (v: SettingsView) => void }) {
         </div>
       </FSec>
       <FSec desc={prov.local ? t('用的是这台电脑上你自己装好、登录了的 Claude Code，走它的订阅用量。整篇翻译会一段一段调它，比按量付费的服务慢；问答、解释、速览正合适。') : undefined}>
+        {borrowable && s.apiKeySource === 'none' && (
+          <Row label={t('画布笔记里有')} hint={t('同意后存一份到 ParaRead 的设置里，钥匙串会问一次')}>
+            <button
+              className="btn"
+              data-testid="borrow-notes-key"
+              onClick={() =>
+                void api.chatBorrow(borrowable.id, true).then((r) => (r.ok ? (toast(t('用上了画布笔记里的 {0} Key', borrowable.name)), setNotesKeys([])) : toast(t('没借成：{0}', r.message ?? ''))))
+              }
+            >
+              {t('用画布笔记那把 {0} Key', borrowable.name)}
+            </button>
+          </Row>
+        )}
         {s.provider === 'custom' && (
           <Row label={t('接口地址')} hint={t('OpenAI 兼容的 /v1 地址')}>
             <input className="input mono" style={{ width: 360 }} defaultValue={s.customBaseUrl} placeholder="https://example.com/v1" onBlur={(e) => set({ customBaseUrl: e.target.value.trim() })} />
@@ -482,15 +507,119 @@ function TrStyleRow({ s, set }: P) {
   )
 }
 
+/** 一组单选：一行一个圆点加名字，后面一句灰字 */
+function RadioList<T extends string>(props: { value: T; options: { id: T; label: string; note?: string; tag?: string }[]; onChange: (v: T) => void }) {
+  return (
+    <div className="radio-list" role="radiogroup">
+      {props.options.map((o) => (
+        <button key={o.id} role="radio" aria-checked={o.id === props.value} className="radio-row" onClick={() => o.id !== props.value && props.onChange(o.id)}>
+          <span className={'radio' + (o.id === props.value ? ' on' : '')} />
+          <span className="rr-label">{o.label}</span>
+          {o.tag && <span className="rr-tag">{o.tag}</span>}
+          {o.note && <span className="rr-note">{o.note}</span>}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const BABEL_SRC = 'https://github.com/funstory-ai/BabelDOC'
+
 function Translate({ s, set }: P) {
+  const inst = useBabelInstall()
+  const [sureRemove, setSureRemove] = useState(false)
+  const working = !!inst && ['uv', 'python', 'packages', 'models'].includes(inst.phase)
+  // 翻译用：空是自动（会员或 DeepSeek），界面上显示成它实际用的那一家
+  const svc = s.trService || (s.trServiceName === t('ParaRead 会员') ? 'member' : 'deepseek')
   return (
     <>
+      {/* 2026-11-23 用户定（设计页 51）：PDF 默认「对照」看保版面的译文页，打开就翻、边看边翻，翻译默认走 DeepSeek 或会员 */}
+      <FSec title={t('对照和译文看法')} desc={t('左边原页、右边同版面的译文页：图、色块、表格位置不动，字在原位换成译文。')}>
+        <Row label={t('打开 PDF 时')} hint={t('窗口窄到一页不足 480 宽时，「对照」自动换成上下排；你在一篇里换过看法，这篇以后就照你的。')}>
+          <RadioList
+            value={s.openView}
+            onChange={(v) => set({ openView: v })}
+            options={[
+              { id: 'dual', label: t('课件和论文都先看「对照」'), tag: t('推荐') },
+              { id: 'paper-reflow', label: t('论文看「重排」，课件看「对照」') },
+              { id: 'pdf', label: t('先看「原文」') }
+            ]}
+          />
+        </Row>
+        <Row label={t('什么时候翻')} hint={t('关掉后要点「翻成对照」才翻。只翻还没翻过的页，翻过的存在本机，不再花钱。')}>
+          <Switch on={s.trOnOpen} onChange={(v) => set({ trOnOpen: v })} label={t('打开就翻你在看的这几页，后面边看边翻')} />
+          <span className="sw-label">{t('打开就翻你在看的这几页，后面边看边翻')}</span>
+        </Row>
+        <Row
+          label={t('翻译用')}
+          hint={
+            <>
+              {t('翻译、意群这类批量小请求默认走 DeepSeek 或会员，不占 Claude 订阅；问答用哪家在「AI 服务」里另设。')}
+              {s.trServiceError && (
+                <span className="tr-svc-err">
+                  <span className="dot err sm" />
+                  {s.trServiceError}
+                </span>
+              )}
+            </>
+          }
+        >
+          <RadioList
+            value={svc}
+            onChange={(v) => set({ trService: v })}
+            options={[
+              { id: 'deepseek', label: t('DeepSeek（自带 Key）'), note: t('40 页课件约 ¥0.3，3 分钟') },
+              { id: 'member', label: t('ParaRead 会员'), note: t('算进每月用量，不另收费') },
+              { id: 'claude-code', label: t('本机 Claude Code'), note: t('用你的订阅额度，慢，不建议整篇翻') },
+              { id: 'ai', label: t('跟「AI 服务」里选的一样'), note: providerOf(s.provider).name }
+            ]}
+          />
+        </Row>
+        <Row
+          label={t('保版面组件')}
+          hint={
+            <>
+              {t('开源组件 BabelDOC（AGPL-3.0），单独的程序，在这台电脑上排版；放在缓存文件夹里，不进安装包。')}{' '}
+              <a className="text-btn" style={{ padding: 0, height: "auto" }} href={BABEL_SRC} target="_blank" rel="noreferrer">
+                {t('源码和许可证')}
+              </a>
+            </>
+          }
+        >
+          {inst?.phase === 'done' ? (
+            <>
+              <span className="num">{t('BabelDOC {0} · 已装 · 约 {1} MB', BABELDOC_VERSION, BABELDOC_MB)}</span>
+              <button className="btn sm ghost" onClick={() => void api.layoutTrReveal()}>
+                {t('在 Finder 中显示')}
+              </button>
+              {/* 删之前再点一次确认；翻好的译文留着 */}
+              <button className={'btn sm ghost' + (sureRemove ? ' danger' : '')} onClick={() => (sureRemove ? void api.layoutTrRemove().then(() => setSureRemove(false)) : setSureRemove(true))} onBlur={() => setSureRemove(false)}>
+                {sureRemove ? t('再点一次删除') : t('删除组件')}
+              </button>
+            </>
+          ) : working ? (
+            <>
+              <span className="num">{t('正在装 {0}%', inst!.percent)}</span>
+              <button className="btn sm" onClick={() => void api.layoutTrStopInstall()}>
+                {t('暂停')}
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="num">{inst?.phase === 'failed' ? t('没装成：{0}', inst.error ?? '') : t('还没装（约 {0} MB，第一次点「对照」时装）', BABELDOC_MB)}</span>
+              <button className="btn sm" onClick={() => void api.layoutTrInstall()}>
+                {inst?.percent ? t('接着装') : t('现在装')}
+              </button>
+            </>
+          )}
+        </Row>
+      </FSec>
       <FSec title={t('翻译成')}>
         <Row label={t('目标语言')} hint={t('段落译文、划词翻译、标题译名都翻成它')}>
           <Pick value={s.targetLang} options={[...new Set([s.targetLang, ...LANGS])].map((l) => ({ id: l, label: l }))} onChange={(v) => set({ targetLang: v })} />
         </Row>
       </FSec>
-      <FSec title={t('对照模式')}>
+      <FSec title={t('重排看法')}>
         <Row label={t('显示')}>
           <Segmented
             className="sm"

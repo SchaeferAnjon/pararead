@@ -26,7 +26,7 @@ try {
   for (let i = 0; i < 90 && !(await ev((x) => window.api.getPaper(x), id)).reflow.ready; i++) await sleep(1000)
   await win.dblclick(`[data-paper="${id}"]`)
   await sleep(1500)
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][1]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][3]?.click())
   await sleep(2000)
   await ev(() => { [...document.querySelectorAll('.blk.heading')].find((x) => /INTRODUCTION/.test(x.textContent)).scrollIntoView({ block: 'start' }); document.querySelector('.reflow-scroller').scrollTop -= 40 })
   await sleep(700)
@@ -41,7 +41,7 @@ try {
   ok('这条标注带着原文的页码', typeof anns[0].page === 'number' && anns[0].page >= 1, `第 ${anns[0].page} 页`)
   // 2. 高亮，再写批注
   await dragIn(1)
-  await win.locator('.sel-toolbar .dot-btn').nth(1).click()
+  await win.locator('.sel-toolbar .tb-kind[data-kind="def"]').click()
   await sleep(700)
   anns = await ev((x) => window.api.annList(x), id)
   const hl = anns.find((a) => a.style !== 'underline')
@@ -79,7 +79,7 @@ try {
   console.log(await shot(win, 'notes-jump'))
 
   // 6. 原文（PDF）模式里划线
-  await ev(() => [...document.querySelectorAll('.mid-bar .seg-item')][0]?.click())
+  await ev(() => [...document.querySelectorAll('.mid-bar .mode-seg .seg-item')][0]?.click())
   await sleep(2500)
   const line = await ev(() => { const sp = [...document.querySelectorAll('.textLayer span')].find((s) => s.textContent.length > 40 && s.getBoundingClientRect().top > 150 && s.getBoundingClientRect().top < 700); const q = sp.getBoundingClientRect(); return { x: q.x, y: q.y, w: q.width, h: q.height } })
   await win.mouse.move(line.x + 4, line.y + line.h / 2)

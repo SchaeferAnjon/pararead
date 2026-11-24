@@ -1,0 +1,44 @@
+{
+  "name": "@cn/ai-chat",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AI 对话框（界面那一层）：输入框、切引擎和 effort、贴多图、旁支、对话目录、一来一回、回答下面那排，画布笔记、ParaRead 共用。不引 Electron，宿主经 ChatHost、UiHost 接进来",
+  "license": "GPL-3.0-or-later",
+  "exports": {
+    ".": "./src/index.ts",
+    "./host": "./src/host.ts",
+    "./context": "./src/context.tsx",
+    "./composer": "./src/composer.tsx",
+    "./materials": "./src/materials.ts",
+    "./paste": "./src/paste.ts",
+    "./ai-picker": "./src/ai-picker.tsx",
+    "./engine-logo": "./src/engine-logo.tsx",
+    "./ai-error": "./src/ai-error.tsx",
+    "./chat-toc": "./src/chat-toc.tsx",
+    "./steps": "./src/steps.tsx",
+    "./turns": "./src/turns.tsx",
+    "./answer-bar": "./src/answer-bar.tsx",
+    "./side/AskBox": "./src/side/AskBox.tsx",
+    "./side/SideInline": "./src/side/SideInline.tsx",
+    "./side/host": "./src/side/host.ts",
+    "./side/name": "./src/side/name.ts",
+    "./side/marks": "./src/side/marks.ts",
+    "./use-dismiss": "./src/use-dismiss.ts",
+    "./chat-jump": "./src/chat-jump.ts",
+    "./side/side-inline.css": "./src/side/side-inline.css",
+    "./assets/*": "./src/assets/*"
+  },
+  "dependencies": {
+    "@cn/ai-engines": "workspace:*",
+    "@cn/design": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19"
+  }
+}

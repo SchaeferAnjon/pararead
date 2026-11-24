@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowRight, ArrowUp, Bookmark, BookOpen, BookOpenCheck, Check, ChevronDown, Clock, Download, Eye, FileOutput, FileText, Folder as FolderIcon, FolderOpen, FolderPlus, Globe, LayoutGrid, LibraryBig, Link, List, ListChecks, MessagesSquare, PanelLeft, PanelRight, Pencil, Plus, Quote, RefreshCw, Search as SearchIcon, Sheet, Trash2, User, X } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, Bookmark, BookMarked, BookOpen, EyeOff, NotebookText, BookOpenCheck, Check, ChevronDown, Clock, Download, Eye, FileOutput, FileText, Folder as FolderIcon, FolderOpen, FolderPlus, Globe, LayoutGrid, LibraryBig, Link, List, ListChecks, MessagesSquare, PanelLeft, PanelRight, Pencil, Plus, Quote, RefreshCw, Search as SearchIcon, Sheet, Trash2, User, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { bibEntry, bibKeys } from '@shared/bib'
 import { CITE_STYLES, citationText, type CiteStyle } from '@shared/cite'
@@ -13,11 +13,13 @@ import { BookmarkletDialog, UrlImport, WebSearch, ZoteroImport } from './ImportD
 import { Inspector } from './Inspector'
 import { folderPath, PaperInfo } from './PaperInfo'
 import { SMART, smartCount } from './Sidebar'
+import { PlaceDialog } from './PlaceDialog'
+import { inCnFolder, parseCnFilter } from '@shared/cnLink'
 import { t } from '@shared/i18n'
 import { modKey, ON_WIN } from '@shared/kbd'
 
 type SortKey = SettingsView['libSort']['key']
-type Dialog = { kind: 'url' } | { kind: 'zotero' } | { kind: 'web'; q?: string } | { kind: 'bookmarklet' } | { kind: 'info'; id: string } | { kind: 'export'; id: string }
+type Dialog = { kind: 'url' } | { kind: 'zotero' } | { kind: 'web'; q?: string } | { kind: 'bookmarklet' } | { kind: 'info'; id: string } | { kind: 'export'; id: string } | { kind: 'place'; id: string }
 
 const SORT_LABEL: Record<SortKey, string> = { opened: t('最近打开'), added: t('添加时间'), title: t('标题'), year: t('年份'), progress: t('进度') }
 
@@ -122,7 +124,13 @@ export function Library(props: {
   }, [folders])
 
   const deepById = useMemo(() => new Map(deep.map((d) => [d.id, d])), [deep])
-  const inFilter = useCallback((p: Paper): boolean => (filter.startsWith('folder:') ? p.folders.includes(filter.slice(7)) : filter.startsWith('tag:') ? p.tags.includes(filter.slice(4)) : smartCount(filter, p)), [filter])
+  // 画布笔记库里的一个文件夹（左栏「画布笔记库」）
+  const cnF = useMemo(() => parseCnFilter(filter), [filter])
+  const inFilter = useCallback(
+    (p: Paper): boolean =>
+      cnF ? inCnFolder(p.cn, cnF.root, cnF.folder) : filter.startsWith('folder:') ? p.folders.includes(filter.slice(7)) : filter.startsWith('tag:') ? p.tags.includes(filter.slice(4)) : smartCount(filter, p),
+    [filter, cnF]
+  )
   const shown = useMemo(() => {
     let list = q && scopeAll ? all : all.filter(inFilter)
     if (q) list = list.filter((p) => (p.title + ' ' + p.authors.join(' ') + ' ' + (p.venue ?? '')).toLowerCase().includes(q) || deepById.has(p.id))
@@ -322,6 +330,9 @@ export function Library(props: {
             ]
           : []),
         { label: t('移到文件夹'), icon: <FolderIcon size={16} />, submenu: folderEntries(ids) },
+        // 放进画布笔记库（PDF 和配对笔记一起）；已经在库里的：在画布笔记里看它的笔记
+        ...(one && p.kind === 'pdf' && !p.cn ? [{ id: 'place', label: t('放到画布笔记…'), icon: <BookMarked size={16} /> }] : []),
+        ...(one && p.cn ? [{ id: 'cn-note', label: t('在画布笔记里看笔记'), icon: <NotebookText size={16} /> }] : []),
         ...(one ? [{ id: 'info', label: t('编辑文献信息…'), icon: <Pencil size={16} />, hint: '⌘I' }] : []),
         { label: t('复制引用'), icon: <Quote size={16} />, submenu: citeEntries() },
         p.progress >= 1 ? { id: 'unread', label: t('标记为未读'), icon: <BookOpen size={16} /> } : { id: 'read', label: t('标记为读完'), icon: <BookOpenCheck size={16} /> },
@@ -337,7 +348,9 @@ export function Library(props: {
               sep
             ]
           : []),
-        { id: 'delete', label: one ? t('删除') : t('删除 {0} 篇', ids.length), icon: <Trash2 size={16} />, hint: '⌘⌫', danger: true }
+        ...(ids.every((x) => all.find((y) => y.id === x)?.cn)
+          ? [{ id: 'hide', label: one ? t('在 ParaRead 里藏起来') : t('在 ParaRead 里藏起来 {0} 篇', ids.length), icon: <EyeOff size={16} /> }]
+          : [{ id: 'delete', label: one ? t('删除') : t('删除 {0} 篇', ids.length), icon: <Trash2 size={16} />, hint: '⌘⌫', danger: true }])
       ],
       at
     )
@@ -361,6 +374,19 @@ export function Library(props: {
         .catch((er) => toast(t('获取失败：{0}', errText(er))))
     if (act === 'retry') void api.retryReflow(id)
     if (act === 'delete') void remove(ids)
+    if (act === 'place') setDialog({ kind: 'place', id })
+    if (act === 'cn-note') void api.cnOpenInCn(id, 'note').catch((er) => toast(errText(er)))
+    if (act === 'hide') void hide(ids)
+  }
+  // 画布笔记库里的：不删库里那份，只是在 ParaRead 里不列（设置 › 画布笔记 里放回来）
+  const hide = async (ids: string[]): Promise<void> => {
+    const ps = ids.map((i) => all.find((p) => p.id === i)).filter((p): p is Paper => !!p?.cn)
+    for (const p of ps) await api.cnHide(p.cn!.root, p.cn!.path, true)
+    setSelected([])
+    toast(ps.length > 1 ? t('藏起来了 {0} 篇，库里那份还在', ps.length) : t('藏起来了，库里那份还在'), {
+      label: t('撤销'),
+      run: () => void Promise.all(ps.map((p) => api.cnHide(p.cn!.root, p.cn!.path, false)))
+    })
   }
 
   // 单击选中，⌘ 点或多选模式下加减，⇧ 点连选；双击打开
@@ -449,7 +475,7 @@ export function Library(props: {
   }, [query, all, folders, s.recentSearches])
 
   const grouped = (sort.key === 'opened' || sort.key === 'added') && sort.desc && !q
-  const pageTitle = curFolder ? curFolder.name : filter.startsWith('tag:') ? `# ${filter.slice(4)}` : (SMART.find((x) => x.id === filter)?.label ?? t('全部论文'))
+  const pageTitle = cnF ? [cnF.root.split('/').pop(), ...cnF.folder.split('/').filter(Boolean)].join(' › ') : curFolder ? curFolder.name : filter.startsWith('tag:') ? `# ${filter.slice(4)}` : (SMART.find((x) => x.id === filter)?.label ?? t('全部论文'))
   const empty = props.papers !== null && props.papers.length === 0
   const selPapers = selected.map((i) => all.find((p) => p.id === i)).filter((p): p is Paper => !!p)
   const scopeLabel = q ? t('找到 {0} 篇 · 范围：{1}', shown.length, scopeAll ? t('全部论文') : pageTitle) : ''
@@ -714,7 +740,14 @@ export function Library(props: {
                         <span className="c-prog">
                           <ProgressCell p={p} live={prog[p.id]} />
                         </span>
-                        <span className="c-time">{fmtOpened(sort.key === 'added' ? p.createdAt : p.lastOpened)}</span>
+                        <span className="c-time">
+                          {p.cn && (
+                            <span className="cn-in" title={p.cn.missing ? t('在画布笔记库里，现在找不到：{0}', p.cn.path) : t('在画布笔记库里：{0}', p.cn.path)}>
+                              <BookMarked size={14} />
+                            </span>
+                          )}
+                          {fmtOpened(sort.key === 'added' ? p.createdAt : p.lastOpened)}
+                        </span>
                       </div>
                     </div>
                   )
@@ -837,6 +870,7 @@ export function Library(props: {
       {dialog?.kind === 'bookmarklet' && <BookmarkletDialog onClose={() => setDialog(null)} />}
       {dialog?.kind === 'info' && <PaperInfo id={dialog.id} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'export' && <ExportDialog id={dialog.id} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'place' && all.find((p) => p.id === dialog.id) && <PlaceDialog paper={all.find((p) => p.id === dialog.id)!} onClose={() => setDialog(null)} onPlaced={() => undefined} />}
     </>
   )
 }

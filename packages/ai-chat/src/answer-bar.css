@@ -1,0 +1,244 @@
+/* AI 回答下面那一排、收不收改动（answer-bar.tsx，task-eavzx 款式页第二版）。
+   只用两边（画布笔记、画布今日、ParaRead）同名的变量：--text --text-2 --text-3 --fill-2 --fill-3 --stroke --btn-bg --btn-bg-hover --btn-stroke
+   --bg-popover --shadow-pop --accent-ring --solid --solid-t --r-sm --fs-sm --fw-medium --z-popover。 */
+
+.cn-ab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  margin-top: 6px;
+  width: 100%;
+  min-width: 0;
+}
+/* 量宽用的那一份：自己 0 × 0、裁掉里面（按钮 flex: none 照样量得到自己多宽），不撑出外面那一栏的横向滚动 */
+.cn-ab-measure {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  gap: 4px;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.cn-ab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
+  flex: none;
+  white-space: nowrap;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+.cn-ab-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+.cn-ab-btn[aria-disabled='true'] {
+  opacity: 0.45;
+}
+
+/* 左边功能按钮：无边框灰字（btn-ghost，500 和「不要」同一个字重），挤了只留图标 24 方 */
+.cn-ab-act {
+  padding: 0 6px;
+  font-weight: var(--fw-medium, 500);
+  border: 0;
+  border-radius: var(--r-sm, 6px);
+  background: transparent;
+  color: var(--text-2);
+}
+.cn-ab-act.icon {
+  width: 24px;
+  padding: 0;
+}
+.cn-ab-act:not([aria-disabled='true']):hover,
+.cn-ab-more.open {
+  background: var(--fill-2);
+  color: var(--text);
+}
+.cn-ab-act:not([aria-disabled='true']):active {
+  background: var(--fill-3);
+}
+
+.cn-ab-sep {
+  width: 1px;
+  height: 14px;
+  margin: 0 4px;
+  flex: none;
+  background: var(--stroke);
+}
+
+/* 右边快捷回复：描边胶囊、黑字、一律带字 */
+.cn-ab-reply {
+  padding: 0 10px 0 8px;
+  border: 1px solid var(--btn-stroke);
+  border-radius: 999px;
+  background: var(--btn-bg);
+  color: var(--text);
+  font-weight: var(--fw-medium, 500);
+}
+.cn-ab-reply:not([aria-disabled='true']):hover {
+  background: var(--btn-bg-hover);
+}
+.cn-ab-reply > .ci {
+  color: var(--text-2);
+}
+.cn-ab-logo {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+.cn-ab-logo > * {
+  width: 12px;
+  height: 12px;
+}
+
+/* ⋯ 弹出来的菜单（pop12：圆角 12、内边距 6、行 30 圆角 8、图标 14 --text-2） */
+.cn-ab-menu {
+  position: fixed;
+  z-index: var(--z-popover, 1000);
+  min-width: 190px;
+  max-width: 280px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--bg-popover);
+  box-shadow: 0 0 0 1px var(--stroke), var(--shadow-pop);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  display: flex;
+  flex-direction: column;
+}
+.cn-ab-mi {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: default;
+}
+.cn-ab-mi:not([aria-disabled='true']):hover,
+.cn-ab-mi:focus-visible {
+  outline: none;
+  background: var(--fill-2);
+}
+.cn-ab-mi[aria-disabled='true'] {
+  opacity: 0.45;
+}
+.cn-ab-mic {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  flex: none;
+}
+.cn-ab-mic .cn-ab-logo > * {
+  width: 14px;
+  height: 14px;
+}
+.cn-ab-ml {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cn-ab-hr {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--stroke);
+}
+.cn-ab-mh {
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* 收不收改动：看改动 ……… 不要 · 收下（28 高，btn-sm） */
+.cn-cb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  min-width: 0;
+}
+.cn-cb-sp {
+  flex: 1;
+}
+.cn-cb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm, 6px);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-sm, 12px);
+  font-weight: var(--fw-medium, 500);
+  white-space: nowrap;
+  cursor: default;
+}
+.cn-cb-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+.cn-cb-btn[aria-disabled='true'] {
+  opacity: 0.45;
+}
+.cn-cb-btn.ghost:not([aria-disabled='true']):hover {
+  background: var(--fill-2);
+  color: var(--text);
+}
+/* 描边「收下」：胶囊，和快捷回复、「全部收下」同一个形状（设计复审） */
+.cn-cb-btn.out {
+  border-radius: 999px;
+  border-color: var(--btn-stroke);
+  background: var(--btn-bg);
+  color: var(--text);
+}
+.cn-cb-btn.out > .ci {
+  color: var(--text-2);
+}
+.cn-cb-btn.out:not([aria-disabled='true']):hover {
+  background: var(--btn-bg-hover);
+}
+/* 实心「收下」：--solid 实心胶囊（天青黑底白字、深湖浅底深字，DESIGN.md「主按钮 --solid 实心胶囊」；两边都有这两个变量） */
+.cn-cb-btn.solid {
+  border-radius: 999px;
+  background: var(--solid, var(--text));
+  color: var(--solid-t, var(--bg));
+}
+.cn-cb-btn.solid:not([aria-disabled='true']):hover {
+  filter: brightness(1.08);
+}
+.cn-cb-btn .cn-ab-logo > * {
+  width: 14px;
+  height: 14px;
+}
+/* 撤回单独一颗时贴着左边那串字（改动块、整理好了那一条），不另起一行 */
+.cn-undo {
+  height: 24px;
+  padding: 0 6px;
+}

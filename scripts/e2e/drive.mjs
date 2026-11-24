@@ -7,8 +7,8 @@ import { mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// playwright 用全局装的那份（npm i -g playwright）
-const require = createRequire(process.env.PLAYWRIGHT_ROOT ?? '/opt/homebrew/lib/node_modules/')
+// playwright 用工作区里装的那份（devDependencies，和画布笔记的 @playwright/test 同一版）；PLAYWRIGHT_ROOT 能指到别处的
+const require = createRequire(process.env.PLAYWRIGHT_ROOT ?? import.meta.url)
 const { _electron } = require('playwright')
 
 // fileURLToPath：Windows 上 URL 的 pathname 是 /D:/…，当不了工作目录

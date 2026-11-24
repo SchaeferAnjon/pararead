@@ -3,6 +3,7 @@ import { LABEL_NAME } from '@shared/annLabels'
 import { isSettled, STATUS_NAME, statusOf } from '@shared/explain'
 import type * as PdfJs from 'pdfjs-dist'
 import type { Annotation, Idea, Paper, ReadPosition, Ink} from '@shared/types'
+import type { LayoutTrState } from '@shared/layoutTr'
 import { IdeaGutter, useIdeaPeek, type Peek } from './IdeaMarks'
 import { pdfjs } from '../lib/pdf'
 import { findTextRange, normRects, selectionText } from '../lib/selection'
@@ -22,8 +23,28 @@ export type InkTool = { kind: 'pen'; color: string } | { kind: 'eraser' }
 export const INK_WIDTH = 2.5
 export const INK_COLORS = ['#e5484d', '#2f6fde', '#1d1d1f']
 
+/**
+ * 对照、译文看法（保版面翻译）：一行一页，左原页右译页（side），窄时原页在上译页在下（stack），或者只有译页（mono）。
+ * 译页是 BabelDOC 出的译文 PDF 里的一页（docs 按文件名），版面和原页一样，所以框、划线都用同一套页内比例坐标。
+ * 还没翻到的页：放变灰的原页，上面一张小卡（pending 画）。
+ */
+export interface TrView {
+  layout: 'side' | 'stack' | 'mono'
+  state: LayoutTrState | null
+  docs: Record<string, PdfJs.PDFDocumentProxy>
+  pending: (n: number) => React.ReactNode
+}
+export type PageSide = 'src' | 'tr'
+// 对照里页上面那一行「第 9 页 · 原文」的高
+const LABEL = 24
+// 左右两页之间、上下两页之间
+const GAP_X = 16
+const GAP_Y = 8
+
 // 原文模式：pdf.js 连续滚动。页面进入视口附近才渲染画布和文字层；高亮是盖在文字层上的矩形。
 export function PdfView(props: {
+  /** 对照、译文看法；原文看法没有 */
+  tr?: TrView
   pdf: PdfJs.PDFDocumentProxy
   paper: Paper
   anns: Annotation[]
@@ -34,13 +55,13 @@ export function PdfView(props: {
   zoom: number
   invert: boolean
   boxMode: boolean
-  shot: { page: number; frac: [number, number, number, number] } | null
+  shot: { page: number; frac: [number, number, number, number]; side?: PageSide } | null
   jump: Jump | null
   hoverAnn: string | null
   initial: ReadPosition
   onPosition: (page: number, frac: number, progress: number) => void
   onSelect: (s: SelInfo | null) => void
-  onBox: (dataUrl: string, page: number, frac: [number, number, number, number], text: string) => void
+  onBox: (dataUrl: string, page: number, frac: [number, number, number, number], text: string, side: PageSide) => void
   onRectsFound: (a: Annotation, rects: number[][]) => void
   inkTool: InkTool | null
   inks: Ink[]
@@ -60,7 +81,11 @@ export function PdfView(props: {
   const [chipEdit, setChipEdit] = useState(false)
   const [found, setFound] = useState<Record<string, number[][]>>({})
   const [flashAnn, setFlashAnn] = useState<string | null>(null)
-  const [box, setBox] = useState<{ page: number; x0: number; y0: number; x1: number; y1: number } | null>(null)
+  const [box, setBox] = useState<{ page: number; side: PageSide; x0: number; y0: number; x1: number; y1: number } | null>(null)
+  const tr = props.tr
+  const layout = tr?.layout
+  // 这一页在页面上的那个元素：对照里一页有原页、译页两个
+  const pageEl = (n: number, side: PageSide = layout === 'mono' ? 'tr' : 'src'): HTMLElement | null => scroller.current?.querySelector<HTMLElement>(`.page[data-page="${n}"][data-side="${side}"]`) ?? null
   // 手写：正在画的这一笔（页内归一化坐标），橡皮按住时一路擦
   const [drawing, setDrawing] = useState<{ page: number; points: [number, number][] } | null>(null)
   const erasing = useRef(false)
@@ -93,8 +118,11 @@ export function PdfView(props: {
   }, [])
 
   const maxW = sizes ? Math.max(...sizes.map((s) => s.w)) : 600
-  const fit = width ? (width - 32 - 32) / maxW : 1
+  const fit = width ? (layout === 'side' ? (width - 64 - GAP_X) / 2 : width - 64) / maxW : 1
   const scale = Math.max(0.3, fit * props.zoom)
+  // 一行多高：原文看法一行就是一页；对照里多一行页名，上下排时一行是原页加译页
+  const label = tr ? LABEL : 0
+  const rowH = (h: number): number => (layout === 'stack' ? 2 * (label + h) + GAP_Y : label + h)
 
   // 缩放前记住页码和页内位置，布局完滚回去
   const anchor = useRef<{ page: number; frac: number } | null>(null)
@@ -102,10 +130,11 @@ export function PdfView(props: {
     (n: number) => {
       if (!sizes) return 0
       let y = 16
-      for (let i = 0; i < n - 1; i++) y += sizes[i].h * scale + 16
-      return y
+      for (let i = 0; i < n - 1; i++) y += rowH(sizes[i].h * scale) + 16
+      return y + label
     },
-    [sizes, scale]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sizes, scale, layout]
   )
   const prevScale = useRef(scale)
   if (prevScale.current !== scale && scroller.current && sizes) {
@@ -113,14 +142,14 @@ export function PdfView(props: {
     let y = 16
     let n = 1
     for (let i = 0; i < sizes.length; i++) {
-      const h = sizes[i].h * prevScale.current
+      const h = rowH(sizes[i].h * prevScale.current)
       if (y + h + 16 > st) {
         n = i + 1
         break
       }
       y += h + 16
     }
-    anchor.current = { page: n, frac: (st - y) / (sizes[n - 1].h * prevScale.current) }
+    anchor.current = { page: n, frac: (st - y - label) / (sizes[n - 1].h * prevScale.current) }
     prevScale.current = scale
   }
   useLayoutEffect(() => {
@@ -135,7 +164,7 @@ export function PdfView(props: {
     if (restored.current || !sizes || !width || !scroller.current) return
     restored.current = true
     const p = props.initial.page
-    if (p && p <= sizes.length) scroller.current.scrollTop = pageTop(p) + (props.initial.pageFrac ?? 0) * sizes[p - 1].h * scale
+    if (p && p <= sizes.length) scroller.current.scrollTop = pageTop(p) + (props.initial.pageFrac ?? 0) * sizes[p - 1].h * scale - (props.initial.pageFrac ? 0 : label)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sizes, width])
 
@@ -150,10 +179,10 @@ export function PdfView(props: {
     let frac = 0
     const vis = new Set<number>()
     for (let i = 0; i < sizes.length; i++) {
-      const h = sizes[i].h * scale
+      const h = rowH(sizes[i].h * scale)
       if (y <= mid) {
         n = i + 1
-        frac = Math.max(0, (st - y) / h)
+        frac = Math.max(0, (st - y - label) / (sizes[i].h * scale))
       }
       if (y + h > st - el.clientHeight && y < st + el.clientHeight * 2) vis.add(i + 1)
       y += h + 16
@@ -177,7 +206,7 @@ export function PdfView(props: {
     if (!j || j.kind !== 'page' || !sizes || !scroller.current) return
     const p = Math.min(Math.max(1, j.page), sizes.length)
     const frac = j.frac ?? 0
-    scroller.current.scrollTop = pageTop(p) + Math.max(0, frac * sizes[p - 1].h * scale - 80)
+    scroller.current.scrollTop = pageTop(p) + Math.max(0, frac * sizes[p - 1].h * scale - 80) - (frac ? 0 : label)
     if (j.annId) {
       setFlashAnn(j.annId)
       setTimeout(() => setFlashAnn(null), 1400)
@@ -215,16 +244,16 @@ export function PdfView(props: {
     const range = sel.getRangeAt(0)
     const text = selectionText(sel)
     if (text.length < 2) return props.onSelect(null)
-    const pageEl = (range.startContainer.parentElement ?? (range.startContainer as Element)).closest('.page') as HTMLElement | null
-    if (!pageEl) return props.onSelect(null)
-    const n = Number(pageEl.dataset.page)
-    const rects = normRects(range, pageEl)
+    const pg = (range.startContainer.parentElement ?? (range.startContainer as Element)).closest('.page') as HTMLElement | null
+    if (!pg || pg.classList.contains('pending')) return props.onSelect(null)
+    const n = Number(pg.dataset.page)
+    const rects = normRects(range, pg)
     const r = range.cloneRange()
     props.onSelect({
       text,
-      paragraph: paragraphAround(pageEl, range),
+      paragraph: paragraphAround(pg, range),
       getRect: () => r.getBoundingClientRect(),
-      target: { mode: 'pdf', page: n, rects }
+      target: { mode: 'pdf', page: n, rects, ...(pg.dataset.side === 'tr' ? { side: 'tr' as const } : {}) }
     })
   }
 
@@ -239,7 +268,7 @@ export function PdfView(props: {
   // 框选：标题栏「框选」或按住 ⌥ 拖
   // 鼠标在哪一页的哪个位置（页内 0 到 1）
   const pagePoint = (e: { clientX: number; clientY: number }, page?: number): { page: number; x: number; y: number; w: number; h: number } | null => {
-    const el = (page ? document.querySelector(`.page[data-page="${page}"]`) : document.elementFromPoint(e.clientX, e.clientY)?.closest('.page')) as HTMLElement | null
+    const el = (page ? pageEl(page) : document.elementFromPoint(e.clientX, e.clientY)?.closest('.page[data-side="src"]')) as HTMLElement | null
     if (!el) return null
     const r = el.getBoundingClientRect()
     return { page: Number(el.dataset.page), x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)), w: r.width, h: r.height }
@@ -271,14 +300,14 @@ export function PdfView(props: {
       return
     }
     if (!(props.boxMode || e.altKey) || e.button !== 0) return
-    const pageEl = (e.target as Element).closest('.page') as HTMLElement | null
-    if (!pageEl) return
+    const pg = (e.target as Element).closest('.page') as HTMLElement | null
+    if (!pg || pg.classList.contains('pending')) return
     e.preventDefault()
     window.getSelection()?.removeAllRanges()
-    const r = pageEl.getBoundingClientRect()
+    const r = pg.getBoundingClientRect()
     const x = e.clientX - r.left
     const y = e.clientY - r.top
-    setBox({ page: Number(pageEl.dataset.page), x0: x, y0: y, x1: x, y1: y })
+    setBox({ page: Number(pg.dataset.page), side: (pg.dataset.side as PageSide) ?? 'src', x0: x, y0: y, x1: x, y1: y })
   }
   const preview = useNotePreview(
     useCallback(
@@ -306,9 +335,9 @@ export function PdfView(props: {
     if (erasing.current) return eraseAt(e)
     preview.onMove(e)
     if (!box) return
-    const pageEl = document.querySelector(`.page[data-page="${box.page}"]`)
-    if (!pageEl) return
-    const r = pageEl.getBoundingClientRect()
+    const pg = pageEl(box.page, box.side)
+    if (!pg) return
+    const r = pg.getBoundingClientRect()
     setBox({ ...box, x1: Math.min(Math.max(0, e.clientX - r.left), r.width), y1: Math.min(Math.max(0, e.clientY - r.top), r.height) })
   }
   const finishBox = (): void => {
@@ -317,10 +346,10 @@ export function PdfView(props: {
     const w = Math.abs(b.x1 - b.x0)
     const h = Math.abs(b.y1 - b.y0)
     if (w < 8 || h < 8) return
-    const canvas = document.querySelector<HTMLCanvasElement>(`.page[data-page="${b.page}"] canvas`)
-    const pageEl = document.querySelector<HTMLElement>(`.page[data-page="${b.page}"]`)
-    if (!canvas || !pageEl) return
-    const k = canvas.width / pageEl.clientWidth
+    const pg = pageEl(b.page, b.side)
+    const canvas = pg?.querySelector<HTMLCanvasElement>('canvas')
+    if (!canvas || !pg) return
+    const k = canvas.width / pg.clientWidth
     const out = document.createElement('canvas')
     out.width = Math.round(w * k)
     out.height = Math.round(h * k)
@@ -328,22 +357,22 @@ export function PdfView(props: {
     const y = Math.min(b.y0, b.y1)
     out.getContext('2d')!.drawImage(canvas, x * k, y * k, w * k, h * k, 0, 0, out.width, out.height)
     // 框里的文字：文字层里和框相交的字
-    const pr = pageEl.getBoundingClientRect()
+    const pr = pg.getBoundingClientRect()
     const area = new DOMRect(pr.left + x, pr.top + y, w, h)
     const words: string[] = []
-    for (const span of pageEl.querySelectorAll<HTMLElement>('.textLayer span')) {
+    for (const span of pg.querySelectorAll<HTMLElement>('.textLayer span')) {
       const r = span.getBoundingClientRect()
       if (r.right > area.left && r.left < area.right && r.bottom > area.top && r.top < area.bottom && span.textContent) words.push(span.textContent)
     }
-    const W = pageEl.clientWidth
-    const H = pageEl.clientHeight
-    props.onBox(out.toDataURL('image/png'), b.page, [x / W, y / H, w / W, h / H], words.join(' ').replace(/\s+/g, ' ').trim())
+    const W = pg.clientWidth
+    const H = pg.clientHeight
+    props.onBox(out.toDataURL('image/png'), b.page, [x / W, y / H, w / W, h / H], words.join(' ').replace(/\s+/g, ' ').trim(), b.side)
   }
 
   const jumpTo = (n: number): void => {
     if (!sizes || !scroller.current) return
     back.remember(t('回到第 {0} 页', page))
-    scroller.current.scrollTop = pageTop(Math.min(Math.max(1, n), sizes.length))
+    scroller.current.scrollTop = pageTop(Math.min(Math.max(1, n), sizes.length)) - label
   }
 
   // PDF 自己的内部链接（引用角标、图表编号）：跳到它指的那一页那一处，跳之前记下位置
@@ -377,35 +406,99 @@ export function PdfView(props: {
         onMouseLeave={preview.onLeave}
       >
         {preview.node}
-        {sizes?.map((s, i) => (
-          <PageView
-            key={i}
-            pdf={pdf}
-            n={i + 1}
-            w={s.w * scale}
-            h={s.h * scale}
-            scale={scale}
-            render={visible.has(i + 1)}
-            anns={props.anns.filter((a) => a.mode === 'pdf' && a.page === i + 1)}
-            ideas={props.ideas.filter((x) => x.page === i + 1)}
-            focusIdea={props.focusIdea}
-            peek={ideaPeek}
-            onIdeaLibrary={props.onIdeaLibrary}
-            onIdeaRemove={props.onIdeaRemove}
-            found={found}
-            hoverAnn={props.hoverAnn}
-            flashAnn={flashAnn}
-            onFound={(a, rects) => {
-              setFound((f) => ({ ...f, [a.id]: rects }))
-              props.onRectsFound(a, rects)
-            }}
-            box={box && box.page === i + 1 ? box : null}
-            shot={props.shot && props.shot.page === i + 1 ? props.shot.frac : null}
-            inks={props.inks.filter((k) => k.page === i + 1)}
-            drawing={drawing && drawing.page === i + 1 && props.inkTool?.kind === 'pen' ? { points: drawing.points, color: props.inkTool.color } : null}
-            onLink={(dest) => void followLink(dest, i + 1)}
-          />
-        ))}
+        {sizes?.map((s, i) => {
+          const n = i + 1
+          const w = s.w * scale
+          const h = s.h * scale
+          const src = (
+            <PageView
+              key={tr ? 'src' : i}
+              pdf={pdf}
+              n={n}
+              side="src"
+              w={w}
+              h={h}
+              scale={scale}
+              render={visible.has(n)}
+              anns={props.anns.filter((a) => a.mode === 'pdf' && a.page === n && a.side !== 'tr')}
+              across={tr ? props.anns.filter((a) => a.mode === 'pdf' && a.page === n && a.side === 'tr') : []}
+              ideas={props.ideas.filter((x) => x.page === n)}
+              focusIdea={props.focusIdea}
+              peek={ideaPeek}
+              onIdeaLibrary={props.onIdeaLibrary}
+              onIdeaRemove={props.onIdeaRemove}
+              found={found}
+              hoverAnn={props.hoverAnn}
+              flashAnn={flashAnn}
+              onFound={(a, rects) => {
+                setFound((f) => ({ ...f, [a.id]: rects }))
+                props.onRectsFound(a, rects)
+              }}
+              box={box && box.page === n && box.side === 'src' ? box : null}
+              mirror={tr && box && box.page === n && box.side === 'tr' ? box : null}
+              shot={props.shot && props.shot.page === n ? props.shot.frac : null}
+              shotMirror={!!tr && props.shot?.side === 'tr'}
+              inks={props.inks.filter((k) => k.page === n)}
+              drawing={drawing && drawing.page === n && props.inkTool?.kind === 'pen' ? { points: drawing.points, color: props.inkTool.color } : null}
+              onLink={(dest) => void followLink(dest, n)}
+            />
+          )
+          if (!tr) return src
+          const at = tr.state?.pages[n]
+          const doc = at ? tr.docs[at.file] : undefined
+          const trPage = doc ? (
+            <PageView
+              key="tr"
+              pdf={doc}
+              n={at!.at}
+              page={n}
+              side="tr"
+              w={w}
+              h={h}
+              scale={scale}
+              render={visible.has(n)}
+              anns={props.anns.filter((a) => a.mode === 'pdf' && a.page === n && a.side === 'tr')}
+              across={layout === 'mono' ? [] : props.anns.filter((a) => a.mode === 'pdf' && a.page === n && a.side !== 'tr')}
+              ideas={[]}
+              focusIdea={null}
+              peek={ideaPeek}
+              onIdeaLibrary={props.onIdeaLibrary}
+              onIdeaRemove={props.onIdeaRemove}
+              found={found}
+              hoverAnn={props.hoverAnn}
+              flashAnn={flashAnn}
+              onFound={() => {}}
+              box={box && box.page === n && box.side === 'tr' ? box : null}
+              mirror={layout !== 'mono' && box && box.page === n && box.side === 'src' ? box : null}
+              shot={props.shot && props.shot.page === n ? props.shot.frac : null}
+              shotMirror={props.shot?.side !== 'tr'}
+              inks={[]}
+              drawing={null}
+              onLink={() => {}}
+            />
+          ) : (
+            // 还没翻到：变灰的原页，上面一张小卡说翻到哪了
+            <PageView key="pending" pdf={pdf} n={n} side="tr" pending={<>{tr.pending(n)}</>} w={w} h={h} scale={scale} render={visible.has(n)} anns={[]} across={[]} ideas={[]} focusIdea={null} peek={ideaPeek} onIdeaLibrary={props.onIdeaLibrary} onIdeaRemove={props.onIdeaRemove} found={found} hoverAnn={null} flashAnn={null} onFound={() => {}} box={null} mirror={null} shot={null} shotMirror={false} inks={[]} drawing={null} onLink={() => {}} />
+          )
+          // 页名：第一行写全「第 9 页 · 原文 / 译文」，往下只在左边写页码
+          const first = i === 0 || n === page
+          const srcName = first || layout === 'stack' ? t('第 {0} 页 · 原文', n) : t('第 {0} 页', n)
+          const trName = layout === 'mono' ? t('第 {0} 页', n) : first || layout === 'stack' ? t('第 {0} 页 · 译文', n) : ''
+          return (
+            <div key={i} className={`tr-row lay-${layout}`} style={{ height: rowH(h) }}>
+              {layout !== 'mono' && (
+                <div className="tr-cell">
+                  <div className="tr-label num">{srcName}</div>
+                  {src}
+                </div>
+              )}
+              <div className="tr-cell">
+                <div className="tr-label num">{trName}</div>
+                {trPage}
+              </div>
+            </div>
+          )
+        })}
         {back.node && <div className="back-dock">{back.node}</div>}
       </div>
       {sizes && (chip || chipEdit) && (
@@ -460,7 +553,18 @@ const HL_BG: Record<string, string> = { yellow: 'var(--hl-yellow)', green: 'var(
 
 const PageView = memo(function PageView(p: {
   pdf: PdfJs.PDFDocumentProxy
+  /** 在 pdf 里是第几页（译页是译文文件里的第几页） */
   n: number
+  /** 原 PDF 的第几页（data-page），不给就是 n */
+  page?: number
+  side: PageSide
+  /** 还没翻到的译页：画变灰的原页，盖上这张卡 */
+  pending?: React.ReactNode
+  /** 对面那一页上的标注：这边只在左边距画一道同色的竖线，表示「对面这块划过」 */
+  across: Annotation[]
+  /** 对面正在框的那一块：这边同一位置画虚线框 */
+  mirror: { x0: number; y0: number; x1: number; y1: number } | null
+  shotMirror: boolean
   w: number
   h: number
   scale: number
@@ -573,7 +677,7 @@ const PageView = memo(function PageView(p: {
   }, [textReady, p.anns])
 
   return (
-    <div className="page" data-page={p.n} style={{ width: p.w, height: p.h, ['--total-scale-factor' as string]: p.scale, ['--scale-round-x' as string]: '1px', ['--scale-round-y' as string]: '1px' }}>
+    <div className={'page' + (p.side === 'tr' ? ' tr-page' : '') + (p.pending ? ' pending' : '')} data-page={p.page ?? p.n} data-side={p.side} style={{ width: p.w, height: p.h, ['--total-scale-factor' as string]: p.scale, ['--scale-round-x' as string]: '1px', ['--scale-round-y' as string]: '1px' }}>
       <canvas ref={canvasRef} style={{ width: p.w, height: p.h }} />
       <div className="hl-layer">
         {p.anns.map((a) =>
@@ -583,7 +687,7 @@ const PageView = memo(function PageView(p: {
               className={'pdf-hl' + (a.style === 'underline' ? ' ul' : '') + (a.note || a.label ? ' noted' : '') + (a.label ? ` lb-${a.label}${isSettled(a) ? ' done' : ''}` : '') + (p.hoverAnn === a.id ? ' hover' : '') + (p.flashAnn === a.id ? ' flash' : '')}
               data-ann={a.id}
               data-color={a.color}
-              style={{ left: `${r[0] * 100}%`, top: `${r[1] * 100}%`, width: `${r[2] * 100}%`, height: `${r[3] * 100}%`, background: a.label ? 'none' : HL_BG[a.color] }}
+              style={{ left: `${r[0] * 100}%`, top: `${r[1] * 100}%`, width: `${r[2] * 100}%`, height: `${r[3] * 100}%`, ...(a.label ? {} : { background: HL_BG[a.color] }) }}
             />
           ))
         )}
@@ -593,7 +697,20 @@ const PageView = memo(function PageView(p: {
           .filter((i) => p.peek.id === i.id || p.focusIdea === i.id)
           .flatMap((i) => ideaRects(i).map((r, k) => <div key={i.id + k} className="pdf-idea-line" style={{ left: `${r[0] * 100}%`, top: `${r[1] * 100}%`, width: `${r[2] * 100}%`, height: `${r[3] * 100}%` }} />))}
       </div>
+      {p.across.length > 0 && (
+        <div className="hl-layer">
+          {p.across.map((a) => {
+            const rs = a.rects ?? []
+            if (!rs.length) return null
+            const top = Math.min(...rs.map((r) => r[1]))
+            const bottom = Math.max(...rs.map((r) => r[1] + r[3]))
+            const left = Math.min(...rs.map((r) => r[0]))
+            return <div key={a.id} className="pdf-across" data-color={a.color} title={t('对面那页这一块划过')} style={{ left: `max(6px, calc(${left * 100}% - 12px))`, top: `${top * 100}%`, height: `${(bottom - top) * 100}%` }} />
+          })}
+        </div>
+      )}
       <div className="textLayer" ref={textRef} />
+      {p.pending && <div className="tr-pending">{p.pending}</div>}
       <div className="idea-layer">
         <IdeaGutter marks={ideaMarks} ideas={p.ideas} focus={p.focusIdea} peek={p.peek} onLibrary={p.onIdeaLibrary} onRemove={p.onIdeaRemove} />
       </div>
@@ -625,7 +742,10 @@ const PageView = memo(function PageView(p: {
           {p.drawing && <polyline points={p.drawing.points.map((q) => q.join(',')).join(' ')} stroke={p.drawing.color} strokeWidth={INK_WIDTH * p.scale} />}
         </svg>
       )}
-      {p.shot && <div className="box-rect shot" style={{ left: `${p.shot[0] * 100}%`, top: `${p.shot[1] * 100}%`, width: `${p.shot[2] * 100}%`, height: `${p.shot[3] * 100}%` }} />}
+      {p.shot && <div className={'box-rect shot' + (p.shotMirror ? ' mirror' : '')} style={{ left: `${p.shot[0] * 100}%`, top: `${p.shot[1] * 100}%`, width: `${p.shot[2] * 100}%`, height: `${p.shot[3] * 100}%` }} />}
+      {p.mirror && (
+        <div className="box-rect mirror" style={{ left: Math.min(p.mirror.x0, p.mirror.x1), top: Math.min(p.mirror.y0, p.mirror.y1), width: Math.abs(p.mirror.x1 - p.mirror.x0), height: Math.abs(p.mirror.y1 - p.mirror.y0) }} />
+      )}
       {p.box && (
         <div
           className="box-rect"

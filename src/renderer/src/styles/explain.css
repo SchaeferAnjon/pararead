@@ -4,8 +4,6 @@
 /* 标签的线：了结了的（懂了、质疑不成立）同色变淡 */
 ::highlight(lb-confused-done) { text-decoration: underline wavy 1.5px color-mix(in srgb, var(--lb-confused) 35%, transparent); text-underline-offset: 4px; }
 ::highlight(lb-doubt-done) { text-decoration: underline wavy 1.5px color-mix(in srgb, var(--lb-doubt) 35%, transparent); text-underline-offset: 4px; }
-.pdf-hl.lb-confused.done { border-bottom-color: color-mix(in srgb, var(--lb-confused) 35%, transparent) !important; }
-.pdf-hl.lb-doubt.done { border-bottom-color: color-mix(in srgb, var(--lb-doubt) 35%, transparent) !important; }
 .note-mark.lb-confused.done { text-decoration-color: color-mix(in srgb, var(--lb-confused) 35%, transparent); }
 .note-mark.lb-doubt.done { text-decoration-color: color-mix(in srgb, var(--lb-doubt) 35%, transparent); }
 

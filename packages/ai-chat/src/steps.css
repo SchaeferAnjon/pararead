@@ -1,0 +1,55 @@
+/* AI 动手的每一步那一行（steps.tsx StepRow）：从画布笔记 ai.css 搬来（ParaRead 联动） */
+/* 工具步骤行（DESIGN.v3 2.3）：每步一行 24 高、12px、图标 12；在做 --acc 转圈、字 --t1；做完绿勾、字 --t2；出错红叉、后面跟原因 */
+.am .read.tstep {
+  height: 24px;
+  /* 图标和字之间 4（图标自己的右边距），动作和命令之间 3（.sc 的左边距），不再叠上 flex 的间距 */
+  gap: 0;
+  margin: 0;
+  font-size: 12px;
+  color: var(--t2, var(--text-2));
+}
+.am .tstep .ci {
+  flex: none;
+  margin-right: 4px;
+}
+/* 「跑命令」「读」这几个字不折行（后面的命令再长也只省略命令） */
+.am .tstep .sl {
+  flex: none;
+  white-space: nowrap;
+}
+.am .tstep.run {
+  color: var(--t1, var(--text));
+}
+.am .tstep.run .ci {
+  color: var(--acc, var(--accent));
+}
+.am .tstep.ok .ci {
+  color: var(--green);
+}
+.am .tstep.err .ci {
+  color: var(--red);
+}
+/* 命令、库外的路径：等宽一段，和前面的字之间 3px（不手打空格），放不下省略号 */
+.am .tstep .sc {
+  min-width: 0;
+  margin-left: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 12px/18px var(--mono, var(--font-mono));
+  color: inherit;
+  background: none;
+  padding: 0;
+}
+.am .tstep .why {
+  /* 原因（「没做完」）不让：放不下时先省略前面的命令 */
+  flex: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.am .tstep + .txt,
+.am .tstep + .thinking {
+  margin-top: 6px;
+}

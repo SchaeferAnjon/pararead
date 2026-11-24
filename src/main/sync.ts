@@ -77,7 +77,7 @@ export interface SyncStatus {
 }
 
 export function makeSnapshot(db: DB, device: string, deviceName: string): Snapshot {
-  const rows = db.prepare("SELECT * FROM papers WHERE file_hash NOT LIKE 'tmp:%'").all() as Record<string, unknown>[]
+  const rows = db.prepare("SELECT * FROM papers WHERE file_hash NOT LIKE 'tmp:%' AND vault IS NULL").all() as Record<string, unknown>[]
   const folderRows = db.prepare('SELECT id, name, parent_id, updated_at, created_at FROM folders').all() as { id: string; name: string; parent_id: string | null; updated_at: number; created_at: number }[]
   const hashOf = new Map(rows.map((r) => [r.id as string, r.file_hash as string]))
   const papers: SnapPaper[] = rows.map((r) => ({

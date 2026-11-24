@@ -6,6 +6,10 @@ import { cyrb53 } from './hash'
 import { plain } from './refs'
 import type { SenseSentence } from './senses'
 import type { Annotation, ExplainRecord, ExplainVersion, LabelStatus } from './types'
+import { latest, plainExplain } from './explainText'
+
+// 这两个在 explainText.ts（不引翻译表，写配对笔记的 pairedNote.ts 也用，画布笔记的测试能直接载入）
+export { latest, plainExplain }
 
 export const STATUS_NAME: Record<LabelStatus, string> = {
   open: t('还没懂'),
@@ -39,9 +43,6 @@ export function isSettled(a: Labeled): boolean {
   return s === 'understood' || s === 'dismissed'
 }
 
-export function latest(rec: ExplainRecord | null | undefined): ExplainVersion | null {
-  return rec?.versions.length ? rec.versions[rec.versions.length - 1] : null
-}
 
 // ---------- 分节格式 ----------
 
@@ -330,14 +331,6 @@ export function senseChunks(sens: SenseSentence[], md: string, zh: string, text:
   return out.slice(0, 8)
 }
 
-/** 讲解的一版去掉分节标签，给接着问时的 AI 看（它知道刚才讲了什么） */
-export function plainExplain(raw: string): string {
-  return raw
-    .replace(/<\/?[a-z]+>/g, '\n')
-    .replace(/\s*\|\|\s*/g, '：')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
 
 /** 讲解卡里接着问的几轮，写成一段给 AI 问答接着聊用 */
 export function turnsText(turns: { q: string; a: string }[]): string {

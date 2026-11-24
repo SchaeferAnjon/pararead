@@ -1,5 +1,9 @@
 # Windows 安装包：在 windows-latest 上装依赖、跑单元测试、打 nsis 安装包，再用 Playwright 把装好的包真的打开走一遍
 # （scripts/e2e/windows.mjs），截图和安装包都作为 artifact 留下。发版时 scripts/release.mjs 从这里取安装包。
+# 只在公开仓库 SchaeferAnjon/pararead 里跑：私有的 canvas-notes 仓库里这个文件在 apps/pararead/.github/ 下，GitHub 不认；
+# scripts/public-export.mjs 导出时 ParaRead 的文件挪到根上，它才到 .github/workflows/。
+# 2026-11-23 ParaRead 并进 canvas-notes 仓库以后：npm 换成 pnpm（共用包 packages/format 是 workspace 里的包），
+# Playwright 用 devDependencies 里的那份（以前是单装一份 1.56.1，npm i 到 pnpm 的 node_modules 里会把它弄乱）。
 name: windows
 
 on:
@@ -13,31 +17,29 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      # pnpm 的版本照 package.json 的 packageManager
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run typecheck
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
       # 单元测试用 Electron 自带的 Node 跑（better-sqlite3 编给 Electron）；package.json 里的 test 是 Mac 的 shell 写法
-      - run: npx electron-builder install-app-deps
+      - run: pnpm exec electron-builder install-app-deps
       - name: Unit tests
         env:
           ELECTRON_RUN_AS_NODE: '1'
-        run: npx electron node_modules/vitest/vitest.mjs run
+        run: pnpm exec electron node_modules/vitest/vitest.mjs run
       - name: Build installer
         run: |
-          npx electron-vite build
-          npx electron-builder --win --x64 --publish never
+          pnpm exec electron-vite build
+          pnpm exec electron-builder --win --x64 --publish never
       - name: Try the installed app
         shell: pwsh
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
         run: |
-          npm i --no-save playwright@1.56.1
           New-Item -ItemType Directory -Force e2e-tmp | Out-Null
           Invoke-WebRequest -Uri https://arxiv.org/pdf/1706.03762v7 -OutFile e2e-tmp\paper.pdf
-          $env:PLAYWRIGHT_ROOT = "$pwd\"
           # 安装包真装一遍（/S 静默，装到当前用户的 AppData\Local\Programs），走查的是装好的那份
           $setup = (Get-ChildItem release\ParaRead-*-win-x64.exe | Select-Object -First 1).FullName
           Start-Process -FilePath $setup -ArgumentList '/S' -Wait
@@ -50,10 +52,7 @@ jobs:
       # 精细重排引擎：在软件里下载装好 MinerU（uv、Python、约 1.3 GB 的包、约 850 MB 的模型），再重排一篇
       - name: Install MinerU inside the app
         shell: pwsh
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
         run: |
-          $env:PLAYWRIGHT_ROOT = "$pwd\"
           $env:E2E_APP = "$env:LOCALAPPDATA\Programs\ParaRead\ParaRead.exe"
           $env:E2E_PAPER = "$pwd\e2e-tmp\paper.pdf"
           node scripts/e2e/mineru-install.mjs "$pwd\e2e-tmp\data-mineru"
