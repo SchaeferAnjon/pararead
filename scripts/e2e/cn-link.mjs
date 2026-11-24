@@ -210,6 +210,27 @@ try {
     ok('看不懂「讲一讲」（真 AI）：讲解写进笔记里那一问下面', !!answered, answered?.split('\n').slice(-6).join(' ⏎ ').slice(0, 160))
     console.log(await shot(win, 'cn-link-explain'))
     await win.keyboard.press('Escape')
+
+    // 右栏「AI 问答」问一句（0.2.1：0.2.0 换成共用对话框后答完没写进配对笔记）→ 一秒后笔记里有这一问、库的 Git 多一条「问 AI」提交
+    await ev(() => window.api.setSettings({ provider: 'deepseek', textModel: 'deepseek-flash' }))
+    await ev(() => window.api.chatSetPick({ engine: 'pararead' }))
+    await win.locator('.col-right').getByText('AI 问答', { exact: true }).first().click().catch(() => {})
+    const q = '用一句话说这篇论文做了什么（走查 cn-link）'
+    const box = win.locator('.col-right [data-testid=ai-input] textarea')
+    await box.click()
+    await box.fill(q)
+    await box.press('Enter')
+    const qa = await until(() => ((note() ?? '').includes(q) && /问 AI/.test(git('log', '--format=%s', '-3')) ? note() : null), 150000)
+    ok('右栏问 AI（真 DeepSeek）：答完一秒后这一问写进配对笔记', !!qa, (note() ?? '').split('\n').filter((l) => l.includes('走查 cn-link')).join(' | ').slice(0, 160))
+    ok('库的 Git 多一条「问 AI」提交', /ParaRead：.*问 AI \d+ 问/.test(git('log', '--format=%s', '-3')), git('log', '--format=%s', '-3').trim().replace(/\n/g, ' | '))
+    // 打开这篇时补写：按 chats 全量写，再写一遍这一问不重复、不多一条「问 AI」提交（「读到」那条属性照常会变）
+    const qaSec = () => (note() ?? '').split('\n## ').find((x) => x.includes(q))
+    const before = qaSec()
+    const askCommits = () => git('log', '--format=%s').split('\n').filter((l) => /问 AI/.test(l)).length
+    const n0 = askCommits()
+    await ev((x) => window.api.updatePaper(x, { lastOpened: Date.now() }), id)
+    await sleep(2500)
+    ok('打开时补写不重复：这一问那段不变、没有新的「问 AI」提交', !!before && qaSec() === before && askCommits() === n0 && (note() ?? '').split(q).length === 3, `${(note() ?? '').split(q).length - 1} 处`)
   }
 
   await sleep(1500)

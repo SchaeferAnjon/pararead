@@ -61,6 +61,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cnVaults: [],
   cnLastPlace: null,
   chatPick: { engine: 'pararead' },
+  chatToNote: true,
   omni: true,
   borrowAsked: []
 }

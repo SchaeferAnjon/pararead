@@ -22,7 +22,7 @@ import { GlanceView } from './GlanceView'
 import { LeftPane, type LeftTab } from './LeftPane'
 import { PaperInfo } from './PaperInfo'
 import { INK_COLORS, INK_WIDTH, PdfView, type InkTool, type PageSide } from './PdfView'
-import { PendingCard, TrBanner } from './LayoutTrCards'
+import { costLine, PendingCard, TrBanner } from './LayoutTrCards'
 import { cropPage, useBabelInstall, useLayoutTr } from '../lib/layoutTr'
 import { doneCount } from '@shared/layoutTr'
 import { ReflowView } from './ReflowView'
@@ -683,7 +683,9 @@ export function Reader(props: {
     onPosition({ zoom: z })
   })
   const zoomCmd = useEvent((cmd: string) => {
-    if (pdfLike(mode)) setZoomTo(cmd === 'zoom-reset' ? 1 : Math.min(3, Math.max(0.5, Math.round((zoom + (cmd === 'zoom-in' ? 0.1 : -0.1)) * 10) / 10)))
+    // 一档 10%：捏合停在 205% 时 ⌘+ 到 210%、⌘- 到 200%（对齐到整 10%）
+    const step = (z: number): number => (cmd === 'zoom-in' ? Math.floor(z * 10 + 1e-6) + 1 : Math.ceil(z * 10 - 1e-6) - 1) / 10
+    if (pdfLike(mode)) setZoomTo(cmd === 'zoom-reset' ? 1 : Math.min(3, Math.max(0.5, step(zoom))))
     else void api.setSettings({ readSize: cmd === 'zoom-reset' ? 18 : Math.min(24, Math.max(14, settings.readSize + (cmd === 'zoom-in' ? 1 : -1))) })
   })
 
@@ -801,10 +803,13 @@ export function Reader(props: {
   const zoomMenu = async (e: React.MouseEvent): Promise<void> => {
     const act = await showMenu(
       [
-        ...[0.75, 1, 1.25, 1.5, 2].map((z) => ({ id: String(z), label: `${Math.round(z * 100)}%`, checked: Math.abs(zoom - z) < 0.01 })),
+        { id: '1', label: t('适合宽度'), hint: '⌘0', checked: Math.abs(zoom - 1) < 0.01 },
         { type: 'separator' },
-        { id: 'in', label: t('放大'), hint: '⌘=', checked: false },
-        { id: 'out', label: t('缩小'), hint: '⌘-', checked: false }
+        ...[0.5, 0.75, 1.25, 1.5, 2, 2.5, 3].map((z) => ({ id: String(z), label: `${Math.round(z * 100)}%`, checked: Math.abs(zoom - z) < 0.01 })),
+        { type: 'separator' },
+        { id: 'in', label: t('放大'), hint: '⌘+', checked: false },
+        { id: 'out', label: t('缩小'), hint: '⌘-', checked: false },
+        { type: 'note', label: t('也能双指捏合缩放') }
       ],
       { el: e.currentTarget }
     )
@@ -826,13 +831,21 @@ export function Reader(props: {
   const dualLayout = dualAuto ? 'stack' : settings.dualLayout
   const trSt = lt.state
   const ltDone = trSt ? doneCount(trSt) : 0
+  // 全篇翻完了（没有在翻、没出错、没有没翻成的页）：按钮只留图标，菜单里还能重新翻译
+  const ltAllDone = !!trSt && ltDone >= trSt.total && !trSt.busy.length && !trSt.error
+  const trFailedN = trSt ? Object.keys(trSt.failed ?? {}).length : 0
+  const trLabel = !trSt ? '' : trSt.error ? t('翻译出错') : !trSt.busy.length && trFailedN ? t('{0} 页没翻成 · {1} / {2}', trFailedN, ltDone, trSt.total) : trSt.paused ? t('已暂停 {0} / {1} 页', ltDone, trSt.total) : ltAllDone ? t('已翻完 {0} 页', trSt.total) : t('翻译中 {0} / {1} 页', ltDone, trSt.total)
   const trMenu = async (e: React.MouseEvent): Promise<void> => {
     if (!trSt) return
+    const el = e.currentTarget
     const stopped = trSt.paused || !!trSt.error
+    const nFailed = Object.keys(trSt.failed ?? {}).length
     const act = await showMenu(
       [
-        stopped ? { id: 'resume', label: trSt.error ? t('重试') : t('继续翻译'), checked: false } : { id: 'pause', label: t('暂停'), checked: false },
-        { id: 'redo', label: t('重翻第 {0} 页', curPage), enabled: !!trSt.pages[curPage], checked: false },
+        ...(ltAllDone ? [] : [stopped ? { id: 'resume', label: trSt.error ? t('重试') : t('继续翻译'), checked: false } : { id: 'pause', label: t('暂停'), checked: false }]),
+        ...(nFailed && !trSt.error ? [{ id: 'resume', label: t('重新翻译没翻成的 {0} 页', nFailed), checked: false }] : []),
+        { id: 'redo', label: t('重新翻译这页（第 {0} 页）', curPage), enabled: !!trSt.pages[curPage] || !!trSt.failed?.[curPage], checked: false },
+        { id: 'redoAll', label: t('重新翻译全篇…'), checked: false },
         { type: 'separator' },
         { id: 'service', label: t('换翻译服务…'), hint: settings.trServiceName, checked: false }
       ],
@@ -841,6 +854,18 @@ export function Reader(props: {
     if (act === 'resume') void api.layoutTrResume(paperId)
     if (act === 'pause') void api.layoutTrPause(paperId)
     if (act === 'redo') void api.layoutTrRedo(paperId, curPage)
+    if (act === 'redoAll') {
+      // 重翻全篇要花翻译费：先确认一句
+      const ok = await showMenu(
+        [
+          { type: 'note', label: t('全篇 {0} 页重新翻译，翻好的会换掉', trSt.total) + ' · ' + costLine(trSt.total, settings) },
+          { id: 'go', label: t('重新翻译全篇'), checked: false },
+          { id: 'no', label: t('取消'), checked: false }
+        ],
+        { el }
+      )
+      if (ok === 'go') void api.layoutTrRedoAll(paperId)
+    }
     if (act === 'service') void api.openSettings('translate')
   }
   const meta = [paper.venue, paper.year, paper.progress >= 1 ? t('读完') : paper.progress > 0 ? t('读到 {0}%', Math.round(paper.progress * 100)) : ''].filter(Boolean).join(' · ')
@@ -1102,11 +1127,11 @@ export function Reader(props: {
               <ScanText size={16} />
             </button>
           )}
-          {(mode === 'dual' || mode === 'mono') && babel?.phase === 'done' && trSt && trSt.started && ltDone < trSt.total && (
-            // 正文列窄时只留图标和小箭头（字放进悬停提示），放不下时它是最后一个收掉的
-            <button className={'btn tr-prog' + (compact ? ' compact' : '')} data-testid="tr-progress" title={[trSt.error ? t('翻译出错') : trSt.paused ? t('已暂停 {0} / {1} 页', ltDone, trSt.total) : t('翻译中 {0} / {1} 页', ltDone, trSt.total), trSt.error ?? t('翻译用 {0}', settings.trServiceName)].join(' · ')} onClick={(e) => void trMenu(e)}>
-              {trSt.error ? <span className="dot err sm" /> : trSt.paused ? <Languages size={16} /> : <span className="spin spin-12" />}
-              {!compact && <span className="num">{trSt.error ? t('翻译出错') : trSt.paused ? t('已暂停 {0} / {1} 页', ltDone, trSt.total) : t('翻译中 {0} / {1} 页', ltDone, trSt.total)}</span>}
+          {(mode === 'dual' || mode === 'mono') && babel?.phase === 'done' && trSt && trSt.started && (
+            // 正文列窄时只留图标和小箭头（字放进悬停提示），放不下时它是最后一个收掉的；全翻完也留着（只剩图标），菜单里能重新翻译
+            <button className={'btn tr-prog' + (compact || ltAllDone ? ' compact' : '')} data-testid="tr-progress" title={[trLabel, trSt.error ?? t('翻译用 {0}', settings.trServiceName), ltAllDone ? t('重新翻译这页或全篇') : ''].filter(Boolean).join(' · ')} onClick={(e) => void trMenu(e)}>
+              {trSt.error || (!trSt.busy.length && trFailedN) ? <span className="dot err sm" /> : trSt.paused || ltAllDone ? <Languages size={16} /> : <span className="spin spin-12" />}
+              {!compact && !ltAllDone && <span className="num">{trLabel}</span>}
               <ChevronDown size={12} />
             </button>
           )}
@@ -1149,7 +1174,7 @@ export function Reader(props: {
                   </button>
                 </span>
               )}
-              <button className="btn ghost num" title={t('缩放')} onClick={(e) => void zoomMenu(e)}>
+              <button className="btn ghost num" data-testid="zoom-btn" title={t('缩放（⌘+ / ⌘- / ⌘0，或双指捏合）')} onClick={(e) => void zoomMenu(e)}>
                 {Math.round(zoom * 100)}%
                 <ChevronDown size={12} />
               </button>
@@ -1201,6 +1226,7 @@ export function Reader(props: {
                 onIdeaLibrary={(i) => props.onOpenIdeas(i.id)}
                 onIdeaRemove={(i) => void removeIdea(i)}
                 zoom={zoom}
+                onZoom={setZoomTo}
                 invert={settings.pdfInvert}
                 boxMode={boxMode}
                 shot={shot}

@@ -359,6 +359,8 @@ function registerIpc(): void {
       const p = getPaper(db, id)
       if (p?.cn) cnLink.readAtPut(id, cnLink.positionToReadAt(id, p))
     }
+    // 打开一篇：把还没写进配对笔记的问答补写进去（按 chats 全量写，已在的不重复；0.2.0 共用对话框答完没写的几问靠它补上）
+    if (patch.lastOpened !== undefined) cnLink.chatChanged(id)
     if (patch.tags || patch.title) broadcast('library:changed', null)
     else bibExport.schedule()
   })
@@ -951,6 +953,7 @@ function buildMenu(): void {
       c('', 'Cmd+4', 'mode-reflow'),
       c('', 'Cmd+5', 'mode-glance'),
       c('', 'Cmd+=', 'zoom-in'),
+      c('', 'Cmd+Plus', 'zoom-in'),
       c('', 'Cmd+-', 'zoom-out'),
       c('', 'Cmd+0', 'zoom-reset'),
       c('', 'Ctrl+Cmd+S', 'toggle-left'),

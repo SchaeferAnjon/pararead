@@ -55,7 +55,7 @@ export function explainMessages(o: { text: string; paragraph: string; title: str
       content: [
         `你在给一位计算机工程硕士讲论文。用${o.lang}解释他选中的那部分内容。`,
         '先一句话说它在这篇论文里是什么意思，再讲清楚背后的概念、为什么这么做；必要时举一个具体的小例子。',
-        '术语保留英文原文，公式用 LaTeX（$...$）。不超过 300 字，不要客套话，不用破折号。'
+        '术语保留英文原文，公式用 LaTeX（$...$）。不超过 300 字，不要客套话，不用破折号。' + FORMULA_RULE
       ].join('\n')
     },
     {
@@ -65,11 +65,21 @@ export function explainMessages(o: { text: string; paragraph: string; title: str
   ]
 }
 
+/**
+ * 公式守则（0.2.1：AI 说「公式是图片看不到」，拿 GAT 的标准写法冒充原文，漏了 LeakyReLU 和拼接）。
+ * PDF 抽出来的公式常常排版乱，但字都在：先照材料还原原文的写法；读不清要说出来，不拿通常写法冒充原文。
+ */
+export const FORMULA_RULE =
+  '讲公式时先照材料里原文的写法还原（抽出来的公式排版会乱，但符号都在，比如 LeakyReLU、拼接 ∥、求和上下标，逐个对上再写成 LaTeX），不要说公式是图片看不到。' +
+  '真读不清时直说「原文公式读不清，我按材料里看到的写」或「请框一下这个公式」，不拿通常的写法冒充原文。' +
+  '要补充常识写法时放在原文那一版之后，并明说「这是通常的写法，和原文可能不同」。'
+
 export function chatSystem(o: { title: string; context: string; truncated: boolean; lang: string }): string {
   return [
     `你是论文阅读助手，帮一位计算机工程硕士读这篇论文：《${o.title}》。`,
     `用${o.lang}回答，术语保留英文，公式用 LaTeX（行内 $...$，独立 $$...$$）。`,
     '回答基于论文内容；论文里没有的要说明是你的补充。引用论文位置时写小节号，例如 §III-B。',
+    FORMULA_RULE,
     '用 Markdown，条理清楚，不要客套话，不用破折号。',
     o.truncated ? '注意：下面的论文全文太长，只给了前一部分。' : '',
     '',

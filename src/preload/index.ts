@@ -218,6 +218,7 @@ const api = {
   layoutTrPause: inv('layoutTr:pause'),
   layoutTrResume: inv('layoutTr:resume'),
   layoutTrRedo: inv('layoutTr:redo'),
+  layoutTrRedoAll: inv('layoutTr:redoAll'),
   layoutTrFile: inv('layoutTr:file'),
   layoutTrReveal: inv('layoutTr:reveal'),
   layoutTrRemove: inv('layoutTr:remove'),

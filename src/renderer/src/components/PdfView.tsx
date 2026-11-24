@@ -37,6 +37,10 @@ export interface TrView {
 export type PageSide = 'src' | 'tr'
 // 对照里页上面那一行「第 9 页 · 原文」的高
 const LABEL = 24
+/** 缩放范围（相对「适合宽度」）：50% 到 300% */
+export const ZOOM_MIN = 0.5
+export const ZOOM_MAX = 3
+
 // 左右两页之间、上下两页之间
 const GAP_X = 16
 const GAP_Y = 8
@@ -53,6 +57,8 @@ export function PdfView(props: {
   onIdeaLibrary: (i: Idea) => void
   onIdeaRemove: (i: Idea) => void
   zoom: number
+  /** 触控板捏合（ctrl + 滚轮）：要换的倍数 */
+  onZoom?: (z: number) => void
   invert: boolean
   boxMode: boolean
   shot: { page: number; frac: [number, number, number, number]; side?: PageSide } | null
@@ -108,6 +114,28 @@ export function PdfView(props: {
     }
   }, [pdf])
 
+  // 触控板双指捏合：Chromium 发的是按着 ctrl 的滚轮。对照里两边在同一行、同一个倍数，放大哪边另一边一起放大，同一段顶边对齐
+  const zoomRef = useRef(props.zoom)
+  zoomRef.current = props.zoom
+  const onZoomRef = useRef(props.onZoom)
+  onZoomRef.current = props.onZoom
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    const wheel = (e: WheelEvent): void => {
+      if (!e.ctrlKey || !onZoomRef.current) return
+      e.preventDefault()
+      const r = el.getBoundingClientRect()
+      const z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoomRef.current * Math.exp(-e.deltaY * 0.01)))
+      if (Math.abs(z - zoomRef.current) < 0.001) return
+      pinchAt.current = { x: e.clientX - r.left, y: e.clientY - r.top }
+      zoomRef.current = z
+      onZoomRef.current(Math.round(z * 100) / 100)
+    }
+    el.addEventListener('wheel', wheel, { passive: false })
+    return () => el.removeEventListener('wheel', wheel)
+  }, [])
+
   useLayoutEffect(() => {
     const el = scroller.current
     if (!el) return
@@ -124,8 +152,9 @@ export function PdfView(props: {
   const label = tr ? LABEL : 0
   const rowH = (h: number): number => (layout === 'stack' ? 2 * (label + h) + GAP_Y : label + h)
 
-  // 缩放前记住页码和页内位置，布局完滚回去
-  const anchor = useRef<{ page: number; frac: number } | null>(null)
+  // 缩放前记住页码和页内位置，布局完滚回去。捏合时记的是手指下那一点（离视口顶 dy、在内容里横着的比例 rx、离视口左 px），放大后它还在手指下
+  const anchor = useRef<{ page: number; frac: number; dy: number; rx: number | null; px: number } | null>(null)
+  const pinchAt = useRef<{ x: number; y: number } | null>(null)
   const pageTop = useCallback(
     (n: number) => {
       if (!sizes) return 0
@@ -138,7 +167,11 @@ export function PdfView(props: {
   )
   const prevScale = useRef(scale)
   if (prevScale.current !== scale && scroller.current && sizes) {
-    const st = scroller.current.scrollTop
+    const el = scroller.current
+    const pin = pinchAt.current
+    pinchAt.current = null
+    const dy = pin?.y ?? 0
+    const st = el.scrollTop + dy
     let y = 16
     let n = 1
     for (let i = 0; i < sizes.length; i++) {
@@ -149,13 +182,17 @@ export function PdfView(props: {
       }
       y += h + 16
     }
-    anchor.current = { page: n, frac: (st - y - label) / (sizes[n - 1].h * prevScale.current) }
+    // 横着：内容两边各有 32 的留白
+    const rx = pin ? (el.scrollLeft + pin.x - 32) / Math.max(1, el.scrollWidth - 64) : null
+    anchor.current = { page: n, frac: (st - y - label) / (sizes[n - 1].h * prevScale.current), dy, rx, px: pin?.x ?? 0 }
     prevScale.current = scale
   }
   useLayoutEffect(() => {
     if (!anchor.current || !scroller.current || !sizes) return
     const a = anchor.current
-    scroller.current.scrollTop = pageTop(a.page) + a.frac * sizes[a.page - 1].h * scale
+    const el = scroller.current
+    el.scrollTop = pageTop(a.page) + a.frac * sizes[a.page - 1].h * scale - a.dy
+    if (a.rx !== null) el.scrollLeft = 32 + a.rx * Math.max(1, el.scrollWidth - 64) - a.px
     anchor.current = null
   }, [scale, sizes, pageTop])
 

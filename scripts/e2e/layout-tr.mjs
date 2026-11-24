@@ -238,6 +238,50 @@ try {
     await pause()
     await goPage(2)
     await midShot('lt-13-paper-p2')
+
+    // ---- 7. 没翻成（0.2.1）：翻译服务装成回原文 / 空译文，页上出「这页没翻成」、不进缓存；点重新翻译能翻成 ----
+    const fake = (v) => app.evaluate((_e, v) => (globalThis.paraReadTrFake = v), v)
+    const idxPages = () => { const d = readdirSync(join(dir, 'layout-tr', id2))[0]; return Object.keys(JSON.parse(readFileSync(join(dir, 'layout-tr', id2, d, 'index.json'), 'utf8')).pages).map(Number) }
+    // 等这一批翻完：先等它开始，再等 busy 清空；翻完马上暂停（不让它接着翻后面的页）
+    const waitIdle = async () => { for (let i = 0; i < 100 && (await st(id2)).busy.length === 0; i++) await sleep(300); for (let i = 0; i < 300 && (await st(id2)).busy.length; i++) await sleep(500) }
+    const failedCard = (n) => win.locator(`.page[data-page="${n}"][data-side="tr"] [data-testid="tr-failed"]`)
+    await fake('echo')
+    await win.locator('[data-testid="tr-progress"]').click()
+    await win.locator('.pop.menu .menu-item', { hasText: '重新翻译这页（第 2 页）' }).click()
+    await waitIdle()
+    await ev((x) => window.api.layoutTrPause(x), id2)
+    await win.keyboard.press('Escape')
+    let s7 = await st(id2)
+    ok('回原文：第 2 页算没翻成，不当译文显示', !!s7.failed[2] && !s7.pages[2] && (await failedCard(2).count()) === 1, JSON.stringify(s7.failed))
+    ok('没翻成的页不进缓存（index.json 里没有第 2 页）', !idxPages().includes(2), JSON.stringify(idxPages()))
+    ok('页上写「这页没翻成」和「重新翻译」', /这页没翻成/.test(await failedCard(2).innerText()) && /重新翻译/.test(await failedCard(2).innerText()))
+    await goPage(2)
+    await midShot('lt-15-failed')
+    await fake('empty')
+    await failedCard(2).locator('button').click()
+    await waitIdle()
+    await ev((x) => window.api.layoutTrPause(x), id2)
+    await win.keyboard.press('Escape')
+    s7 = await st(id2)
+    ok('空译文：说出原因「翻译请求失败」，第 2 页还是没翻成', /翻译请求失败/.test(s7.error ?? '') && !!s7.failed[2] && !s7.pages[2], s7.error ?? '')
+    await fake(undefined)
+    await failedCard(2).locator('button').click()
+    await waitIdle()
+    for (let i = 0; i < 120 && !(await trReady(2)); i++) await sleep(1000)
+    await ev((x) => window.api.layoutTrPause(x), id2)
+    await win.keyboard.press('Escape')
+    s7 = await st(id2)
+    const zh2 = await ev(() => document.querySelector('.page[data-page="2"][data-side="tr"] .textLayer')?.textContent ?? '')
+    ok('恢复后点「重新翻译」：第 2 页翻成中文、进缓存', !!s7.pages[2] && !s7.failed[2] && /[一-鿿]{20}/.test(zh2) && idxPages().includes(2), zh2.slice(0, 40))
+    // 全翻完以后标题栏的翻译按钮还在，菜单里能重新翻译这页和全篇（全篇先确认）
+    await win.locator('[data-testid="tr-progress"]').click()
+    const items = (await win.locator('.pop.menu .menu-item').allInnerTexts()).join('|')
+    ok('翻译菜单里有「重新翻译这页」「重新翻译全篇…」', /重新翻译这页/.test(items) && /重新翻译全篇/.test(items), items)
+    await win.locator('.pop.menu .menu-item', { hasText: '重新翻译全篇' }).click()
+    await sleep(400)
+    ok('重新翻译全篇先确认一句（页数、花费）', /全篇 7 页重新翻译/.test(await win.locator('.pop.menu').innerText()))
+    await midShot('lt-16-redo-all-confirm')
+    await win.locator('.pop.menu .menu-item', { hasText: '取消' }).click()
   }
 
   // 设置 › 翻译

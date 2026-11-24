@@ -54,6 +54,25 @@ export async function extractPdf(data: Uint8Array): Promise<PdfExtract> {
   }
 }
 
+/** 几页的纯文字（行尾换行），给保版面翻译比原文和译文用。pages 从 1 数，不给是全部 */
+export async function pageTexts(data: Uint8Array, pages?: number[]): Promise<string[]> {
+  const lib = await pdfjs()
+  const task = lib.getDocument({ data, useSystemFonts: false, verbosity: 0 })
+  const doc = await task.promise
+  try {
+    const out: string[] = []
+    for (const p of pages ?? Array.from({ length: doc.numPages }, (_, i) => i + 1)) {
+      const page = await doc.getPage(p)
+      const tc = await page.getTextContent()
+      out.push(tc.items.map((it) => ('str' in it ? it.str + (it.hasEOL ? '\n' : ' ') : '')).join(''))
+      page.cleanup()
+    }
+    return out
+  } finally {
+    await task.destroy()
+  }
+}
+
 export interface Line {
   text: string
   x: number

@@ -355,6 +355,7 @@ export interface Api {
   layoutTrPause(paperId: string): Promise<LayoutTrState>
   layoutTrResume(paperId: string): Promise<LayoutTrState>
   layoutTrRedo(paperId: string, page: number): Promise<LayoutTrState>
+  layoutTrRedoAll(paperId: string): Promise<LayoutTrState>
   layoutTrFile(paperId: string, name: string): Promise<Uint8Array>
   /** 设置 › 翻译：在访达里看组件、删掉组件（移到废纸篓） */
   layoutTrReveal(): Promise<void>

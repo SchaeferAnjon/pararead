@@ -180,8 +180,11 @@ export function makeChatAi(c: Ctx, deps: ChatAiDeps) {
     c.streamer.streamTo(wc, reqId, messages, {
       kind,
       think,
-      onFinish: (full, info) =>
-        addChat(db, { id: newId(), paperId, role: 'assistant', content: full, quote: null, image: null, createdAt: Date.now(), reasoning: info.reasoning || null, thinkMs: info.thinkMs, meta: { pick: { engine: PARAREAD_ENGINE, ...(think ? { effort: think } : {}) }, label: think ? `${label} · ${levelName(think)}` : label } }),
+      onFinish: (full, info) => {
+        addChat(db, { id: newId(), paperId, role: 'assistant', content: full, quote: null, image: null, createdAt: Date.now(), reasoning: info.reasoning || null, thinkMs: info.thinkMs, meta: { pick: { engine: PARAREAD_ENGINE, ...(think ? { effort: think } : {}) }, label: think ? `${label} · ${levelName(think)}` : label } })
+        // 答完写进连着的画布笔记库的配对笔记（0.2.0 换成共用对话框后漏了这一句，问答没写进去）
+        c.cn.chatChanged(paperId)
+      },
       onError: (msg) => addChat(db, { id: newId(), paperId, role: 'assistant', content: '', quote: null, image: null, createdAt: Date.now(), meta: { pick: { engine: PARAREAD_ENGINE }, label, error: msg } })
     })
   }
@@ -246,6 +249,7 @@ export function makeChatAi(c: Ctx, deps: ChatAiDeps) {
       })
       if (r.session) setChatSession(db, paperId, id, r.session, needFull || !!was?.fullIn)
       addChat(db, { id: newId(), paperId, role: 'assistant', content: (r.text || text).replace(/\n{3,}/g, '\n\n'), quote: null, image: null, createdAt: Date.now(), meta: meta() })
+      c.cn.chatChanged(paperId)
       send(wc, { reqId, done: true })
     } catch (e) {
       const err = e as Error & { session?: string }
@@ -284,7 +288,10 @@ export function makeChatAi(c: Ctx, deps: ChatAiDeps) {
       ...(mats?.length ? { meta: { mats } } : {})
     }
     addChat(db, user)
-    if (id === PARAREAD_ENGINE) askProvider(wc, reqId, paperId, req, user)
+    // 设置里那家是本机 Claude Code：交给共用引擎的 claude（和画布笔记一样能全能模式、显示步骤），模型和那一档照设置里的
+    const cf = c.ai.conf()
+    if (id === PARAREAD_ENGINE && cf.provider === 'claude-code') void askEngine(wc, reqId, paperId, { ...req, pick: { engine: 'claude', model: cf.model, ...(req.pick.effort ? { effort: req.pick.effort } : {}) } }, user)
+    else if (id === PARAREAD_ENGINE) askProvider(wc, reqId, paperId, req, user)
     else void askEngine(wc, reqId, paperId, req, user)
     return { user }
   }

@@ -12,7 +12,7 @@ const YUAN_PER_PAGE = 0.0075
 
 export const trLangWord = (target: string): string => (/^(简体|繁體|繁体)/.test(target) ? t('中文') : target)
 
-function costLine(pages: number, s: SettingsView): string {
+export function costLine(pages: number, s: SettingsView): string {
   const min = Math.max(1, Math.round((START_S + pages * S_PER_PAGE) / 60))
   const svc = s.trServiceName
   const money =
@@ -94,6 +94,20 @@ export function TrBanner(props: { inst: BabelInstallState | null; state: LayoutT
 export function PendingCard(props: { n: number; inst: BabelInstallState | null; state: LayoutTrState | null; paperId: string }) {
   const { n, state } = props
   if (props.inst?.phase !== 'done' || !state) return null
+  // 翻了但译文里还是原文（请求失败、BabelDOC 没翻）：不把原文当译文显示，说清楚、给重新翻译
+  const why = state.failed?.[n]
+  if (why && !state.busy.includes(n))
+    return (
+      <div className="tr-pend-card" data-testid="tr-failed" title={why}>
+        <span className="dot err sm" />
+        <span className="tp-text">
+          {t('这页没翻成')} <span className="tp-why">{/原样留着/.test(why) ? t('译文和原文一样') : t('翻译请求失败')}</span>
+        </span>
+        <button className="text-btn" onClick={() => void (state.error ? api.layoutTrResume(props.paperId) : api.layoutTrRedo(props.paperId, n))}>
+          {t('重新翻译')}
+        </button>
+      </div>
+    )
   if (state.error)
     return (
       <div className="tr-pend-card">

@@ -503,7 +503,8 @@ export class CnLink {
 
   /** AI 问答答完一问：一秒后把这篇的问答写进笔记（连着问几句只写一次） */
   chatChanged(paperId: string): void {
-    if (!this.linkOf(paperId)) return
+    // 右栏头上「记笔记」关着：不写（打开时也不补写），再打开时补上
+    if (!this.linkOf(paperId) || !this.c.settings.get().chatToNote) return
     clearTimeout(this.chatTimers.get(paperId))
     this.chatTimers.set(
       paperId,

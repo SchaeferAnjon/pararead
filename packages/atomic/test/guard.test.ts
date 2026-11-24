@@ -12,7 +12,7 @@ const DIRS = ['apps/notes/src/main', 'apps/today/src/main', 'packages/format/src
 /** 文件 → 允许的写法和为什么 */
 const ALLOWED: Record<string, { calls: string[]; why: string }> = {
   'apps/notes/src/main/crash-log.ts': { calls: ['appendFileSync'], why: '崩溃日志一行行追加（设置目录）' },
-  'apps/notes/src/main/index.ts': { calls: ['appendFileSync'], why: '测试模式的 quit.log' },
+  'apps/notes/src/main/test-mode.ts': { calls: ['appendFileSync'], why: '测试模式的 quit.log' },
   'apps/notes/src/main/ai.ts': { calls: ['appendFileSync'], why: '测试用的 CN_FAKE_PICK_LOG' },
   'apps/notes/src/main/feynman.ts': { calls: ['appendFileSync'], why: '测试用的 CN_FAKE_FEYNMAN_LOG' },
   'apps/notes/src/main/when-ai.ts': { calls: ['appendFileSync'], why: '测试用的 CN_FAKE_WHEN_LOG' },

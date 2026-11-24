@@ -98,6 +98,9 @@ function stepView(s: NonNullable<ChatMeta['steps']>[number]): StepView {
 
 // 右栏 AI 问答（2026-11-23 起照画布笔记读 PDF 的对话）：输入框底下一键切谁来答 · 模型 · effort，贴多张图（字里 ①② 是位置），
 // 会话接着问，全能模式，回答下面那排；组件是 @cn/ai-chat，和画布笔记同一份。本篇加其他文献一起问、核心概念、快速开始照旧
+/** 配对笔记的名字：「课程/ecp/BST-GATNet.pdf」→「BST-GATNet 笔记」 */
+const noteStem = (pdfPath: string): string => `${pdfPath.split('/').pop()!.replace(/\.pdf$/i, '')} ${t('笔记')}`
+
 export function ChatPanel(props: {
   paper: Paper
   settings: SettingsView
@@ -124,6 +127,7 @@ export function ChatPanel(props: {
   const c = useComposer(notice)
   // 谁来答 · 模型 · effort：记在设置里（chatPick），输入框底下换了马上记
   const cp = useConvPick<ChatPick, ChatEngine>(undefined, (p) => void api.chatSetPick(p), notice)
+  const canOmni = isCli(cp.pick.engine) || cp.engines.find((e) => e.id === cp.pick.engine)?.route === 'cli'
   const paperId = props.paper.id
 
   // 设置里那家（'pararead'）的标志：会员画闪光，别家画服务商的
@@ -391,6 +395,16 @@ export function ChatPanel(props: {
           </button>
         )}
       </div>
+      {props.paper.cn && (
+        // 连着画布笔记库的论文：问答答完记进这篇的配对笔记（照画布笔记的「记笔记」开关），头上露出记进哪篇，点一下停 / 接着记
+        <div className={'note-rec' + (props.settings.chatToNote ? ' on' : '')} data-testid="chat-note-rec">
+          <span className="dot" />
+          <span className="l">{props.settings.chatToNote ? t('正在记进《{0}》', noteStem(props.paper.cn.path)) : t('不记进笔记')}</span>
+          <button className="text-btn" onClick={() => void api.setSettings({ chatToNote: !props.settings.chatToNote })}>
+            {props.settings.chatToNote ? t('不记了') : t('接着记')}
+          </button>
+        </div>
+      )}
       <div className={'msgs-box' + (msgs.some((m) => m.role === 'user') ? ' toc' : '')}>
       <div className="msgs" ref={listRef} onScroll={onScroll}>
         {ctx?.truncated && <div className="hint">{t('论文较长，只读了前 {0}%', Math.round(ctx.ratio * 100))}</div>}
@@ -529,8 +543,9 @@ export function ChatPanel(props: {
           omni={{
             ...cp.omni,
             // 灰着时也写「关着」那一句，不写开着能做什么
-            on: cp.omni.on && isCli(cp.pick.engine),
-            off: cp.omni.off || !isCli(cp.pick.engine),
+            // 设置里那家是本机 Claude Code 时（engine 是 'pararead'、route 是 cli）也能开：0.2.0 只认画布笔记那几家的 id，拨不开
+            on: cp.omni.on && canOmni,
+            off: cp.omni.off || !canOmni,
             say: {
               on: t('能读写这台电脑上的文件、跑命令、上网'),
               off: t('关着：只回答，不动手'),

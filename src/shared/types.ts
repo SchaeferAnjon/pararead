@@ -286,6 +286,7 @@ export interface Settings {
   // AI 问答由谁答（2026-11-23 起照画布笔记，输入框底下一键切）：engine 是画布笔记那十家（本机命令行、API Key、本机模型）
   // 或 'pararead'（上面 provider 那家，会员时走会员）。翻译、意群这类批量小请求一直走 provider，不跟这里
   chatPick: { engine: string; model?: string; effort?: string }
+  chatToNote: boolean // 右栏问答答完记进连着的画布笔记库里这篇的配对笔记（照画布笔记 0.5.7「记笔记」开关，默认开）
   omni: boolean // 全能模式：命令行在 AI 工作目录里和终端里一样能读写文件、跑命令、上网（照画布笔记，默认开）
   borrowAsked: string[] // 问过「用画布笔记那把？」的几家（ApiId），答过就不再问
   openView: 'dual' | 'paper-reflow' | 'pdf' // 打开一篇还没换过看法的 PDF：都先看对照；论文看重排、课件（横版页）看对照；看原文

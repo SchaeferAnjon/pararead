@@ -71,7 +71,8 @@ export function registerChat(c: Ctx): { stop(reqId: string): boolean; dispose():
     const label = cf.provider === 'member' ? t('ParaRead 会员') : t('{0}（设置里那家）', p.name)
     // 想多久那一颗：这个模型能选的思考档（shared/thinking.ts，DeepSeek 是关 / 开），和问答框原来的「思考」同一套
     const efforts = thinkSpec(cf.provider, cf.model).levels.map((l) => ({ id: l, label: levelName(l), note: levelHint(l) }))
-    return { id: PARAREAD_ENGINE, label, route: 'api', path: c.ai.ready() ? `api:${cf.provider}` : null, where: t('设置 › AI 服务'), models: [{ id: cf.model, label: cf.model, efforts }], efforts }
+    // 设置里那家是本机命令行（Claude Code）：算命令行这条路，全能模式能开，问的时候走共用引擎的 claude（ask 里转过去）
+    return { id: PARAREAD_ENGINE, label, route: p.local ? 'cli' : 'api', path: c.ai.ready() ? `api:${cf.provider}` : null, where: t('设置 › AI 服务'), models: [{ id: cf.model, label: cf.model, efforts }], efforts }
   }
 
   ipcMain.handle('chat:engines', () => {

@@ -74,10 +74,12 @@ export interface LayoutTrState {
   started: boolean
   /** 上一批出错的原因（还会接着试下一批之前停住） */
   error: string | null
+  /** 翻了但没翻成的页（译文里还是原文，untranslatedReason）→ 原因。不进缓存、不当译文显示，页上出「这页没翻成 · 重新翻译」；只记在内存里，关了再开会再翻 */
+  failed: Record<number, string>
 }
 
 export function emptyState(paperId: string, lang: string, total: number): LayoutTrState {
-  return { paperId, lang, total, pages: {}, busy: [], busySince: null, msPerPage: null, paused: false, started: false, error: null }
+  return { paperId, lang, total, pages: {}, busy: [], busySince: null, msPerPage: null, paused: false, started: false, error: null, failed: {} }
 }
 
 /** 已经翻好几页 */
@@ -96,3 +98,38 @@ export interface BabelInstallState {
 
 /** 框选在对照、译文看法里截哪一边 */
 export type ShotSide = 'src' | 'tr' | 'both'
+
+/**
+ * 译文页到底翻了没有（2026-11-24：0.2.0 里 BabelDOC 的请求全失败时它不报错，把原文原样写进「译文」PDF，界面当翻好了显示）。
+ * 拿这一页的原文和译文的字比，不看目标语言是哪种字（德文、法文也能判）：
+ * - 原文不到 MIN_JUDGE_WORDS 个英文词（图、公式、幻灯片的标题页）不判，算翻好了，免得图多字少的页误判；
+ * - 原文里连着的三个词（三连词）在译文里原样还在的比例 ≥ SAME_RUNS 就是没翻。真翻过的页只剩人名、缩写、公式和文献条目，
+ *   阈值按实测定（tests/layoutTr.test.ts 里的数）；
+ * - 参考文献页照规矩不翻（ZH_RULES），三连词大都还在：原文一半以上的行像文献条目（[12] 开头或带年份）的页不判。
+ * 返回 null 是翻好了（或不判），否则是一句给日志的原因。
+ */
+export const MIN_JUDGE_WORDS = 40
+export const SAME_RUNS = 0.6
+const latinWords = (s: string): string[] => s.toLowerCase().match(/[a-z]{2,}/g) ?? []
+const runsOf = (w: string[]): Set<string> => {
+  const out = new Set<string>()
+  for (let i = 0; i + 2 < w.length; i++) out.add(`${w[i]} ${w[i + 1]} ${w[i + 2]}`)
+  return out
+}
+/** 原样留着的三连词占原文的比例（不判的页是 null） */
+export function sameRunShare(src: string, out: string): number | null {
+  const sw = latinWords(src)
+  if (sw.length < MIN_JUDGE_WORDS) return null
+  const lines = src.split(/\n/).map((l) => l.trim()).filter((l) => l.length > 20)
+  const refLike = lines.filter((l) => /^\[\d{1,3}\]/.test(l) || /\b(19|20)\d{2}\b/.test(l)).length
+  if (lines.length >= 8 && refLike / lines.length > 0.5) return null
+  const a = runsOf(sw)
+  const b = runsOf(latinWords(out))
+  let same = 0
+  for (const r of a) if (b.has(r)) same++
+  return same / Math.max(1, a.size)
+}
+export function untranslatedReason(src: string, out: string): string | null {
+  const share = sameRunShare(src, out)
+  return share !== null && share >= SAME_RUNS ? `${Math.round(share * 100)}% 的原文原样留着` : null
+}

@@ -173,6 +173,21 @@ try {
   await sleep(500)
   ok('全能模式点一下关上了', (await ev(() => window.api.chatEngines())).omni === false)
   await shot('pr-after-final')
+
+  // 8. 0.2.1：设置 › AI 服务选的是本机 Claude Code、谁来答是「本机 Claude Code（设置里那家）」时，全能模式也能拨（0.2.0 拨不开）
+  await ev(() => window.api.setSettings({ provider: 'claude-code', textModel: 'sonnet' }))
+  await ev(() => window.api.chatSetPick({ engine: 'pararead' }))
+  await sleep(800)
+  const sw = col.getByTestId('ai-omni').locator('[role=switch]').first()
+  ok('设置里那家是本机 Claude Code：谁来答写「本机 Claude Code（设置里那家）」', /本机 Claude Code/.test(await col.locator('[data-testid=ai-input] textarea').getAttribute('placeholder')), await col.locator('[data-testid=ai-input] textarea').getAttribute('placeholder'))
+  ok('它的全能模式开关能拨（不是灰的）', !(await sw.isDisabled()))
+  await sw.click()
+  await sleep(500)
+  ok('拨开全能模式：设置里跟着开', (await ev(() => window.api.chatEngines())).omni === true && (await sw.getAttribute('aria-checked')) === 'true')
+  await shot('pr-omni-own-cc')
+  await sw.click()
+  await sleep(500)
+  ok('再拨一下关上，设置里跟着关', (await ev(() => window.api.chatEngines())).omni === false)
 } finally {
   await close(app)
 }
