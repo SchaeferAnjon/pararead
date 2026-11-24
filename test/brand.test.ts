@@ -5,7 +5,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const APP = join(__dirname, '..')
-const read = (f: string) => readFileSync(join(APP, f), 'utf8')
+// Windows 上 git 取出来是 CRLF（CI 的 windows-latest 默认 core.autocrlf），按行比对的正则先换回 \n
+const read = (f: string) => readFileSync(join(APP, f), 'utf8').replace(/\r\n/g, '\n')
 const brand = JSON.parse(read('brand.json'))
 const pkg = JSON.parse(read('package.json'))
 const builder = read('electron-builder.yml')

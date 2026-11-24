@@ -1,7 +1,7 @@
 // ParaRead × 画布笔记联动（src/main/cnLink.ts、src/shared/cnLink.ts）：库里那篇配对笔记是唯一一份。
 // 用一个临时「画布笔记库」（真 git 仓库）和内存里的数据库，读写都用画布笔记读同一篇用的 @cn/format 核对。
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -110,7 +110,9 @@ beforeEach(() => {
 
 afterEach(() => {
   cn.closeAll()
-  rmSync(dir, { recursive: true, force: true })
+  // Windows 上 git 的对象文件是只读的，rmSync 删只读文件报 EPERM：先都改成可写；刚关的文件监听要一会儿才放开文件夹，删不掉多试几次
+  if (process.platform === 'win32') for (const f of readdirSync(dir, { recursive: true, withFileTypes: true })) if (f.isFile()) chmodSync(join(f.parentPath, f.name), 0o666)
+  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 
 describe('含义、框、对账（纯函数）', () => {
