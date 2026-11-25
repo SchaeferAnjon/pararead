@@ -13,6 +13,8 @@ export interface PdfAnchor {
   file: string
   page: number
   rect?: Rect
+  /** 引的那句原文的开头几个词（AI 回答里的页码链接带的，页码链接跳到段）：软件拿它找是这页的哪一段（pdf-quote.ts） */
+  text?: string
 }
 
 const round = (n: number) => Math.round(n * 1000) / 1000
@@ -37,7 +39,8 @@ export function encodePath(p: string): string {
 export function formatPdfAnchor(a: PdfAnchor): string {
   const page = Math.max(1, Math.round(a.page))
   const rect = a.rect ? `&rect=${clampRect(a.rect).join(',')}` : ''
-  return `${encodePath(a.file)}#page=${page}${rect}`
+  const text = a.text ? `&text=${encodeURIComponent(a.text)}` : ''
+  return `${encodePath(a.file)}#page=${page}${rect}${text}`
 }
 
 /** 认不出（不是 .pdf、没有页码）返回 null；只有 #page=5 的也认（没有 rect） */
@@ -57,6 +60,8 @@ export function parsePdfAnchor(href: string): PdfAnchor | null {
   const out: PdfAnchor = { file, page }
   const r = params.get('rect')?.split(',').map(Number)
   if (r && r.length === 4 && r.every((n) => Number.isFinite(n))) out.rect = clampRect(r as Rect)
+  const text = params.get('text')?.trim()
+  if (text) out.text = text
   return out
 }
 
@@ -65,6 +70,8 @@ export interface PageLink {
   file: string | null
   page: number
   rect?: Rect
+  /** 引的那句原文（见 PdfAnchor.text） */
+  text?: string
 }
 
 /** 笔记 note 里的链接 href 是不是指 PDF 某一页（# 后面有 page=N）；网址、光一个 PDF、别的锚点返回 null */
@@ -77,7 +84,7 @@ export function pageLinkOf(note: string, href: string): PageLink | null {
   if (!a) return null
   const file = head ? resolveLink(note, head) : null
   if (head && !file) return null
-  return { file, page: a.page, ...(a.rect ? { rect: a.rect } : {}) }
+  return { file, page: a.page, ...(a.rect ? { rect: a.rect } : {}), ...(a.text ? { text: a.text } : {}) }
 }
 
 /**

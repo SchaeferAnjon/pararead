@@ -1,7 +1,11 @@
 // 假的 codex app-server：测引擎接法用，不联网。消息不带 "jsonrpc"，和真的一样
 // 给了 FAKE_CLI_STATE（fake-cli.mjs 演整个 codex 时）：model/list 照 <目录>/codex.json 的 models 给，每问一次重新读（测试中途换列表）
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+// 给了 FAKE_CODEX_GATE=<样本.json>（gate/codex-0.163.0.json，真 codex 录的）：这一问照样本一步一步做；批准方式是 untrusted 时每一步先发
+// 样本里那条审批请求（$CWD 换成线程的 cwd、$OUT 换成 FAKE_GATE_OUT），批了才真做（在 cwd 里跑那行命令、照 diff 写文件），没批的报 declined；
+// never 时不问、直接做（和真的一样）。回答写每一步做没做
+import { execFileSync } from 'node:child_process'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
 import { createInterface } from 'node:readline'
 
 let id = 1000
@@ -40,13 +44,13 @@ createInterface({ input: process.stdin }).on('line', async (line) => {
   }
   if (m.method === 'thread/start') {
     instructions = m.params.developerInstructions
-    opened = { sandbox: m.params.sandbox, approval: m.params.approvalPolicy, config: m.params.config }
+    opened = { sandbox: m.params.sandbox, approval: m.params.approvalPolicy, config: m.params.config, cwd: m.params.cwd }
     return send({ id: m.id, result: { thread: { id: `th${++threads}` }, sandbox: m.params.sandbox } })
   }
   // 接着用一个线程（进程换过、线程不在手上时）：照样记下这次给的沙箱
   if (m.method === 'thread/resume') {
     instructions = m.params.developerInstructions
-    opened = { sandbox: m.params.sandbox, approval: m.params.approvalPolicy, config: m.params.config }
+    opened = { sandbox: m.params.sandbox, approval: m.params.approvalPolicy, config: m.params.config, cwd: m.params.cwd }
     return send({ id: m.id, result: { thread: { id: m.params.threadId } } })
   }
   // 旁支：从一个线程整段分叉出新线程（找不到的线程报错）
@@ -58,8 +62,15 @@ createInterface({ input: process.stdin }).on('line', async (line) => {
   }
   if (m.method === 'turn/start') {
     const threadId = m.params.threadId
+    // turn/start 上带的批准方式管这一问和后面几问（和真的一样）
+    if (m.params.approvalPolicy) opened.approval = m.params.approvalPolicy
     send({ id: m.id, result: { turn: { id: 'u1' } } })
     const delta = (d) => send({ method: 'item/agentMessage/delta', params: { threadId, turnId: 'u1', itemId: 'i1', delta: d } })
+    if (process.env.FAKE_CODEX_GATE) {
+      const said = await gate(threadId)
+      delta(said)
+      return send({ method: 'turn/completed', params: { threadId, turn: { id: 'u1', status: 'completed' } } })
+    }
     const mcp = await ask('mcpServer/elicitation/request', { threadId, turnId: 'u1', serverName: 'canvas', mode: 'form', message: '可以调吗', requestedSchema: {} })
     const patch = await ask('item/fileChange/requestApproval', { threadId, turnId: 'u1', itemId: 'p1' })
     const cmd = await ask('item/commandExecution/requestApproval', { threadId, turnId: 'u1', itemId: 'c1' })
@@ -91,3 +102,35 @@ createInterface({ input: process.stdin }).on('line', async (line) => {
     send({ method: 'turn/completed', params: { threadId, turn: { id: 'u1', status: 'completed' } } })
   }
 })
+
+/** 照录下来的样本一步一步做（见文件头） */
+async function gate(threadId) {
+  const cwd = opened.cwd
+  const text = readFileSync(process.env.FAKE_CODEX_GATE, 'utf8').split('$CWD').join(cwd).split('$OUT').join(process.env.FAKE_GATE_OUT ?? '/nonexistent')
+  const done = []
+  for (const s of JSON.parse(text)) {
+    const item = (method, it) => send({ method, params: { threadId, turnId: 'u1', item: it } })
+    if (s.item) item('item/started', s.item)
+    let ok = true
+    if (opened.approval === 'untrusted') {
+      const r = await ask(s.request.method, { ...s.request.params, threadId, turnId: 'u1' })
+      ok = r.decision === 'accept'
+    }
+    const cmd = s.request.method === 'item/commandExecution/requestApproval' ? (/-lc '(.*)'$/s.exec(s.request.params.command)?.[1] ?? s.request.params.command) : null
+    if (ok && cmd) {
+      try {
+        execFileSync('/bin/sh', ['-c', cmd], { cwd, stdio: 'ignore' })
+      } catch {
+        // 命令自己失败（推不上）：照样算做了
+      }
+    }
+    if (ok && !cmd)
+      for (const c of s.item?.changes ?? []) {
+        if (c.kind.type === 'delete') rmSync(c.path, { force: true })
+        else writeFileSync(c.path, c.kind.type === 'add' ? c.diff : c.diff.split('\n').filter((l) => l.startsWith('+') && !l.startsWith('+++')).map((l) => l.slice(1) + '\n').join(''))
+      }
+    if (s.item) item('item/completed', { ...s.item, status: ok ? 'completed' : 'declined' })
+    done.push(`${cmd ?? `改 ${(s.item?.changes ?? []).map((c) => basename(c.path)).join(',')}`} ${ok ? '做了' : '没做'}`)
+  }
+  return `批准 ${opened.approval}；${done.join('；')}`
+}

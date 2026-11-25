@@ -5,6 +5,7 @@
  * （test/no-apps.test.ts、packages/ai-chat/test/no-electron.test.ts 守着）。不碰 Node 的那一半在 '@cn/ai-engines/shared'。
  */
 export * from './engines'
+export * from './gate-map'
 export * from './engine-api'
 export * from './engine-check'
 export * from './engine-models'
@@ -16,3 +17,4 @@ export * from './cli'
 export * from './jsonrpc'
 export * from './keys'
 export * from './side-prompt'
+export * from './pasted'

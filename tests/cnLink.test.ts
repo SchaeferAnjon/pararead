@@ -103,6 +103,7 @@ beforeEach(() => {
     broadcast: vi.fn(),
     log: vi.fn(),
     afterImport: vi.fn(),
+    vaultListed: vi.fn(),
     mainWindow: () => null
   } as unknown as Ctx
   cn = new CnLink(ctx)

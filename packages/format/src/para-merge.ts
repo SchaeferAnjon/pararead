@@ -20,6 +20,7 @@
  * 改这里要两边一起改（format-fixtures 对照测试会红）。
  */
 import { diffIndices } from 'node-diff3'
+import { mergeInk } from './ink'
 
 export interface ParaConflict {
   /** base 里这一处的原文（去掉末尾空白） */
@@ -399,4 +400,18 @@ export function mergeParagraphs(base: string, local: string, remote: string, kee
     copy: conflicts.length ? finish(copy, pick3b(eo, ea, eb)) : null,
     conflicts,
   }
+}
+
+/**
+ * 同步时两台设备都改了的一个文件怎么合（Git 按行合不了时叫到这里；iPhone / iPad 的 SyncModel、Mac 的同步拉取都走这一个）：
+ * - 白板笔迹 `.ink`：按笔画、组的编号三方合并（ink.ts 的 mergeInk），两边各写各的都留下，同一笔两边都改了取后改的，没有副本；
+ * - md：按段合并（mergeParagraphs），同一句两边都改了另存副本；
+ * - 别的（图片、PDF、PencilKit 的 .drawing）：null，照旧另存「（iPad 上的一版）」副本。
+ * 输入是解码过的文字（md 只有 \n）。
+ */
+export function mergeVaultText(path: string, base: string, local: string, remote: string, keep: 'local' | 'remote'): ParaMergeResult | null {
+  const p = path.toLowerCase()
+  if (p.endsWith('.ink')) return { text: mergeInk(base, local, remote, keep).text, copy: null, conflicts: [] }
+  if (p.endsWith('.md')) return mergeParagraphs(base, local, remote, keep)
+  return null
 }

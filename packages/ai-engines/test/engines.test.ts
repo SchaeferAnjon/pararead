@@ -1,9 +1,10 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 // ACP（Gemini、OpenCode）和 Codex 的引擎；Claude Code 的接着画布笔记的 MCP 服务测，在 apps/notes/test/engines-claude.test.ts
-import { acpEngine, claudeArgs, CODEX_LOCKED, codexEngine, codexModelList, type Engine, type EngineStep, GEMINI_POLICY, geminiArgs, opencodeConfig } from '../src/engines'
+import { acpEngine, acpMode, claudeArgs, CODEX_LOCKED, codexEngine, codexModelList, type Engine, type EngineRun, type EngineStep, GEMINI_POLICY, geminiArgs, OPENCODE_ASK, opencodeConfig } from '../src/engines'
 
 const cwd = mkdtempSync(join(tmpdir(), 'cn-engine-'))
 const opened: Engine[] = []
@@ -67,8 +68,8 @@ describe('ACP 引擎（Gemini、OpenCode 的接法）', () => {
         acpEngine({
           id: o.id,
           command: process.execPath,
-          args: (_cwd, omni) => [fixture('fake-acp.mjs'), ...(o.id === 'gemini' ? geminiArgs(omni, '/tmp/p.toml') : ['acp', '--cwd', cwd])],
-          env: (omni): Record<string, string> => (o.id === 'opencode' ? { OPENCODE_CONFIG_CONTENT: opencodeConfig(omni) } : {}),
+          args: (_cwd, mode) => [fixture('fake-acp.mjs'), ...(o.id === 'gemini' ? geminiArgs(mode, '/tmp/p.toml') : ['acp', '--cwd', cwd])],
+          env: (mode): Record<string, string> => (o.id === 'opencode' ? { OPENCODE_CONFIG_CONTENT: opencodeConfig(mode) } : {}),
           loginHint: '去登录',
         })
       opened.push(e)
@@ -91,11 +92,11 @@ describe('ACP 引擎（Gemini、OpenCode 的接法）', () => {
   })
 
   it('全能模式：OpenCode 的权限全放开（「*」: allow）；关着时改文件、跑命令、上网、库外、子 Agent 都拒', async () => {
-    expect(JSON.parse(opencodeConfig(true))).toEqual({ permission: { '*': 'allow' } })
-    expect(JSON.parse(opencodeConfig(false))).toEqual({ permission: { edit: 'deny', bash: 'deny', webfetch: 'deny', websearch: 'deny', external_directory: 'deny', task: 'deny' } })
+    expect(JSON.parse(opencodeConfig('omni'))).toEqual({ permission: { '*': 'allow' } })
+    expect(JSON.parse(opencodeConfig('locked'))).toEqual({ permission: { edit: 'deny', bash: 'deny', webfetch: 'deny', websearch: 'deny', external_directory: 'deny', task: 'deny' } })
     const on = await acpRun({ id: 'opencode', omni: true, env: { FAKE_ACP_ARGS: '1' } })
     expect(on.text).toContain('它自己写文件 a1；')
-    expect(on.text).toContain(`设置 ${opencodeConfig(true)}`)
+    expect(on.text).toContain(`设置 ${opencodeConfig('omni')}`)
   })
 
   it('全能模式不给 mcp（ParaRead）：Gemini 照样 yolo、它自己写文件放行，只是不接 MCP；OpenCode 权限全放开', async () => {
@@ -106,7 +107,7 @@ describe('ACP 引擎（Gemini、OpenCode 的接法）', () => {
     const oc = await acpRun({ id: 'opencode', omni: true, noMcp: true, env: { FAKE_ACP_ARGS: '1' } })
     expect(oc.text).toContain('MCP ；')
     expect(oc.text).toContain('它自己写文件 a1；')
-    expect(oc.text).toContain(`设置 ${opencodeConfig(true)}`)
+    expect(oc.text).toContain(`设置 ${opencodeConfig('omni')}`)
     // 全能关着、不给 mcp：照旧拒掉它自己写文件
     const off = await acpRun({ id: 'gemini', omni: false, noMcp: true, env: { FAKE_ACP_ARGS: '1' } })
     expect(off.text).toContain('它自己写文件 r1；')
@@ -275,5 +276,198 @@ describe('Claude Code 全能模式不给 mcp（ParaRead）', () => {
   it('给了 mcp 却没写出配置文件：不当全能（照旧）', () => {
     const a = claudeArgs({ system: 'x', omni: true, mcp: { url: 'http://x/mcp', token: 't', tools: [] } })
     expect(at(a, '--permission-mode')).toBe('dontAsk')
+  })
+})
+
+/**
+ * 全能模式给了 beforeTool（手机全能模式、画布今日）：Codex、Gemini、OpenCode 每一步先来要批准，换成 Claude Code 的叫法交给 beforeTool。
+ * 假协议进程照真命令行录的样本（fixtures/gate）一步一步做：批了才真做（在临时库里跑命令、写文件，推到临时的远端），不给 beforeTool 照旧不问
+ */
+describe('全能模式三家每一步过 beforeTool', () => {
+  const git = (dir: string, ...a: string[]) => execFileSync('git', a, { cwd: dir, encoding: 'utf8' })
+  const made: { done(): void }[] = []
+  afterAll(() => made.forEach((v) => v.done()))
+  /** 临时库：a.txt、junk.txt 提交过，origin 是一个临时的空远端；out 是库外的一个临时目录 */
+  function vault() {
+    const dir = mkdtempSync(join(tmpdir(), 'cn-gate-vault-'))
+    const remote = mkdtempSync(join(tmpdir(), 'cn-gate-remote-'))
+    const out = mkdtempSync(join(tmpdir(), 'cn-gate-out-'))
+    git(remote, 'init', '-q', '--bare')
+    git(dir, 'init', '-q', '-b', 'main')
+    git(dir, 'remote', 'add', 'origin', remote)
+    writeFileSync(join(dir, 'a.txt'), 'a\n')
+    writeFileSync(join(dir, 'junk.txt'), 'junk\n')
+    git(dir, 'add', '.')
+    git(dir, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'a')
+    const v = {
+      dir,
+      out,
+      pushed: () => git(remote, 'log', '--oneline', '--all').trim() !== '',
+      done: () => [dir, remote, out].forEach((d) => rmSync(d, { recursive: true, force: true })),
+    }
+    made.push(v)
+    return v
+  }
+
+  /** 照「不让删、不让推」答的 beforeTool，记下每一次问了什么 */
+  const strict = () => {
+    const asked: { tool: string; input: Record<string, unknown>; id?: string }[] = []
+    const fn: NonNullable<EngineRun['beforeTool']> = async (tool, input, id) => {
+      asked.push({ tool, input, ...(id ? { id } : {}) })
+      return tool === 'Bash' && /\brm\b|\bpush\b/.test(String(input.command)) ? '用户没同意' : null
+    }
+    return { asked, fn }
+  }
+
+  async function withEnv<T>(env: Record<string, string>, f: () => Promise<T>): Promise<T> {
+    const saved = { ...process.env }
+    Object.assign(process.env, env)
+    try {
+      return await f()
+    } finally {
+      for (const k of Object.keys(env)) {
+        if (saved[k] === undefined) delete process.env[k]
+        else process.env[k] = saved[k]
+      }
+    }
+  }
+  const gateSample = (name: string) => join(__dirname, 'fixtures', 'gate', name)
+  const shown = (a: { tool: string; input: Record<string, unknown> }, v: { dir: string; out: string }) => `${a.tool} ${String(a.input.command ?? a.input.file_path ?? a.input.url).split(v.dir).join('库').split(v.out).join('外')}`
+
+  it('Codex：给了 beforeTool 批准方式换成 untrusted（thread 和 turn/start 都带），每条命令、每次改文件先问；不让的 decline、真没做', async () => {
+    const v = vault()
+    const e = codexEngine(process.execPath, [fixture('fake-codex.mjs')])
+    opened.push(e)
+    const g = strict()
+    const r = await withEnv({ FAKE_CODEX_GATE: gateSample('codex-0.163.0.json'), FAKE_GATE_OUT: v.out }, () => e.run({ prompt: '做', system: '系统', cwd: v.dir, mcp, omni: true, beforeTool: g.fn, signal: new AbortController().signal, onText: () => undefined }))
+    expect(r.text).toBe('批准 untrusted；ls -1 做了；改 note.md 做了；改 a.txt 做了；rm junk.txt 没做；git push origin main 没做')
+    expect(g.asked.map((a) => shown(a, v))).toEqual(['Bash ls -1', 'Write 库/note.md', 'Edit 库/a.txt', 'Bash rm junk.txt', 'Bash git push origin main'])
+    // id 是 Codex 的 itemId（和步骤行同一个）
+    expect(g.asked[3]!.id).toMatch(/^exec-/)
+    expect(existsSync(join(v.dir, 'junk.txt'))).toBe(true)
+    expect(readFileSync(join(v.dir, 'a.txt'), 'utf8')).toBe('b\n')
+    expect(v.pushed()).toBe(false)
+  })
+
+  it('Codex：都点「可以」就真做了（删了、推上去了）；同一个线程接着在 Mac 上问（不给 beforeTool）turn/start 带回 never，一步都不问、照做', async () => {
+    const yes = vault()
+    const e = codexEngine(process.execPath, [fixture('fake-codex.mjs')])
+    opened.push(e)
+    const asked: string[] = []
+    const r = await withEnv({ FAKE_CODEX_GATE: gateSample('codex-0.163.0.json'), FAKE_GATE_OUT: yes.out }, () =>
+      e.run({ prompt: '做', system: '系统', cwd: yes.dir, mcp, omni: true, beforeTool: async (tool) => (asked.push(tool), null), signal: new AbortController().signal, onText: () => undefined }),
+    )
+    expect(r.text).toContain('rm junk.txt 做了；git push origin main 做了')
+    expect(asked).toHaveLength(5)
+    expect(existsSync(join(yes.dir, 'junk.txt'))).toBe(false)
+    expect(yes.pushed()).toBe(true)
+    const mac = vault()
+    const again = await withEnv({ FAKE_CODEX_GATE: gateSample('codex-0.163.0.json'), FAKE_GATE_OUT: mac.out }, () => e.run({ prompt: '做', system: '系统', cwd: mac.dir, mcp, omni: true, session: r.session, signal: new AbortController().signal, onText: () => undefined }))
+    expect(again.text).toBe('批准 never；ls -1 做了；改 note.md 做了；改 a.txt 做了；rm junk.txt 做了；git push origin main 做了')
+    expect(asked).toHaveLength(5)
+    // 不给 beforeTool 的新引擎、新库（Mac 桌面）：照做，删了、推上去了
+    const desk = codexEngine(process.execPath, [fixture('fake-codex.mjs')])
+    opened.push(desk)
+    const d = await withEnv({ FAKE_CODEX_GATE: gateSample('codex-0.163.0.json'), FAKE_GATE_OUT: mac.out }, () => desk.run({ prompt: '做', system: '系统', cwd: mac.dir, mcp, omni: true, signal: new AbortController().signal, onText: () => undefined }))
+    expect(d.text).toContain('批准 never；')
+    expect(existsSync(join(mac.dir, 'junk.txt'))).toBe(false)
+    expect(mac.pushed()).toBe(true)
+  })
+
+  /** 起一个 ACP 引擎（参数、环境照 geminiEngine / opencodeEngine 的写法）在临时库里跑一问 */
+  async function acpGate(id: 'gemini' | 'opencode', v: ReturnType<typeof vault>, beforeTool?: EngineRun['beforeTool'], engine?: Engine) {
+    const e =
+      engine ??
+      acpEngine({
+        id,
+        command: process.execPath,
+        args: (dir, mode) => [fixture('fake-acp.mjs'), ...(id === 'gemini' ? geminiArgs(mode, '/tmp/p.toml') : ['acp', '--cwd', dir])],
+        env: (mode): Record<string, string> => (id === 'opencode' ? { OPENCODE_CONFIG_CONTENT: opencodeConfig(mode) } : {}),
+        loginHint: '去登录',
+      })
+    opened.push(e)
+    const r = await withEnv({ FAKE_ACP_GATE: gateSample(id === 'gemini' ? 'gemini-0.64.0.json' : 'opencode-1.19.3.json'), FAKE_GATE_OUT: v.out }, () =>
+      e.run({ prompt: '做', system: '系统', cwd: v.dir, mcp, omni: true, ...(beforeTool ? { beforeTool } : {}), signal: new AbortController().signal, onText: () => undefined }),
+    )
+    return { ...r, engine: e }
+  }
+
+  it('Gemini：给了 beforeTool 起 --approval-mode default（不带策略文件），每一步来问；不让的 reject、真没做；不给照旧 yolo、不问', async () => {
+    expect(geminiArgs('ask', 'p')).toEqual(['--acp', '--approval-mode', 'default', '--allowed-mcp-server-names', 'canvas'])
+    expect(acpMode({ omni: true, beforeTool: async () => null })).toBe('ask')
+    expect(acpMode({ omni: true })).toBe('omni')
+    expect(acpMode({ omni: false, beforeTool: async () => null })).toBe('locked')
+    const v = vault()
+    const g = strict()
+    const r = await acpGate('gemini', v, g.fn)
+    expect(r.text).toBe('ls -1 做了；edit note.md 做了；edit a.txt 做了；rm junk.txt 没做；git push origin main 没做；touch y.txt 做了；fetch 做了')
+    expect(g.asked.map((a) => shown(a, v))).toEqual(['Bash ls -1', 'Write 库/note.md', 'Edit 库/a.txt', 'Bash rm junk.txt', 'Bash git push origin main', 'Bash cd 外 && touch y.txt', 'WebFetch Fetching content from: https://example.com'])
+    expect(g.asked[3]!.id).toBe('run_shell_command-1795617651762-4')
+    expect(existsSync(join(v.dir, 'junk.txt'))).toBe(true)
+    expect(v.pushed()).toBe(false)
+    const mac = vault()
+    const desk = await acpGate('gemini', mac, undefined, r.engine)
+    expect(desk.text).toBe('ls -1 做了；edit note.md 做了；edit a.txt 做了；rm junk.txt 做了；git push origin main 做了；touch y.txt 做了；fetch 做了')
+    expect(mac.pushed()).toBe(true)
+  })
+
+  it('OpenCode：给了 beforeTool 时 bash、edit、webfetch、external_directory 设 ask（不加「*」），每一步来问；点「可以」真做；不给照旧「*」: allow、不问', async () => {
+    expect(JSON.parse(opencodeConfig('ask'))).toEqual({ permission: OPENCODE_ASK })
+    expect(OPENCODE_ASK).toEqual({ bash: 'ask', edit: 'ask', webfetch: 'ask', external_directory: 'ask' })
+    const v = vault()
+    const g = strict()
+    const r = await acpGate('opencode', v, g.fn)
+    expect(r.text).toContain('ls -1 做了；edit note.md 做了；edit a.txt 做了；rm junk.txt 没做；')
+    expect(r.text).toContain('git push origin main 没做；edit x.txt 做了；')
+    expect(g.asked.map((a) => shown(a, v))).toEqual(['Bash ls -1', 'Write 库/note.md', 'Edit 库/a.txt', 'Bash rm junk.txt', 'Bash git push origin main', 'Write 外/x.txt', 'Bash cp a.txt 外/y.txt'])
+    expect(existsSync(join(v.dir, 'junk.txt'))).toBe(true)
+    expect(v.pushed()).toBe(false)
+    const yes = vault()
+    const all = await acpGate('opencode', yes, async () => null, r.engine)
+    expect(all.text).toContain('rm junk.txt 做了')
+    expect(existsSync(join(yes.dir, 'junk.txt'))).toBe(false)
+    expect(yes.pushed()).toBe(true)
+    const mac = vault()
+    const desk = await acpGate('opencode', mac, undefined, r.engine)
+    expect(desk.text).toContain('rm junk.txt 做了')
+    expect(mac.pushed()).toBe(true)
+  })
+
+  it('我们 MCP 的工具照旧放行、不经 beforeTool；它自己改文件的那一步经 beforeTool', async () => {
+    const v = vault()
+    const g = strict()
+    const e = acpEngine({ id: 'gemini', command: process.execPath, args: (_c, mode) => [fixture('fake-acp.mjs'), ...geminiArgs(mode, '/tmp/p.toml')], loginHint: '去登录' })
+    opened.push(e)
+    // 没给 FAKE_ACP_GATE：fake-acp 照旧先问我们的 board_add_card，再问它自己写文件（标题「WriteFile 笔记.md」，kind edit）
+    const r = await e.run({ prompt: '做', system: '系统', cwd: v.dir, mcp, omni: true, beforeTool: g.fn, signal: new AbortController().signal, onText: () => undefined })
+    expect(r.text).toContain('我们的工具 a1；它自己写文件 a1；')
+    expect(g.asked.map((a) => a.tool)).toEqual(['Edit'])
+  })
+
+  it('换模式时在答的进程不关：手机那一问停着等点头时 Mac 上来一问，两个进程各答各的（ACP 一种模式一个进程）', async () => {
+    const e = acpEngine({ id: 'gemini', command: process.execPath, args: (_c, mode) => [fixture('fake-acp.mjs'), ...geminiArgs(mode, '/tmp/p.toml')], loginHint: '去登录' })
+    opened.push(e)
+    const v = vault()
+    let release: () => void = () => undefined
+    const held = new Promise<void>((ok) => (release = ok))
+    let waiting = false
+    const phone = acpGate(
+      'gemini',
+      v,
+      async () => {
+        if (!waiting) {
+          waiting = true
+          await held
+        }
+        return null
+      },
+      e,
+    )
+    await vi.waitFor(() => expect(waiting).toBe(true), { timeout: 10_000 })
+    const mac = vault()
+    const desk = await acpGate('gemini', mac, undefined, e)
+    expect(desk.text).toContain('rm junk.txt 做了')
+    release()
+    expect((await phone).text).toContain('rm junk.txt 做了')
   })
 })

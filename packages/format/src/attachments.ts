@@ -214,10 +214,25 @@ export interface FileRef {
   cands: string[]
   name: string
   loose: boolean
+  /** [[双链]] / ![[嵌入]]：名字没写扩展名时（`![[截图 4]]`）按去掉扩展名的名字认 */
+  wiki?: boolean
 }
 
 const WIKI = /\[\[([^\]|#^\n]+)/g
-const ATTR_URL = /\b(?:src|href|data-src|poster|xlink:href)\s*=\s*(?:"([^"\n]+)"|'([^'\n]+)')/gi
+const ATTR_URL = /\b(?:src|href|data-src|poster|xlink:href)\s*=\s*(?:"([^"\n]+)"|'([^'\n]+)'|([^\s"'<>`=]+))/gi
+/** 名字最后一段带扩展名 */
+const HAS_EXT = /\.[A-Za-z0-9]{1,10}$/
+/** 统一成 NFC 比：访达、iCloud 写的文件名可能是 NFD（é 拆成 e + ´），笔记里打的字是 NFC */
+const nfc = (s: string) => s.normalize('NFC')
+/** fileNameIndex 里按「去掉扩展名的名字」记的那几条的键前缀（和真文件名分开） */
+const STEM_KEY = '\0'
+const stemKey = (name: string) => STEM_KEY + name.replace(HAS_EXT, '')
+/** 地址里直接带空格的 md 链接（没用尖括号、没编码：`![](附件/截图 1.png)`，Obsidian 和我们的编辑器都显示得出来） */
+const LINK_SPACED = /!?\[[^\]\n]*\]\(([^()<>\n]*?[^\s()<>\n][ \t]+[^()<>\n]*?)(?:[ \t]+"[^"\n]*")?[ \t]*\)/g
+/** 引号里带扩展名的一段（属性、JSON 里带空格的路径：`封面: "../../附件/fm 空格.jpg"`） */
+const QUOTED = /"([^"\n]+\.[A-Za-z0-9]{1,10})"|'([^'\n]+\.[A-Za-z0-9]{1,10})'/g
+/** 「键: 值」一行里值是带扩展名的路径（属性、.base 里没加引号、带空格的：`封面: ../附件/a b.png`） */
+const YAML_VAL = /^[ \t-]*[^\s:#][^:\n]*:[ \t]+([^\n"'[\]{}#|]+?\.[A-Za-z0-9]{1,10})[ \t]*$/gm
 /** 带扩展名的一段字（属性里的封面、JSON、白板卡片、写坏了的链接）：不含空白和括号引号 */
 const RAW = /[^\s"'`()<>[\]{}|*!,;]+\.[A-Za-z0-9]{1,10}(?![A-Za-z0-9])/g
 
@@ -237,6 +252,7 @@ const looseName = (s: string) => decoded(s.replace(/[#?].*$/, '')).replace(/^(?:
  */
 export function fileRefs(text: string, from: string): FileRef[] {
   const out: FileRef[] = []
+  text = nfc(text)
   const add = (raw: string, wiki = false, loose = true) => {
     const link = (raw.startsWith('<') && raw.endsWith('>') ? raw.slice(1, -1) : raw).trim()
     if (!link || /^[a-z][a-z0-9+.-]*:/i.test(link)) return
@@ -246,11 +262,15 @@ export function fileRefs(text: string, from: string): FileRef[] {
     const rel = linkTarget(from, link)
     if (rel) cands.add(rel)
     if (wiki || !link.startsWith('.')) cands.add(name)
-    out.push({ cands: [...cands], name, loose })
+    out.push({ cands: [...cands], name, loose, ...(wiki ? { wiki } : {}) })
   }
   for (const m of text.matchAll(LINK)) add(m[2]!)
+  for (const m of text.matchAll(LINK_SPACED)) add(m[1]!)
   for (const m of text.matchAll(WIKI)) add(m[1]!, true)
-  for (const m of text.matchAll(ATTR_URL)) add(m[1] ?? m[2]!)
+  for (const m of text.matchAll(ATTR_URL)) add(m[1] ?? m[2] ?? m[3]!)
+  // 引号里、「键: 值」里的路径可能带空格：整段认，按路径或尾巴，不按文件名认
+  for (const m of text.matchAll(QUOTED)) add(m[1] ?? m[2]!, false, false)
+  for (const m of text.matchAll(YAML_VAL)) add(m[1]!, false, false)
   // 一段带扩展名的字可能是带空格的链接的后半截（「Lecture05 笔记/截图%201.png」）：只认尾巴，不按文件名认
   for (const m of text.matchAll(RAW)) add(m[0], false, false)
   return out
@@ -270,11 +290,15 @@ export function refHits(refs: FileRef[], files: ReadonlySet<string>, byName: Rea
         found = true
       }
     if (found) continue
-    const low = r.name.toLowerCase()
-    const same = byName.get(low.slice(low.lastIndexOf('/') + 1)) ?? []
+    const low = nfc(r.name).toLowerCase()
+    const base = low.slice(low.lastIndexOf('/') + 1)
+    // [[截图 4]]：没写扩展名的双链按去掉扩展名的名字认（同名的笔记、图都算上，宁可多认）
+    const bare = r.wiki && !HAS_EXT.test(base)
+    const same = [...(byName.get(base) ?? []), ...(bare ? (byName.get(stemKey(base)) ?? []) : [])]
     const tail = same.filter((p) => {
-      const l = p.toLowerCase()
-      return l === low || l.endsWith('/' + low)
+      const l = nfc(p).toLowerCase()
+      const lt = bare ? l.replace(HAS_EXT, '') : l
+      return l === low || l.endsWith('/' + low) || (bare && (lt === low || lt.endsWith('/' + low)))
     })
     // 尾巴也对不上（文件夹改过名的旧链接）：写明了是链接的只看文件名
     for (const p of tail.length || !r.loose ? tail : same) hit.add(p)
@@ -282,14 +306,18 @@ export function refHits(refs: FileRef[], files: ReadonlySet<string>, byName: Rea
   return hit
 }
 
-/** 小写文件名 → 库里那些文件（refHits 用） */
+/** 小写文件名（NFC）→ 库里那些文件（refHits 用）；另记一份去掉扩展名的名字（键前面带 \0，给没写扩展名的 [[双链]]） */
 export function fileNameIndex(files: Iterable<string>): Map<string, string[]> {
   const m = new Map<string, string[]>()
-  for (const p of files) {
-    const k = p.slice(p.lastIndexOf('/') + 1).toLowerCase()
+  const put = (k: string, p: string) => {
     const list = m.get(k)
     if (list) list.push(p)
     else m.set(k, [p])
+  }
+  for (const p of files) {
+    const k = nfc(p.slice(p.lastIndexOf('/') + 1)).toLowerCase()
+    put(k, p)
+    if (HAS_EXT.test(k)) put(stemKey(k), p)
   }
   return m
 }

@@ -16,7 +16,7 @@ const arg = (k) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.le
 const workers = Math.max(1, Number(arg('workers') ?? 2))
 const out = arg('out') ?? mkdtempSync(join(tmpdir(), 'pararead-e2e-all-'))
 const timeoutMin = Number(arg('timeout') ?? 15)
-const OPT_IN = ['packaged', 'windows', 'mineru-install', 'claude-code', 'langs', 'layout-tr']
+const OPT_IN = ['bg-perf', 'packaged', 'windows', 'mineru-install', 'claude-code', 'langs', 'layout-tr']
 const SERIAL = ['connector', 'word', 'inspiration']
 const NOT_SCRIPTS = ['drive', 'all', 'office-stub']
 

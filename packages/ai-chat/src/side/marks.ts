@@ -9,7 +9,7 @@ import { t } from '@cn/ai-engines/shared'
 import { uiNow } from '../context'
 
 /** 不算字的：KaTeX 给读屏的那一份、小标、小框、回答里挂着的旁支那一块 */
-const SKIP = '.katex-mathml, .badge, .askbox, .side-host'
+const SKIP = '.katex-mathml, .badge, .askbar, .side-host'
 
 /** root 里能找字的文本节点（按文档顺序） */
 function textNodes(root: Element): Text[] {

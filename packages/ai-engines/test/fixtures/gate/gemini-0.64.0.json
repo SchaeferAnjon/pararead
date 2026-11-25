@@ -1,0 +1,149 @@
+[
+  {
+    "request": {
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "gemini-s1",
+        "options": [
+          { "optionId": "proceed_always", "name": "Allow for this session", "kind": "allow_always" },
+          { "optionId": "proceed_once", "name": "Allow", "kind": "allow_once" },
+          { "optionId": "cancel", "name": "Reject", "kind": "reject_once" }
+        ],
+        "toolCall": {
+          "toolCallId": "run_shell_command-1795617639727-1",
+          "status": "pending",
+          "title": "ls -1",
+          "content": [{ "type": "content", "content": { "type": "text", "text": "[current working directory $CWD] (List the files)" } }],
+          "locations": [],
+          "kind": "execute"
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "gemini-s1",
+        "options": [
+          { "optionId": "proceed_always", "name": "Allow for this session", "kind": "allow_always" },
+          { "optionId": "proceed_once", "name": "Allow", "kind": "allow_once" },
+          { "optionId": "cancel", "name": "Reject", "kind": "reject_once" }
+        ],
+        "toolCall": {
+          "toolCallId": "write_file-1795617642998-2",
+          "status": "pending",
+          "title": "Writing to note.md",
+          "content": [{ "type": "diff", "path": "$CWD/note.md", "oldText": "", "newText": "hi\n", "_meta": { "kind": "add" } }],
+          "locations": [{ "path": "$CWD/note.md" }],
+          "kind": "edit"
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "gemini-s1",
+        "options": [
+          { "optionId": "proceed_always", "name": "Allow for this session", "kind": "allow_always" },
+          { "optionId": "proceed_once", "name": "Allow", "kind": "allow_once" },
+          { "optionId": "cancel", "name": "Reject", "kind": "reject_once" }
+        ],
+        "toolCall": {
+          "toolCallId": "replace-1795617646091-3",
+          "status": "pending",
+          "title": "a.txt: a => b",
+          "content": [{ "type": "diff", "path": "$CWD/a.txt", "oldText": "a\n", "newText": "b\n", "_meta": { "kind": "modify" } }],
+          "locations": [{ "path": "$CWD/a.txt" }],
+          "kind": "edit"
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "gemini-s1",
+        "options": [
+          { "optionId": "proceed_always", "name": "Allow for this session", "kind": "allow_always" },
+          { "optionId": "proceed_once", "name": "Allow", "kind": "allow_once" },
+          { "optionId": "cancel", "name": "Reject", "kind": "reject_once" }
+        ],
+        "toolCall": {
+          "toolCallId": "run_shell_command-1795617651762-4",
+          "status": "pending",
+          "title": "rm junk.txt",
+          "content": [{ "type": "content", "content": { "type": "text", "text": "[current working directory $CWD] (Remove junk.txt)" } }],
+          "locations": [],
+          "kind": "execute"
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "gemini-s1",
+        "options": [
+          { "optionId": "proceed_always", "name": "Allow for this session", "kind": "allow_always" },
+          { "optionId": "proceed_once", "name": "Allow", "kind": "allow_once" },
+          { "optionId": "cancel", "name": "Reject", "kind": "reject_once" }
+        ],
+        "toolCall": {
+          "toolCallId": "run_shell_command-1795617655392-5",
+          "status": "pending",
+          "title": "git push origin main",
+          "content": [{ "type": "content", "content": { "type": "text", "text": "[in $CWD] (Push main to origin)" } }],
+          "locations": [],
+          "kind": "execute"
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "gemini-s1",
+        "options": [
+          { "optionId": "proceed_always", "name": "Allow for this session", "kind": "allow_always" },
+          { "optionId": "proceed_once", "name": "Allow", "kind": "allow_once" },
+          { "optionId": "cancel", "name": "Reject", "kind": "reject_once" }
+        ],
+        "toolCall": {
+          "toolCallId": "run_shell_command-1795617659011-6",
+          "status": "pending",
+          "title": "touch y.txt",
+          "content": [{ "type": "content", "content": { "type": "text", "text": "[in $OUT] (Make an empty file)" } }],
+          "locations": [],
+          "kind": "execute"
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "gemini-s1",
+        "options": [
+          { "optionId": "proceed_always", "name": "Allow for this session", "kind": "allow_always" },
+          { "optionId": "proceed_once", "name": "Allow", "kind": "allow_once" },
+          { "optionId": "cancel", "name": "Reject", "kind": "reject_once" }
+        ],
+        "toolCall": {
+          "toolCallId": "web_fetch-1795617662003-7",
+          "status": "pending",
+          "title": "Fetching content from: https://example.com",
+          "content": [],
+          "locations": [],
+          "kind": "fetch"
+        }
+      }
+    }
+  }
+]

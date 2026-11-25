@@ -5,11 +5,13 @@ import { MainWindow, type LibState } from './components/MainWindow'
 import { Onboarding } from './components/Onboarding'
 import { Pricing } from './components/Pricing'
 import { Reader } from './components/Reader'
+import { useActivityReport } from './components/BgParse'
 import type { Route } from './components/Sidebar'
 import { MenuHost } from './lib/menu'
 import { ToastProvider, useToast } from './lib/ui'
 
 export function App() {
+  useActivityReport()
   const [open, setOpen] = useState<{ id: string; mode?: ReadMode; ann?: string; at?: OpenAt; idea?: string; back?: { root: string; folder: string } | null; nonce?: number } | null>(null)
   const [settings, setSettings] = useState<SettingsView | null>(null)
   const [route, setRoute] = useState<Route>({ kind: 'lib' })

@@ -22,7 +22,7 @@ export type CiteAnchor = { line: number; end: number } | { heading: string } | {
 export type Cite =
   | { kind: 'note'; path: string; anchor?: CiteAnchor }
   /** page：链接里写了第几页才有（光一个 PDF 不翻页，开在上次看到的地方） */
-  | { kind: 'pdf'; path: string; page?: number; rect?: Rect }
+  | { kind: 'pdf'; path: string; page?: number; rect?: Rect; text?: string }
   /** 别的库里文件（HTML、图片……）：按类型开 */
   | { kind: 'file'; path: string }
   | { kind: 'web'; url: string }
@@ -111,7 +111,7 @@ export function noteAnchorOf(hash: string): CiteAnchor | undefined {
 function fileCite(path: string, hash: string): Cite {
   if (/\.pdf$/i.test(path)) {
     const a = /(^|&)page=\d+(&|$)/.test(hash) ? parsePdfAnchor(`x.pdf#${hash}`) : null
-    return { kind: 'pdf', path, ...(a ? { page: a.page } : {}), ...(a?.rect ? { rect: a.rect } : {}) }
+    return { kind: 'pdf', path, ...(a ? { page: a.page } : {}), ...(a?.rect ? { rect: a.rect } : {}), ...(a?.text ? { text: a.text } : {}) }
   }
   if (/\.md$/i.test(path)) {
     const anchor = noteAnchorOf(decode(hash))

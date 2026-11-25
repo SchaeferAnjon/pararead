@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./app-files": "./src/app-files.ts"
   },
   "dependencies": {
     "node-diff3": "^4.0.0"

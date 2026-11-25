@@ -52,7 +52,7 @@ try {
   ok('两笔都存上了', saved.length === 2)
 
   // 缩放：笔画跟着页面放大
-  await ev(() => document.querySelector('.mid-bar button[title="缩放"]').click())
+  await ev(() => document.querySelector('[data-testid="zoom-btn"]').click())
   await sleep(300)
   await win.keyboard.press('Escape')
   await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.getMenuItemById('zoom-in')?.click())

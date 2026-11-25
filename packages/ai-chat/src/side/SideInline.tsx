@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom'
 import { AiError } from '../ai-error'
 import { AiInput, MatMsg, type PicksProps, sendText, useComposer } from '../composer'
 import { Icon, useChat, useUi } from '../context'
+import { useFollow } from '../follow'
 import type { ChatHost, IconName, StepView } from '../host'
 import type { Material } from '../materials'
 import { StepRow } from '../steps'
@@ -158,12 +159,25 @@ export function SideInline(p: SideInlineProps) {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [side.id])
-  // 新问、边答边出字：块里滚到底，外面那一格把整块滚进来（那句留在上面）
+  // 换了一条、新问：块里滚到底接着跟，外面那一格把整块滚进来（那句留在上面）。
+  // 边答边出字：块里跟着到底，人往上翻了就停（follow.tsx）；块还在长高时外面才跟着挪，长满了不再拽外面那一格
   const tail = side.msgs.length ? side.msgs[side.msgs.length - 1]!.text.length : 0
+  const fol = useFollow(qa)
+  const tall = useRef(0)
   useLayoutEffect(() => {
-    if (qa.current) qa.current.scrollTop = qa.current.scrollHeight
+    fol.follow()
+    tall.current = root.current?.offsetHeight ?? 0
     requestAnimationFrame(() => grow.current?.())
-  }, [side.id, side.msgs.length, tail, p.running])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [side.id, side.msgs.length])
+  useLayoutEffect(() => {
+    fol.stick()
+    const h = root.current?.offsetHeight ?? 0
+    if (h === tall.current) return
+    tall.current = h
+    requestAnimationFrame(() => grow.current?.())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tail, p.running])
 
   function send() {
     const mats = c.plain()

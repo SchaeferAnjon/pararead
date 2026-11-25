@@ -1,7 +1,7 @@
 {
   "name": "pararead",
   "productName": "ParaRead",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "读英文论文：重排成好读的版面、逐段对照翻译、划词解释、AI 问答",
   "main": "./out/main/index.js",
@@ -32,6 +32,7 @@
     "@cn/family": "workspace:*",
     "@cn/format": "workspace:*",
     "@cn/git": "workspace:*",
+    "@cn/pdf-view": "workspace:*",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",

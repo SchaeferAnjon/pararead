@@ -24,6 +24,8 @@ export const DEFAULT_SETTINGS: Settings = {
   senseStyle: 'text',
   termMarks: true,
   defaultEngine: 'basic',
+  bgParse: 'opened',
+  basicBroken: null,
   leftW: 260,
   rightW: 380,
   leftCollapsed: false,

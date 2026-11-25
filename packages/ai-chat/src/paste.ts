@@ -16,3 +16,21 @@ export async function toBytes(f: File): Promise<{ bytes: Uint8Array; mime: strin
   const blob = await c.convertToBlob({ type: 'image/png' })
   return { bytes: new Uint8Array(await blob.arrayBuffer()), mime: 'image/png' }
 }
+
+/**
+ * 粘贴时剪贴板里的字（粘贴优先文字）：微信多条聊天记录、Excel / Numbers 的单元格在字之外另附一张渲染好的图，有字就贴字。
+ * 返回 '' 是没有要贴的字，有图就照旧贴图：没有字（截图、「拷贝图像」），或字只是那几张图的文件名（访达里拷的图）、只是一个网址（浏览器「拷贝图像」带的）。
+ * 换行统一成 \n（输入框、编辑器里的写法）
+ */
+export function clipText(dt: DataTransfer): string {
+  const text = dt.getData('text/plain').replace(/\r\n?/g, '\n')
+  const lines = text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+  if (!lines.length) return ''
+  const names = new Set([...dt.files].map((f) => f.name))
+  if (names.size && lines.every((l) => names.has(l) || names.has(l.slice(l.lastIndexOf('/') + 1)))) return ''
+  if (lines.length === 1 && /^(https?|file|data|blob):\S+$/i.test(lines[0]!)) return ''
+  return text
+}

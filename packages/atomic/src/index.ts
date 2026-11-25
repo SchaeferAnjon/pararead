@@ -11,8 +11,8 @@
  * 搜索、梦游、监听都不当笔记），Git 由 packages/git 写进 .git/info/exclude 的 TEMP_GLOB 忽略。
  * 崩溃留下的临时文件下次打开库时 sweepTemps 挪进 `.canvas-notes/回收/`，不直接删。
  */
-import { accessSync, closeSync, constants, copyFileSync, fchmodSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, realpathSync, renameSync, statSync, type Stats, unlinkSync, utimesSync, writeSync } from 'node:fs'
-import { access, copyFile, link, lstat, mkdir, open, readdir, readFile, realpath, rename, stat, unlink, utimes } from 'node:fs/promises'
+import { accessSync, chmodSync, closeSync, constants, copyFileSync, fchmodSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, realpathSync, renameSync, statSync, type Stats, unlinkSync, utimesSync, writeSync } from 'node:fs'
+import { access, chmod, copyFile, link, lstat, mkdir, open, readdir, readFile, realpath, rename, stat, unlink, utimes } from 'node:fs/promises'
 import { basename, dirname, join, relative, sep } from 'node:path'
 
 /** 临时文件名的样子；第 1 组是原名（太长时截短过），第 2 组是写它的进程号 */
@@ -251,7 +251,7 @@ export async function atomicWrite(path: string, data: string | Uint8Array, o: At
   if (o.mkdir) await mkdir(dirname(path), { recursive: true })
   const { target, cur } = await resolveTarget(path)
   precheck(target, cur, o)
-  if (cur) await access(target, constants.W_OK)
+  if (cur) await access(target, constants.W_OK).catch((e: unknown) => Promise.reject(withStack(e)))
   const tmp = tempPathFor(target)
   const mode = o.mode ?? (cur ? cur.mode & 0o7777 : 0o666)
   try {
@@ -270,7 +270,7 @@ export async function atomicWrite(path: string, data: string | Uint8Array, o: At
     await unlink(tmp).catch((e2: unknown) => {
       if (!isENOENT(e2)) throw e2
     })
-    throw e
+    throw withStack(e)
   }
   await syncDir(dirname(target))
 }
@@ -306,22 +306,40 @@ export function atomicWriteSync(path: string, data: string | Uint8Array, o: Atom
   syncDirSync(dirname(target))
 }
 
+/** 拷过来的临时文件该是什么权限：给了用给的；盖已有的沿用原来的；新文件是源文件的权限位加上本人可读写（不带 setuid 这些） */
+function copyMode(copied: number, cur: Stats | null, o: AtomicOptions): number {
+  if (o.mode !== undefined) return o.mode
+  if (cur) return cur.mode & 0o7777
+  return (copied & 0o777) | 0o600
+}
+
+/**
+ * Node 的文件报错（fs/promises）只有一句话、没有调用栈：在这里补上（异步调用链，看得出是谁调的），记进日志时查得到在哪一步。
+ * 已经带栈的照原样
+ */
+function withStack(e: unknown): unknown {
+  if (e instanceof Error && !/\n\s+at /.test(e.stack ?? '')) Error.captureStackTrace(e, withStack)
+  return e
+}
+
 /**
  * 原子拷一个文件（附件、图片、视频这种大文件）：拷进临时文件（APFS 上是克隆，不占空间、一下就好）、fsync，再改名过去。
- * 新文件的权限跟着源文件（和 copyFile 一样），盖已有的文件时沿用目标原来的
+ * 新文件的权限跟着源文件、再加上本人可读写（源文件只读时拷进库的也要能改名、批注、以后再盖），盖已有的文件时沿用目标原来的；
+ * 给了 mode 就用 mode。扩展属性（下载来源的隔离标记这些）照 copyFile 带过来
  */
 export async function atomicCopy(src: string, dest: string, o: AtomicOptions = {}): Promise<void> {
   if (o.mkdir) await mkdir(dirname(dest), { recursive: true })
   const { target, cur } = await resolveTarget(dest)
   precheck(target, cur, o)
-  if (cur) await access(target, constants.W_OK)
+  if (cur) await access(target, constants.W_OK).catch((e: unknown) => Promise.reject(withStack(e)))
   const tmp = tempPathFor(target)
   try {
     await copyFile(src, tmp, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE)
-    const fh = await open(tmp, 'r+')
+    // 先按路径改权限：源文件只读（微信、邮件存下来的常是 0444）时临时文件也是只读，不能以写方式打开
+    await chmod(tmp, copyMode((await stat(tmp)).mode, cur, o))
+    // fsync 只要能打开就行，只读打开
+    const fh = await open(tmp, 'r')
     try {
-      if (o.mode !== undefined) await fh.chmod(o.mode)
-      else if (cur) await fh.chmod(cur.mode & 0o7777)
       await fh.sync()
     } finally {
       await fh.close()
@@ -332,7 +350,7 @@ export async function atomicCopy(src: string, dest: string, o: AtomicOptions = {
     await unlink(tmp).catch((e2: unknown) => {
       if (!isENOENT(e2)) throw e2
     })
-    throw e
+    throw withStack(e)
   }
   await syncDir(dirname(target))
 }
@@ -345,10 +363,9 @@ export function atomicCopySync(src: string, dest: string, o: AtomicOptions = {})
   const tmp = tempPathFor(target)
   try {
     copyFileSync(src, tmp, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE)
-    const fd = openSync(tmp, 'r+')
+    chmodSync(tmp, copyMode(statSync(tmp).mode, cur, o))
+    const fd = openSync(tmp, 'r')
     try {
-      if (o.mode !== undefined) fchmodSync(fd, o.mode)
-      else if (cur) fchmodSync(fd, cur.mode & 0o7777)
       fsyncSync(fd)
     } finally {
       closeSync(fd)
@@ -361,7 +378,7 @@ export function atomicCopySync(src: string, dest: string, o: AtomicOptions = {})
     } catch (e2) {
       if (!isENOENT(e2)) throw e2
     }
-    throw e
+    throw withStack(e)
   }
   syncDirSync(dirname(target))
 }
@@ -380,7 +397,7 @@ export async function unlinkTemp(tmp: string): Promise<void> {
  */
 export async function finishTemp(tmp: string, target: string): Promise<void> {
   try {
-    const fh = await open(tmp, 'r+')
+    const fh = await open(tmp, 'r')
     try {
       await fh.sync()
     } finally {
@@ -391,7 +408,7 @@ export async function finishTemp(tmp: string, target: string): Promise<void> {
     await unlink(tmp).catch((e2: unknown) => {
       if (!isENOENT(e2)) throw e2
     })
-    throw e
+    throw withStack(e)
   }
   await syncDir(dirname(target))
 }

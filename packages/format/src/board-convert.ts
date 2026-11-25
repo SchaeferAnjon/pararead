@@ -13,7 +13,7 @@
  * 5. 一个字都不丢：转完再按旧写法读，读不出东西；按新写法读，每张卡都在。
  */
 import { attr, type Block, content, fmValue, hasOldLayout, parseBoard } from './board'
-import { type DocUnit, linksOf, placeLine, splitDoc, tagLine } from './doc-board'
+import { BOARD_COL_GAP, BOARD_COL_W, type DocUnit, linksOf, placeLine, pushApart, splitDoc, tagLine } from './doc-board'
 import { isMindmap } from './mindmap'
 import { summaryCallout } from './summary-card'
 
@@ -222,19 +222,21 @@ export interface BoardThumbRect {
 export function boardThumb(text: string): { cards: number; thumb: BoardThumbRect[] } {
   const b = splitDoc(text)
   const thumb: BoardThumbRect[] = []
+  // 原来按 276 宽摆的、加宽以后叠了的，照白板上画的那样推开（pushApart）
+  const shown = pushApart([...b.columns.flatMap((c) => (c.place ? [{ id: 'c:' + c.place.id, x: c.place.x }] : [])), ...b.placed.map((u) => ({ id: 'u:' + u.place!.id, x: u.place!.x }))])
   let i = 0
   for (const c of b.columns) {
     const n = c.cards.filter((u) => u.kind !== 'gap').length
     const h = (c.head ? 52 : 0) + n * 90
-    if (c.place) thumb.push({ x: c.place.x, y: c.place.y, w: 276, h, k: 'l' })
+    if (c.place) thumb.push({ x: shown.get('c:' + c.place.id) ?? c.place.x, y: c.place.y, w: BOARD_COL_W, h, k: 'l' })
     else {
-      thumb.push({ x: i * 298, y: 64, w: 276, h, k: c.head ? 'l' : 'n' })
+      thumb.push({ x: i * (BOARD_COL_W + BOARD_COL_GAP), y: 64, w: BOARD_COL_W, h, k: c.head ? 'l' : 'n' })
       i++
     }
   }
   for (const u of b.placed) {
     const k = u.kind === 'image' || u.kind === 'images' ? 'i' : u.kind === 'quote' ? 'c' : 'n'
-    thumb.push({ x: u.place!.x, y: u.place!.y, w: 276, h: Math.min(320, estimate(u)), k })
+    thumb.push({ x: shown.get('u:' + u.place!.id) ?? u.place!.x, y: u.place!.y, w: BOARD_COL_W, h: Math.min(320, estimate(u)), k })
   }
   return { cards: b.total, thumb }
 }

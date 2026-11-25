@@ -1,0 +1,234 @@
+[
+  {
+    "request": {
+      "method": "item/commandExecution/requestApproval",
+      "params": {
+        "kind": "command",
+        "threadId": "01a21326-b3d6-7930-ad53-5538bd29a389",
+        "turnId": "01a21326-b617-73d3-ba4a-e7a8afd05917",
+        "itemId": "exec-2e766319-5d29-491f-a7f3-a1e7c387b744",
+        "startedAtMs": 1795617639727,
+        "environmentId": "local",
+        "command": "/bin/zsh -lc 'ls -1'",
+        "cwd": "$CWD",
+        "commandActions": [
+          {
+            "type": "listFiles",
+            "command": "ls -1",
+            "path": null
+          }
+        ],
+        "proposedExecpolicyAmendment": [
+          "ls",
+          "-1"
+        ],
+        "availableDecisions": [
+          "accept",
+          {
+            "acceptWithExecpolicyAmendment": {
+              "execpolicy_amendment": [
+                "ls",
+                "-1"
+              ]
+            }
+          },
+          "cancel"
+        ]
+      }
+    },
+    "item": {
+      "type": "commandExecution",
+      "id": "exec-2e766319-5d29-491f-a7f3-a1e7c387b744",
+      "pluginId": null,
+      "scriptPath": null,
+      "command": "/bin/zsh -lc 'ls -1'",
+      "cwd": "$CWD",
+      "processId": null,
+      "source": "agent",
+      "status": "inProgress",
+      "commandActions": [
+        {
+          "type": "listFiles",
+          "command": "ls -1",
+          "path": null
+        }
+      ],
+      "aggregatedOutput": null,
+      "exitCode": null,
+      "durationMs": null
+    }
+  },
+  {
+    "request": {
+      "method": "item/fileChange/requestApproval",
+      "params": {
+        "threadId": "01a21326-b3d6-7930-ad53-5538bd29a389",
+        "turnId": "01a21326-b617-73d3-ba4a-e7a8afd05917",
+        "itemId": "exec-e57de65b-11e5-4666-ba39-8d4bb820a4da",
+        "startedAtMs": 1795617642998,
+        "reason": null,
+        "grantRoot": null
+      }
+    },
+    "item": {
+      "type": "fileChange",
+      "id": "exec-e57de65b-11e5-4666-ba39-8d4bb820a4da",
+      "changes": [
+        {
+          "path": "$CWD/note.md",
+          "kind": {
+            "type": "add"
+          },
+          "diff": "hi\n"
+        }
+      ],
+      "status": "inProgress"
+    }
+  },
+  {
+    "request": {
+      "method": "item/fileChange/requestApproval",
+      "params": {
+        "threadId": "01a21326-b3d6-7930-ad53-5538bd29a389",
+        "turnId": "01a21326-b617-73d3-ba4a-e7a8afd05917",
+        "itemId": "exec-1e4bb7a1-a7d0-4b4e-bcc6-7778b84a4c1f",
+        "startedAtMs": 1795617646091,
+        "reason": null,
+        "grantRoot": null
+      }
+    },
+    "item": {
+      "type": "fileChange",
+      "id": "exec-1e4bb7a1-a7d0-4b4e-bcc6-7778b84a4c1f",
+      "changes": [
+        {
+          "path": "$CWD/a.txt",
+          "kind": {
+            "type": "update",
+            "move_path": null
+          },
+          "diff": "@@ -1 +1 @@\n-a\n+b\n"
+        }
+      ],
+      "status": "inProgress"
+    }
+  },
+  {
+    "request": {
+      "method": "item/commandExecution/requestApproval",
+      "params": {
+        "kind": "command",
+        "threadId": "01a21326-b3d6-7930-ad53-5538bd29a389",
+        "turnId": "01a21326-b617-73d3-ba4a-e7a8afd05917",
+        "itemId": "exec-d9c60b48-7039-432b-b79e-6dd9247fceb8",
+        "startedAtMs": 1795617651762,
+        "environmentId": "local",
+        "command": "/bin/zsh -lc 'rm junk.txt'",
+        "cwd": "$CWD",
+        "commandActions": [
+          {
+            "type": "unknown",
+            "command": "rm junk.txt"
+          }
+        ],
+        "proposedExecpolicyAmendment": [
+          "rm",
+          "junk.txt"
+        ],
+        "availableDecisions": [
+          "accept",
+          {
+            "acceptWithExecpolicyAmendment": {
+              "execpolicy_amendment": [
+                "rm",
+                "junk.txt"
+              ]
+            }
+          },
+          "cancel"
+        ]
+      }
+    },
+    "item": {
+      "type": "commandExecution",
+      "id": "exec-d9c60b48-7039-432b-b79e-6dd9247fceb8",
+      "pluginId": null,
+      "scriptPath": null,
+      "command": "/bin/zsh -lc 'rm junk.txt'",
+      "cwd": "$CWD",
+      "processId": null,
+      "source": "agent",
+      "status": "inProgress",
+      "commandActions": [
+        {
+          "type": "unknown",
+          "command": "rm junk.txt"
+        }
+      ],
+      "aggregatedOutput": null,
+      "exitCode": null,
+      "durationMs": null
+    }
+  },
+  {
+    "request": {
+      "method": "item/commandExecution/requestApproval",
+      "params": {
+        "kind": "command",
+        "threadId": "01a21326-b3d6-7930-ad53-5538bd29a389",
+        "turnId": "01a21326-b617-73d3-ba4a-e7a8afd05917",
+        "itemId": "exec-e009d8fc-01cd-4e04-8a2e-dd027bec0e60",
+        "startedAtMs": 1795617655392,
+        "environmentId": "local",
+        "command": "/bin/zsh -lc 'git push origin main'",
+        "cwd": "$CWD",
+        "commandActions": [
+          {
+            "type": "unknown",
+            "command": "git push origin main"
+          }
+        ],
+        "proposedExecpolicyAmendment": [
+          "git",
+          "push",
+          "origin",
+          "main"
+        ],
+        "availableDecisions": [
+          "accept",
+          {
+            "acceptWithExecpolicyAmendment": {
+              "execpolicy_amendment": [
+                "git",
+                "push",
+                "origin",
+                "main"
+              ]
+            }
+          },
+          "cancel"
+        ]
+      }
+    },
+    "item": {
+      "type": "commandExecution",
+      "id": "exec-e009d8fc-01cd-4e04-8a2e-dd027bec0e60",
+      "pluginId": null,
+      "scriptPath": null,
+      "command": "/bin/zsh -lc 'git push origin main'",
+      "cwd": "$CWD",
+      "processId": null,
+      "source": "agent",
+      "status": "inProgress",
+      "commandActions": [
+        {
+          "type": "unknown",
+          "command": "git push origin main"
+        }
+      ],
+      "aggregatedOutput": null,
+      "exitCode": null,
+      "durationMs": null
+    }
+  }
+]

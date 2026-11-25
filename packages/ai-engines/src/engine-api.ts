@@ -16,7 +16,7 @@ import type { EngineId } from './shared'
 import { API_EFFORTS, type ModelOption } from './shared'
 import { API_BASE, API_DEFAULT, type ApiId, isApi, KEY_ENV, LOCAL_BASE, type LocalId, preferModel, PROVIDER_NAME, SOURCE_LABEL } from './shared'
 import { t } from './shared/i18n'
-import { acpEngine, type Engine, type EngineImage, type EngineRun, opencodeConfig } from './engines'
+import { type AcpMode, acpEngine, type Engine, type EngineImage, type EngineRun, opencodeConfig } from './engines'
 
 // ---------------------------------------------------------------- 地址
 
@@ -331,9 +331,9 @@ export const localModels = (f: LocalFound): ModelOption[] => f.models.map((m) =>
  * - 权限照全能模式开关（engines.ts 的 opencodeConfig）；不自动升级、不分享会话（share 关掉，会话不上传）；
  * - 小活（起标题）也用这一家便宜的那个，不让它挑别家的
  */
-export function bundledConfig(provider: ApiId, omni: boolean, model?: string): string {
+export function bundledConfig(provider: ApiId, mode: AcpMode, model?: string): string {
   return JSON.stringify({
-    ...(JSON.parse(opencodeConfig(omni)) as object),
+    ...(JSON.parse(opencodeConfig(mode)) as object),
     enabled_providers: [provider],
     ...(model ? { model: `${provider}/${model}` } : {}),
     small_model: `${provider}/${API_DEFAULT[provider].quick[0]}`,
@@ -378,7 +378,7 @@ export function apiEngine(id: ApiId, deps: ApiDeps): Engine {
       label: name,
       command: oc.path,
       args: (cwd) => ['acp', '--cwd', cwd],
-      env: (omni) => ({ ...home, [KEY_ENV[id]]: key, OPENCODE_CONFIG_CONTENT: bundledConfig(id, omni) }),
+      env: (mode) => ({ ...home, [KEY_ENV[id]]: key, OPENCODE_CONFIG_CONTENT: bundledConfig(id, mode) }),
       loginHint: t('{name}的Key用不了：在 设置 › AI换一把', { name }),
     })
     acp = { engine, key, path: oc.path }

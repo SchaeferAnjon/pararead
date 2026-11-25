@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { commitAll, commitPaths, currentBranch, git, gitPath, init, isRepo, lastCommitOf, log, parseStatus, remote, revert, revertPaths, setRemote, status } from '../src'
+import { commitAll, commitPaths, currentBranch, git, headState, gitPath, init, isRepo, lastCommitOf, log, parseStatus, remote, revert, revertPaths, setRemote, status } from '../src'
 
 let dir: string
 beforeEach(async () => {
@@ -238,4 +238,39 @@ it('原子写的临时文件、崩溃残留的回收处不进 Git（task-8dula�
   // 只写一次：再查状态不再追加
   await status(dir)
   expect(readFileSync(join(dir, '.git', 'info', 'exclude'), 'utf8')).toBe(exclude)
+})
+
+describe('同步途中的库（git:state 不抛「HEAD is not a symbolic ref」）', () => {
+  /** main 和 other 改同一行，各提交一次：rebase / merge 都会停在冲突上 */
+  async function forked() {
+    writeFileSync(join(dir, 'a.md'), '第一行\n')
+    await commitAll(dir, '起头')
+    await git(dir, ['checkout', '-q', '-b', 'other'])
+    writeFileSync(join(dir, 'a.md'), '别处改的\n')
+    await commitAll(dir, '别处')
+    await git(dir, ['checkout', '-q', 'main'])
+    writeFileSync(join(dir, 'a.md'), '这里改的\n')
+    await commitAll(dir, '这里')
+  }
+
+  it('rebase 停在冲突上（同 pull --rebase 途中，HEAD 分离）：分支照样是 main，busy 是 rebase，状态照样读得到', async () => {
+    await forked()
+    await expect(git(dir, ['rebase', 'other'])).rejects.toThrow()
+    expect(existsSync(join(dir, '.git', 'rebase-merge'))).toBe(true)
+    // 以前 git:state 就是这一步抛的
+    await expect(currentBranch(dir)).rejects.toThrow(/not a symbolic ref/)
+    expect(await headState(dir)).toEqual({ branch: 'main', busy: 'rebase' })
+    expect((await status(dir)).map((s) => s.path)).toEqual(['a.md'])
+    await git(dir, ['rebase', '--abort'])
+    expect(await headState(dir)).toEqual({ branch: 'main', busy: null })
+  })
+
+  it('merge 停在冲突上：busy 是 merge；检出某个提交（分离 HEAD、没在同步）：分支是 null', async () => {
+    await forked()
+    await expect(git(dir, ['merge', 'other'])).rejects.toThrow()
+    expect(await headState(dir)).toEqual({ branch: 'main', busy: 'merge' })
+    await git(dir, ['merge', '--abort'])
+    await git(dir, ['checkout', '-q', '--detach', 'HEAD~1'])
+    expect(await headState(dir)).toEqual({ branch: null, busy: null })
+  })
 })

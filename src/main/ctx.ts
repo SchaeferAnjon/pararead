@@ -17,6 +17,8 @@ export interface Ctx {
   log: (msg: string) => void
   enqueueReflow: (paperId: string, tiers?: ('flash' | 'basic')[], args?: string[]) => void
   afterImport: (paperId: string) => void
+  /** 列完画布笔记库的文件夹：设置是「连着的库都在后台解析」时把还没解析的排上 */
+  vaultListed: () => void
   mainWindow: () => Electron.BrowserWindow | null
   streamer: Streamer
   /** 画布笔记联动（cnLink.ts）：讲解好了、问答答完时写进库里的配对笔记 */

@@ -6,7 +6,7 @@
  * 不碰各软件的翻译：给人看的字都从参数进来。
  */
 import { createContext, Fragment, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { applyGlass, GLASS_DEFAULT, GLASS_MAX, GLASS_MIN, glassPct } from './glass'
+import { applyGlass, GLASS_DEFAULT, GLASS_MAX, GLASS_MIN } from './glass'
 import { Codicon } from './index'
 
 /** 设置里改了一项之后，底下提示条说的话：已存 · 会怎样，带「撤回」；别的事（存好了、导入了）只说一句 */
@@ -538,8 +538,8 @@ export interface GlassText {
 }
 
 /**
- * 面板透明度（task-jgely）：有窗口背景时几块半透明面板透多少。滑杆两头是量过对比度的范围（@cn/design/glass），中间那道刻度是默认（用户认可的那版）。
- * 拖的时候直接套到窗口上（<html> 的 --isle-shift），停手 300ms 才存；enabled 为 false 时滑杆变灰（面板这会儿是实的）
+ * 面板透明度（task-jgely）：有窗口背景时几块半透明面板透多少。滑杆 0（实）到 100（透），右边写的数就是滑块的位置（@cn/design/glass），中间那道刻度是默认（用户认可的那版）。
+ * 拖的时候直接套到窗口上（<html> 的 --isle-p），停手 300ms 才存；enabled 为 false 时滑杆变灰（面板这会儿是实的）
  */
 export function GlassRow(props: { text: GlassText; value: number; enabled: boolean; onChange(v: number): void }) {
   const T = props.text
@@ -570,13 +570,6 @@ export function GlassRow(props: { text: GlassText; value: number; enabled: boole
       save.current(n)
     }, 300)
   }
-  // 现在这套主题默认透多少（--isle-k）：换了主题时 <html> 上的主题是软件在这一帧之后才套的，下一帧再读一次
-  const [base, setBase] = useState(() => glassPct(0))
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setBase(glassPct(0)))
-    return () => cancelAnimationFrame(id)
-  })
-  const pct = base + v
   const span = GLASS_MAX - GLASS_MIN
   return (
     <>
@@ -592,14 +585,14 @@ export function GlassRow(props: { text: GlassText; value: number; enabled: boole
             value={v}
             disabled={!props.enabled}
             aria-label={T.label}
-            aria-valuetext={T.value(pct) + (v === GLASS_DEFAULT ? ` · ${T.def}` : '')}
+            aria-valuetext={T.value(v) + (v === GLASS_DEFAULT ? ` · ${T.def}` : '')}
             onChange={(e) => set(Number(e.currentTarget.value))}
           />
           <i className="gl-def" aria-hidden />
         </span>
         <span className="gl-end">{T.clear}</span>
         {/* 轨道右头已经写着「透」，这里只写数 */}
-        <output className="gl-val num">{pct}%</output>
+        <output className="gl-val num">{v}%</output>
         <button className="gl-reset" disabled={!props.enabled || v === GLASS_DEFAULT} onClick={() => set(GLASS_DEFAULT)}>
           {T.reset}
         </button>

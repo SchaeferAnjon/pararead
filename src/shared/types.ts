@@ -104,6 +104,15 @@ export interface ReadPosition {
 
 export type JobStatus = 'none' | 'queued' | 'running' | 'done' | 'failed'
 
+/** 后台解析的状态条：这一批几篇、解析完几篇、正在解析哪篇（标题）、暂停着没有（manual 手动，busy 等用户停手） */
+export interface BgStatus {
+  total: number
+  done: number
+  current: { paperId: string; tier: 'flash' | 'basic' } | null
+  title: string | null
+  paused: 'manual' | 'busy' | null
+}
+
 export interface ReflowState {
   // 当前可用的最好档位
   ready: Tier | null
@@ -251,6 +260,8 @@ export interface Settings {
   trLayout: 'stack' | 'side' // 双语的排法：译文跟在原文下面，或者原文在左、译文在右
   termMarks: boolean // 正文里给术语画虚线、悬停看解释
   defaultEngine: 'flash' | 'basic' // 默认用哪种重排：basic 是导入后快速先出、精细好了换上；flash 是只用快速，精细不自动跑（每篇在阅读页还能单独换）
+  bgParse: 'opened' | 'vault' // 画布笔记库里的论文什么时候解析：打开哪篇解析哪篇（默认），或连着的库都在后台解析（低优先级、用户在操作时暂停）
+  basicBroken: { error: string; at: number } | null // 精细解析在这台电脑上失败过（环境问题）：之后不再每篇自动跑，设置里能「重试精细解析」
   senseGroups: boolean // 双语时的意群显示：一句原文配一句译文，原文的一块和译文里对它的那几段同色
   senseStyle: SenseStyle // 意群怎么上色：字换成这一块的颜色，或者字不变色、底下画同色的线
   leftW: number

@@ -147,3 +147,50 @@ it('提交说明和本周提交数', async () => {
   expect(await countCommitsSince(a, new Date(Date.now() - 3600_000))).toBe(1)
   expect(await countCommitsSince(a, new Date(Date.now() + 3600_000))).toBe(0)
 })
+
+it('两边都往白板笔迹里加了笔（同一处、按行合不了）：交给 resolve 合好，接着 rebase、推上去；不给 resolve 时照旧退回', async () => {
+  const head = '{"ink":1}\n{"g":"g0","x":0,"y":0}\n{"id":"s0","g":"g0","p":"0,0,250,500,0"}\n'
+  const lb = '{"id":"sb","g":"g0","p":"1,1,250,500,0"}\n'
+  const la = '{"id":"sa","g":"g0","p":"2,2,250,500,0"}\n'
+  writeFileSync(join(a, '笔迹.ink'), head)
+  await commitAll(a, '笔迹')
+  await git(a, ['push', '-q'])
+  await git(b, ['pull', '-q'])
+  writeFileSync(join(b, '笔迹.ink'), head + lb)
+  await commitAll(b, 'b 写了一笔')
+  await git(b, ['push', '-q'])
+  writeFileSync(join(a, '笔迹.ink'), head + la)
+  await commitAll(a, 'a 写了一笔')
+  writeFileSync(join(a, '旅行.md'), '第一段\n\n第二段，a 又改的\n')
+  await commitAll(a, 'a 又改了一段')
+
+  expect((await pull(a)).kind).toBe('conflict')
+  expect(readFileSync(join(a, '笔迹.ink'), 'utf8')).toBe(head + la)
+
+  const seen: string[][] = []
+  const r = await sync(a, {
+    resolve: (path, base, remote, local) => {
+      seen.push([path, base, remote, local])
+      if (!path.endsWith('.ink')) return null
+      // 测试里的合法：base 之后两边各加的行都留下，远程的在前
+      return remote + local.slice(base.length)
+    },
+  })
+  expect(r).toMatchObject({ kind: 'ok', pulled: 1, pushed: true })
+  expect(seen).toEqual([['笔迹.ink', head, head + lb, head + la]])
+  expect(readFileSync(join(a, '笔迹.ink'), 'utf8')).toBe(head + lb + la)
+  expect(readFileSync(join(a, '旅行.md'), 'utf8')).toBe('第一段\n\n第二段，a 又改的\n')
+  expect(await status(a)).toEqual([])
+  expect((await git(bare, ['log', '--format=%s', 'main'])).trim().split('\n')).toEqual(['a 又改了一段', 'a 写了一笔', 'b 写了一笔', '笔迹', '第一次'])
+})
+
+it('resolve 合不了（返回 null）：照旧退回同步前，本机的字都在', async () => {
+  writeFileSync(join(b, '旅行.md'), '第一段 b\n\n第二段\n')
+  await commitAll(b, 'b')
+  await git(b, ['push', '-q'])
+  writeFileSync(join(a, '旅行.md'), '第一段 a\n\n第二段\n')
+  const r = await sync(a, { resolve: () => null })
+  expect(r.kind).toBe('conflict')
+  expect(readFileSync(join(a, '旅行.md'), 'utf8')).toBe('第一段 a\n\n第二段\n')
+  expect(await git(a, ['status', '--porcelain'])).toBe('')
+})

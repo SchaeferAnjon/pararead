@@ -240,6 +240,7 @@ export class CnLink {
         this.scanning = null
       }
       if (this.scanAgain) await this.scan()
+      else this.c.vaultListed()
     })()
     return this.scanning
   }

@@ -30,6 +30,22 @@
   overflow: hidden;
   color: var(--t1);
 }
+/* 半透明的岛：B 有窗口背景图时（<html data-glass>，画布笔记 skin.ts、画布今日 store.ts 照同一条规矩打），设置弹窗也是半透明面板（--isle-pop + --isle-blur），
+   里面的卡片、按钮、次要字同岛里一样换（原来写在画布笔记 settings.css，画布今日用同一个框架却没有，弹窗是不透的纯白，bug 一批 1125b） */
+[data-glass] .set:not(.set-tab) {
+  --win: transparent;
+  --card: var(--isle-card);
+  --clip: var(--isle-card);
+  --btn-bg: var(--isle-card);
+  --field-bg: var(--isle-card);
+  --t2: var(--isle-t2);
+  --t3: var(--isle-t3);
+  --text-2: var(--isle-t2);
+  --text-3: var(--isle-t3);
+  background: var(--isle-pop);
+  -webkit-backdrop-filter: var(--isle-blur);
+  backdrop-filter: var(--isle-blur);
+}
 .set-nav {
   background: var(--fill);
   padding: 16px 10px;
@@ -256,6 +272,10 @@
 .set-x:hover {
   background: var(--fill);
   color: var(--t1);
+}
+/* A 里设置是中间一个标签（标签上有 ×），这颗不出；没引 ui.css 的软件（画布今日）[hidden] 不一定是 display:none */
+.set-x[hidden] {
+  display: none;
 }
 .sa-head {
   display: flex;
@@ -1438,4 +1458,127 @@
 }
 .set-body .gl-note {
   margin: 6px 0 0;
+}
+
+/* ---------- 快捷键（画布笔记、画布今日的设置 › 快捷键共用，对标清单 U5；从画布笔记 settings-a.css 搬过来）：键位按钮、录键、撞键那一句、顶上搜索和只看已设的 ---------- */
+.sa-keyb {
+  height: 28px;
+  min-width: 72px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line2);
+  background: var(--fill);
+  font: 12px var(--sans);
+  color: var(--t1);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.sa-keyb.rec {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 3px var(--acc-soft);
+  color: var(--acc-t);
+}
+.sa-kwarn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--t1);
+  margin-top: 4px;
+}
+.sa-kwarn .ci {
+  color: var(--yellow);
+}
+/* 固定的键：样子同键位按钮，点不动 */
+.sa-keyb.fixed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  color: var(--t2);
+}
+/* 固定的键：只写字，不像能点 */
+.sa-keyb.fixed {
+  border-color: transparent;
+  color: var(--t2);
+}
+/* 快捷键页（照 Obsidian）：顶上搜索、只看已设的；每条右边清掉、回到默认 */
+.sa-keytools {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 22px 0 0;
+}
+.sa-keytools .sa-srch {
+  flex: 1;
+  margin: 0;
+}
+.sa-only {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--t2);
+  white-space: nowrap;
+}
+.set .sa-btn.sa-ic {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+}
+/* 回到默认、清掉不能用时占着位置不显示（[hidden] 全局是 display:none，这里改成看不见） */
+.set .sa-btn.sa-ic[hidden] {
+  display: inline-flex !important;
+  visibility: hidden;
+}
+/* 快捷键页（task-spsmf）：搜索那一行贴在顶上（底色同所在的面），滚下去时下面一道线 */
+.sa-keytools {
+  position: sticky;
+  top: -22px;
+  z-index: 2;
+  padding: 10px 0;
+  margin-top: 12px;
+  background: var(--pop);
+}
+.set.set-tab .sa-keytools {
+  background: var(--win);
+}
+/* B 有窗口背景图时设置弹窗是半透明的（settings.css）：贴在顶上的搜索行同样铺半透明加模糊 */
+[data-glass] .set:not(.set-tab) .sa-keytools {
+  background: var(--isle-pop);
+  -webkit-backdrop-filter: var(--isle-blur);
+  backdrop-filter: var(--isle-blur);
+}
+.sa-keytools.stuck {
+  box-shadow: 0 1px 0 var(--line);
+}
+/* 没贴在顶上时不铺底（设计复审：B 有背景图时半透明弹窗上压一整条实白）；贴在顶上时照旧铺底挡住滚上去的行 */
+.sa-keytools:not(.stuck) {
+  background: transparent;
+}
+[data-glass] .set:not(.set-tab) .sa-keytools:not(.stuck) {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+/* 还没有键：「没有」两个字淡（框照样 72 × 28，一列对齐） */
+.sa-keyb.none {
+  color: var(--t3);
+}
+/* 撞了键：键位先写刚按的，待定的样子 */
+.sa-keyb.pend {
+  border-color: var(--acc-ring);
+  box-shadow: 0 0 0 3px var(--acc-soft);
+}
+/* 撞键那一句：这一行的第二行，12 --t3，后面「换给这一条 · 两个对调」 */
+.sa-kclash {
+  font-size: 12px;
+  color: var(--t3);
+}
+.sa-kclash .sa-lnk {
+  margin-left: 6px;
+}
+.sa-kclash .sep {
+  margin-left: 6px;
+  color: var(--t3);
 }

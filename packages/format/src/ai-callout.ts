@@ -44,6 +44,8 @@ export interface CalloutWords {
   sideHead: string
   sideAnswer: string
   inAnswer(q: string): string
+  /** 讲的是论文外的前置知识的那一问：小标题末尾的标签（ai-note.ts 的 splitPreTag 两种都认） */
+  preTag: string
 }
 
 export const ZH_CALLOUT_WORDS: CalloutWords = {
@@ -62,6 +64,7 @@ export const ZH_CALLOUT_WORDS: CalloutWords = {
   sideHead: '旁支：',
   sideAnswer: '旁支回答',
   inAnswer: (q) => `在「${q}」的回答里`,
+  preTag: '#前置知识',
 }
 
 export const EN_CALLOUT_WORDS: CalloutWords = {
@@ -80,6 +83,7 @@ export const EN_CALLOUT_WORDS: CalloutWords = {
   sideHead: 'Side: ',
   sideAnswer: 'Side answer',
   inAnswer: (q) => `in the answer to “${q}”`,
+  preTag: '#prerequisite',
 }
 
 let words = ZH_CALLOUT_WORDS

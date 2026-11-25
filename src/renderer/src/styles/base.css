@@ -208,3 +208,12 @@ svg.lucide { flex: none; }
 .platform-win ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 22%, transparent); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
 .platform-win ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--text) 36%, transparent); }
 .platform-win ::-webkit-scrollbar-track, .platform-win ::-webkit-scrollbar-corner { background: transparent; }
+
+/* 后台解析的状态条（BgParse.tsx）：一行小字，暂停 / 继续一颗小按钮 */
+.bg-parse { display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 24px; padding: 0 2px 0 8px; border-radius: var(--r-sm); background: var(--fill-1); color: var(--text-2); font-size: var(--fs-sm); white-space: nowrap; flex: 0 1 auto; overflow: hidden; -webkit-app-region: no-drag; }
+.bg-parse .bp-btn.icon { width: 20px; padding: 0; }
+.bg-parse .bp-l { overflow: hidden; text-overflow: ellipsis; }
+.bg-parse .bp-btn { height: 20px; padding: 0 6px; color: var(--text); }
+.bg-parse[data-paused='manual'] { color: var(--text-3); }
+.sb-foot .bg-parse { align-self: stretch; }
+.sb-foot .bg-parse .bp-l { flex: 1; }

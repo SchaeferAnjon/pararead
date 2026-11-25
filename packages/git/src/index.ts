@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process'
 import { readFile, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { atomicWrite, finishTemp, RECYCLE_DIR, TEMP_GLOB, tempPathFor, unlinkTemp } from '@cn/atomic'
+import { APP_DIRS, APP_FILE_NAMES, isHiddenPath } from '@cn/format/app-files'
 
 export class GitError extends Error {
   constructor(
@@ -18,6 +19,8 @@ export class GitError extends Error {
 
 export interface GitOptions {
   timeoutMs?: number
+  /** 再加的环境变量（同步途中 rebase --continue 不开编辑器：GIT_EDITOR=true） */
+  env?: Record<string, string>
 }
 
 /**
@@ -39,7 +42,7 @@ export function git(cwd: string, args: string[], opts: GitOptions = {}, tries = 
       execFile(
         'git',
         ['-c', 'core.quotepath=false', ...args],
-        { cwd, timeout: ms, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, PATH: gitPath(), GIT_TERMINAL_PROMPT: '0' } },
+        { cwd, timeout: ms, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, PATH: gitPath(), GIT_TERMINAL_PROMPT: '0', ...opts.env } },
         (err, stdout, stderr) => {
           clearTimeout(deadline)
           if (err) reject(new GitError(`git ${args[0]} 失败：${stderr.trim() || err.message}`, args, stderr))
@@ -104,6 +107,44 @@ export function ensureExcludes(dir: string): Promise<void> {
 export async function currentBranch(dir: string): Promise<string> {
   return (await git(dir, ['symbolic-ref', '--short', 'HEAD'])).trim()
 }
+
+/** 库里正在进行的 rebase / merge（同步时 pull --rebase 那一会儿 HEAD 是分离的，symbolic-ref 会失败） */
+export type GitBusy = 'rebase' | 'merge' | null
+
+/**
+ * 分支和是否正在 rebase / merge：git:state 用，同步途中也不抛错。
+ * rebase 时 HEAD 分离，分支名从 rebase-merge/head-name（或 rebase-apply/head-name）读；别的分离 HEAD（检出了某个提交）分支是 null。
+ */
+export async function headState(dir: string): Promise<{ branch: string | null; busy: GitBusy }> {
+  const [rebaseMerge, rebaseApply, mergeHead] = (await git(dir, ['rev-parse', '--git-path', 'rebase-merge', '--git-path', 'rebase-apply', '--git-path', 'MERGE_HEAD'])).trim().split('\n').map((p) => (isAbsolute(p) ? p : join(dir, p)))
+  const rebaseDir = (await exists(rebaseMerge!)) ? rebaseMerge! : (await exists(rebaseApply!)) ? rebaseApply! : null
+  const busy: GitBusy = rebaseDir ? 'rebase' : (await exists(mergeHead!)) ? 'merge' : null
+  let branch: string | null
+  try {
+    branch = (await git(dir, ['symbolic-ref', '-q', '--short', 'HEAD'])).trim()
+  } catch (e) {
+    // -q：HEAD 分离时不说话、退出码 1；别的失败照样抛
+    if (!(e instanceof GitError) || e.stderr.trim()) throw e
+    branch = null
+  }
+  if (branch === null && rebaseDir) {
+    const name = await readFile(join(rebaseDir, 'head-name'), 'utf8').catch((e: NodeJS.ErrnoException) => {
+      if (e.code === 'ENOENT') return ''
+      throw e
+    })
+    branch = name.trim().replace(/^refs\/heads\//, '') || null
+  }
+  return { branch, busy }
+}
+
+const exists = (p: string) =>
+  stat(p).then(
+    () => true,
+    (e: NodeJS.ErrnoException) => {
+      if (e.code === 'ENOENT') return false
+      throw e
+    },
+  )
 
 export interface FileStatus {
   path: string
@@ -201,19 +242,28 @@ export interface Commit {
 }
 
 /**
- * 软件自己的文件（CN-116）：`.canvas-notes/` 下面的全部（首页、左栏、置顶、对话、字幕）、画布今日的 `.canvas-tasks/`（提醒记录）、
- * 各文件夹的 `.首页.json` 和首页模板 `.首页模板.json`、空文件夹的 `.gitkeep`。提交说明不写它们，历史默认不列
+ * 软件自己的文件（CN-116）：清单在 @cn/format 的 app-files.ts（扫库也用这一份）。`.canvas-notes/` 下面的全部（首页、左栏、置顶、对话、字幕）、
+ * 画布今日的 `.canvas-tasks/`、画布订阅的 `.canvas-feeds/`、各文件夹的 `.首页.json` 和 `.首页模板.json`、空文件夹的 `.gitkeep`，
+ * 还有一切 . 开头的（.DS_Store、.obsidian/……）。提交说明不写它们，历史默认不列。白板笔迹（附件/<白板>/笔迹.ink）是用户写的，不算
  */
 export function isInternalPath(p: string): boolean {
-  const base = p.slice(p.lastIndexOf('/') + 1)
-  return p === '.canvas-notes' || p.startsWith('.canvas-notes/') || p === '.canvas-tasks' || p.startsWith('.canvas-tasks/') || base === '.首页.json' || base === '.首页模板.json' || base === '.gitkeep'
+  return isHiddenPath(p)
 }
 
 /**
  * 读历史时排除的路径（git 自己跳过只动了这些的提交，「最近100次」全是用户的改动；混着的提交只列用户的文件）。
- * `.gitkeep` 不排除：新建文件夹那次只有它，历史里列成「课程/ecpc/」一行
+ * `.gitkeep` 不排除：新建文件夹那次只有它，历史里列成「课程/ecpc/」一行。别的 . 开头的：. 开头的文件夹里的全部、.DS_Store
+ * （pathspec 写不出「. 开头但不是 .gitkeep」，.gitignore 这种单个的隐藏文件照列）
  */
-export const HIDE_INTERNAL = ['.', ':(exclude).canvas-notes', ':(exclude).canvas-tasks', ':(exclude)*/.首页.json', ':(exclude)*/.首页模板.json']
+export const HIDE_INTERNAL = [
+  '.',
+  ...APP_DIRS.map((d) => `:(exclude)${d}`),
+  ...APP_FILE_NAMES.filter((n) => n !== '.gitkeep').map((n) => `:(exclude)*/${n}`),
+  ':(exclude).*/*',
+  ':(exclude)*/.*/*',
+  ':(exclude).DS_Store',
+  ':(exclude)*/.DS_Store',
+]
 
 /** rev：从哪次提交往前数（不给是 HEAD）；paths：只看这些路径（git 的 pathspec，比如 HIDE_INTERNAL） */
 export async function log(dir: string, limit = 50, rev?: string, paths?: readonly string[]): Promise<Commit[]> {
@@ -340,6 +390,7 @@ function internalSay(f: FileStatus): string {
   if (p.startsWith('.canvas-notes/对话/')) return '存了AI对话'
   if (p.startsWith('.canvas-notes/字幕/')) return '存了字幕'
   if (p.startsWith('.canvas-tasks/提醒/')) return '记了提醒'
+  if (p.startsWith('.canvas-feeds/')) return '同步了订阅和已读'
   return '改了软件设置'
 }
 
@@ -397,11 +448,46 @@ export type SyncResult =
 
 export type PullResult = { kind: 'no-remote' } | { kind: 'conflict'; message: string } | { kind: 'ok'; committed: string | null; pulled: number }
 
+export interface PullOptions extends GitOptions {
+  /**
+   * rebase 停在冲突上时，按行合不了的文件再试一次（白板笔迹 .ink 按编号合，@cn/format 的 mergeVaultText）：
+   * base 是共同的祖先，remote 是远程那边（rebase 里的 ours），local 是本机正在重放的那次提交（theirs）；返回合好的字，合不了给 null
+   */
+  resolve?(path: string, base: string, remote: string, local: string): string | null
+}
+
+/** rebase 停在冲突上：每个冲突的文件交给 resolve，全合好了就接着 rebase；有一个合不了返回 false（调用的去 abort） */
+async function resolveRebase(dir: string, resolve: NonNullable<PullOptions['resolve']>, timeoutMs: number): Promise<boolean> {
+  // 一次 rebase 重放好几次提交，每一次都可能停一下；有限次数，不会一直转
+  for (let round = 0; round < 200; round++) {
+    const files = (await git(dir, ['diff', '--name-only', '--diff-filter=U', '-z'])).split('\0').filter(Boolean)
+    if (!files.length) return false
+    const merged: [string, string][] = []
+    for (const f of files) {
+      const stage = (n: number) => git(dir, ['show', `:${n}:${f}`]).catch((e) => (e instanceof GitError ? null : Promise.reject(e)))
+      const [base, remote, local] = await Promise.all([stage(1), stage(2), stage(3)])
+      const text = remote !== null && local !== null ? resolve(f, base ?? '', remote, local) : null
+      if (text === null) return false
+      merged.push([f, text])
+    }
+    for (const [f, text] of merged) await atomicWrite(join(dir, f), text)
+    await git(dir, ['add', '--', ...files])
+    try {
+      await git(dir, ['rebase', '--continue'], { timeoutMs, env: { GIT_EDITOR: 'true' } })
+      return true
+    } catch (e) {
+      if (!(e instanceof GitError)) throw e
+      // 下一次提交又停在冲突上：接着合
+    }
+  }
+  return false
+}
+
 /**
  * 拉：先把本地改动提交，再取远程、rebase 到远程上（不推）。打开库时先拉一次（设置 › Git和同步）用它，同步也是先走这一步。
- * rebase 冲突时 abort，库回到拉之前，交给用户处理。
+ * rebase 冲突时先交给 resolve（给了的话）合；还是合不了就 abort，库回到拉之前，交给用户处理。
  */
-export async function pull(dir: string, opts: GitOptions = {}): Promise<PullResult & { remote?: string; branch?: string; remoteHead?: string | null; before?: string | null }> {
+export async function pull(dir: string, opts: PullOptions = {}): Promise<PullResult & { remote?: string; branch?: string; remoteHead?: string | null; before?: string | null }> {
   if (!(await hasRemote(dir))) return { kind: 'no-remote' }
   const timeoutMs = opts.timeoutMs ?? 60_000
   const st = await status(dir)
@@ -420,8 +506,10 @@ export async function pull(dir: string, opts: GitOptions = {}): Promise<PullResu
         await git(dir, ['rebase', `${remote}/${branch}`], { timeoutMs })
       } catch (e) {
         if (!(e instanceof GitError)) throw e
-        await git(dir, ['rebase', '--abort']).catch(() => undefined)
-        return { kind: 'conflict', message: e.message }
+        if (!(opts.resolve && (await resolveRebase(dir, opts.resolve, timeoutMs)))) {
+          await git(dir, ['rebase', '--abort']).catch(() => undefined)
+          return { kind: 'conflict', message: e.message }
+        }
       }
     }
   }
@@ -430,9 +518,9 @@ export async function pull(dir: string, opts: GitOptions = {}): Promise<PullResu
 
 /**
  * 同步：先把本地改动提交，再 pull --rebase，再 push。
- * rebase 冲突时 abort，库回到同步前，交给用户处理。
+ * rebase 冲突时先交给 resolve 合（pull 那里）；合不了 abort，库回到同步前，交给用户处理。
  */
-export async function sync(dir: string, opts: GitOptions = {}): Promise<SyncResult> {
+export async function sync(dir: string, opts: PullOptions = {}): Promise<SyncResult> {
   const p = await pull(dir, opts)
   if (p.kind !== 'ok') return p.kind === 'no-remote' ? { kind: 'no-remote' } : { kind: 'conflict', message: p.message }
   const { remote, branch, remoteHead, before } = p as Required<typeof p>

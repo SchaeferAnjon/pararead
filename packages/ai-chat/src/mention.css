@@ -1,0 +1,176 @@
+/*
+ * @ 点名的文档（mention.tsx，@文档胶囊）：输入框里的胶囊、发出去那条里的胶囊、@ 候选。
+ * 胶囊：1px --line 细边、圆角 4（DESIGN.md 圆角档：小色块），字 13 同对话正文，12 的图标 --t2，字 --t1；底色在输入框里（--card 底）是 --fill2，发出去那条的气泡本身是 --fill2，那里用 --card。
+ */
+
+/* ---------- 输入框里：textarea 和两层叠在同一格 ---------- */
+.aiin .aiin-tx {
+  position: relative;
+}
+/* 有胶囊时 textarea 的字透明（下面那层画），光标照旧 */
+.aiin .aiin-tx.ment textarea {
+  position: relative;
+  z-index: 1;
+  color: transparent;
+  caret-color: var(--t1, var(--text));
+}
+.aiin .mlayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.aiin .mlayer.hit {
+  z-index: 2;
+}
+/* 和 textarea 一样排：13/1.5、内边距 2、保留空白和换行、长词折断 */
+.aiin .mlayer > div {
+  box-sizing: border-box;
+  padding: 2px;
+  font: 13px/1.5 var(--sans, var(--font-sans));
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-indent: 0;
+  text-transform: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  color: var(--t1, var(--text));
+}
+.aiin .mlayer.hit > div {
+  color: transparent;
+}
+/* 组字的那一段：textarea 自己的下划线看不见了，这里补一道 */
+.aiin .mlayer .ime {
+  text-decoration: underline;
+  text-decoration-color: var(--t3, var(--text-3));
+  text-underline-offset: 3px;
+}
+/* 胶囊：字的位置不动（不加内边距），底和细边画在 ::before 上、左右各外扩 2（空格约 3.6 宽，和两边的字留一道缝），图标盖在 @ 上。
+   底色 --fill2 + 1px --line：输入框是 --card 底，--fill 太淡看不出是一颗（设计复审） */
+.aiin .mchip-in {
+  position: relative;
+  z-index: 0;
+}
+.aiin .mchip-in::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -1px -2px;
+  border-radius: 4px;
+  background: var(--fill2, var(--fill-2));
+  box-shadow: inset 0 0 0 1px var(--line, var(--stroke-soft));
+}
+.aiin .mchip-in .at {
+  color: transparent;
+}
+.aiin .mchip-in .ic {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  color: var(--t2, var(--text-2));
+}
+.aiin .mlayer .mhit {
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+/* ---------- 发出去的那条里 ---------- */
+.mchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  height: 20px;
+  padding: 0 6px 0 4px;
+  margin: 0 1px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--card, var(--bg-elevated));
+  box-shadow: 0 0 0 1px var(--line, var(--stroke-soft));
+  color: var(--t1, var(--text));
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  vertical-align: 1px;
+  cursor: pointer;
+}
+.mchip > svg,
+.mchip > .codicon {
+  flex: none;
+  color: var(--t2, var(--text-2));
+}
+.mchip .mt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mchip:hover {
+  box-shadow: 0 0 0 1px var(--acc-ring, var(--accent-ring));
+}
+
+/* ---------- @ 候选：贴在输入框上面（同 / 菜单的弹层） ---------- */
+.aiin-at {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--pop, var(--bg-popover));
+  -webkit-backdrop-filter: var(--blur, var(--blur-pop));
+  backdrop-filter: var(--blur, var(--blur-pop));
+  box-shadow: var(--shadow-up, var(--shadow-pop));
+}
+.aiin-at button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+  color: var(--t1, var(--text));
+  font: inherit;
+}
+.aiin-at button.on {
+  background: var(--fill2, var(--fill-2));
+}
+.aiin-at .ib {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--fill, var(--fill-1));
+  color: var(--t2, var(--text-2));
+}
+.aiin-at .tx {
+  min-width: 0;
+}
+.aiin-at b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+}
+.aiin-at .tx > span {
+  display: block;
+  font-size: 12px;
+  color: var(--t2, var(--text-2));
+}
+.aiin-at .keys {
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  color: var(--t3, var(--text-3));
+}

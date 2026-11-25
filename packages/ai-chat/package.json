@@ -11,6 +11,8 @@
     "./context": "./src/context.tsx",
     "./composer": "./src/composer.tsx",
     "./materials": "./src/materials.ts",
+    "./mentions": "./src/mentions.ts",
+    "./mention": "./src/mention.tsx",
     "./paste": "./src/paste.ts",
     "./ai-picker": "./src/ai-picker.tsx",
     "./engine-logo": "./src/engine-logo.tsx",
@@ -26,6 +28,7 @@
     "./side/marks": "./src/side/marks.ts",
     "./use-dismiss": "./src/use-dismiss.ts",
     "./chat-jump": "./src/chat-jump.ts",
+    "./follow": "./src/follow.tsx",
     "./side/side-inline.css": "./src/side/side-inline.css",
     "./assets/*": "./src/assets/*"
   },

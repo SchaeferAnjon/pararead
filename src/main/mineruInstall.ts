@@ -4,7 +4,7 @@
 //   3. 装 mineru（带 PyTorch，约 1.3 GB）        4. 下载版面、公式、表格、OCR 模型（约 850 MB，放在 ~/.mineru/models）
 // 中途退出下次接着来（uv 和模型下载都有缓存、能续）。装好后把设置里的 mineruPath 指过去。
 import { spawn, type ChildProcess } from 'node:child_process'
-import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -14,6 +14,11 @@ import { dirKb, IS_WIN, killTree, venvExe } from './platform'
 
 // 这个版本在本机实测过（4.0.12）；升级要先测重排的输出格式
 const MINERU_VERSION = '4.0.12'
+// mineru 4.0.12 只要求 docvortex>=0.5.16,<1，装的时候拿到最新的。docvortex 0.6.8 起 prepare_span_texts 的参数从
+// private_range（一对）改成 private_ranges（一串对），mineru 4.0.12 照旧传一对，精细解析每篇跑完一两分钟后报
+// 「argument 'private_ranges': 'int' object is not an instance of 'tuple'」（2026-11-24 用户那台装到 0.6.22；0.6.7 能跑）
+export const PINS: Record<string, string> = { docvortex: '0.6.7' }
+const pinArgs = (): string[] => Object.entries(PINS).map(([n, v]) => `${n}==${v}`)
 const PYTHON = '3.12'
 
 export type MineruPhase = 'none' | 'uv' | 'python' | 'packages' | 'models' | 'done' | 'failed'
@@ -32,6 +37,7 @@ export class MineruInstaller {
   private child: ChildProcess | null = null
   private abort: AbortController | null = null
   private running = false
+  private quiet = false // 修环境时不报进度（界面不该以为又在装）
 
   constructor(
     private dir: string,
@@ -58,6 +64,7 @@ export class MineruInstaller {
   }
 
   private step(phase: keyof typeof SPAN, frac: number, line?: string): void {
+    if (this.quiet) return
     const [a, b] = SPAN[phase]
     this.set({ phase, percent: Math.round(a + (b - a) * Math.min(1, Math.max(0, frac))), ...(line === undefined ? {} : { line }) })
   }
@@ -65,6 +72,31 @@ export class MineruInstaller {
   stop(): void {
     this.abort?.abort()
     if (this.child) killTree(this.child)
+  }
+
+  /** 以前装的环境里钉住的包版本不对（比如 docvortex 被装成 0.6.8 以后）：换成钉住的版本，几 MB；换过返回 true，不用换返回 false */
+  async repair(): Promise<boolean> {
+    if (this.running || this.state.phase !== 'done') return false
+    const venv = join(this.dir, 'venv')
+    const wrong = Object.entries(PINS).filter(([n, v]) => {
+      const have = venvPkgVersion(venv, n)
+      return have !== null && have !== v
+    })
+    if (!wrong.length) return false
+    this.running = true
+    this.quiet = true
+    try {
+      const uv = await this.getUv()
+      const env = { ...process.env, UV_CACHE_DIR: join(this.dir, 'cache'), UV_PYTHON_INSTALL_DIR: join(this.dir, 'python'), PYTHONUNBUFFERED: '1' }
+      await this.run(uv, ['pip', 'install', '--python', venvExe(venv, 'python'), ...pinArgs()], env, 'packages')
+      rmSync(join(this.dir, 'cache'), { recursive: true, force: true })
+      return true
+    } finally {
+      this.quiet = false
+      this.running = false
+      this.child = null
+      this.abort = null
+    }
   }
 
   async start(): Promise<void> {
@@ -81,7 +113,7 @@ export class MineruInstaller {
       if (!existsSync(venvExe(venv, 'python'))) await this.run(uv, ['venv', '--python', PYTHON, venv], env, 'python')
       this.step('packages', 0, t('下载 MinerU 和 PyTorch（约 1.3 GB）'))
       // uv 和模型下载的输出里没有总进度：按下载目录长到多大来算（包先进 uv 的缓存，约 1.3 GB；模型约 850 MB）
-      await this.run(uv, ['pip', 'install', '--python', venvExe(venv, 'python'), `mineru==${MINERU_VERSION}`], env, 'packages', { dir: join(this.dir, 'cache'), expectKb: 1_300_000 })
+      await this.run(uv, ['pip', 'install', '--python', venvExe(venv, 'python'), `mineru==${MINERU_VERSION}`, ...pinArgs()], env, 'packages', { dir: join(this.dir, 'cache'), expectKb: 1_300_000 })
       this.step('models', 0, t('下载识别模型（约 850 MB）'))
       await this.run(this.command(), ['models', 'download', '--tier', 'basic'], env, 'models', { dir: join(homedir(), '.mineru', 'models'), expectKb: 850_000 })
       await this.run(this.command(), ['--version'], env, 'models')
@@ -167,4 +199,18 @@ export class MineruInstaller {
 export function installedMineru(dir: string): string | null {
   const f = join(dir, 'installed.json')
   return existsSync(f) ? ((JSON.parse(readFileSync(f, 'utf8')) as { version: string }).version ?? null) : null
+}
+
+/** 虚拟环境里装的某个包的版本（看 site-packages 里的 <名字>-<版本>.dist-info；没装是 null） */
+export function venvPkgVersion(venv: string, name: string): string | null {
+  const libs = IS_WIN ? [join(venv, 'Lib', 'site-packages')] : existsSync(join(venv, 'lib')) ? readdirSync(join(venv, 'lib')).map((d) => join(venv, 'lib', d, 'site-packages')) : []
+  const re = new RegExp(`^${name.replace(/-/g, '_')}-([^-]+)\\.dist-info$`, 'i')
+  for (const lib of libs) {
+    if (!existsSync(lib)) continue
+    for (const d of readdirSync(lib)) {
+      const m = re.exec(d)
+      if (m) return m[1]
+    }
+  }
+  return null
 }

@@ -8,6 +8,12 @@
   display: flex;
   flex-direction: column;
 }
+/* 对话区永远不横向滚（画布笔记右栏、读 PDF、ParaRead 共用这一层）：没空格的一长串任意处断；
+   真有东西伸出去也只是被切，不能整列被拨到左边去。要横着滚的代码块、宽表格各在自己的框里滚 */
+.msgs-box > .msgs {
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+}
 .msgs-box.toc > .msgs {
   /* 一直显示滚动条（系统设置）时滚动条占了 --sbw（chat-toc.tsx 量的），从内边距里扣掉，字到横线照样 10 */
   padding-right: calc(46px - var(--sbw, 0px));

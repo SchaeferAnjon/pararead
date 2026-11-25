@@ -6,7 +6,7 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { sectionForText, sectionsOf } from '../shared/chunk'
 import { cyrb53 } from '../shared/hash'
-import type { Annotation, ChatMessage, Glance, MenuItem, Settings, StreamEvent, Tier, Ink } from '../shared/types'
+import type { Annotation, BgStatus, ChatMessage, Glance, MenuItem, Paper, Settings, StreamEvent, Tier, Ink } from '../shared/types'
 import {
   addChat,
   createFolder,
@@ -43,7 +43,7 @@ import { claudeStatus, findClaude } from './claudeCode'
 import { Connector, CONNECTOR_PORT } from './connector'
 import { listModels, parseJsonLoose, type ChatMsg, type ContentPart } from './glm'
 import { Library, newId } from './library'
-import { MineruQueue, type MineruProgress } from './mineru'
+import { envFailure, MineruQueue, type MineruProgress, type QueueStatus } from './mineru'
 import { chatSystem, explainMessages, FOLLOWUP_HINT, glanceMessages, selectionTranslateMessages } from './prompts'
 import { mapNote, mapPaper, readScholaread, SCHOLAREAD_DIR } from './scholaread'
 import { providerOf } from '../shared/providers'
@@ -135,27 +135,53 @@ function broadcast(channel: string, payload: unknown): void {
   }
 }
 
+let basicFails = new Set<string>() // 连着失败的精细解析（不同的篇）；成一篇就清空
 const mineru = new MineruQueue({
   command: () => settings.get().mineruPath,
   timeoutMs: 600_000,
   onProgress: (p) => {
     progress.set(p.paperId, p)
     if (p.status === 'running') setReflow(db, p.paperId, p.tier, 'running', { log: p.logLine })
+    if (p.status === 'queued') setReflow(db, p.paperId, p.tier, 'queued', { error: null })
     broadcast('reflow:progress', p)
   },
   onDone: (job) => {
     setReflow(db, job.paperId, job.tier, 'done')
     log(`MinerU ${job.tier} 完成 ${job.paperId}`)
+    if (job.tier === 'basic') {
+      basicFails = new Set()
+      if (settings.get().basicBroken) {
+        settings.set({ basicBroken: null })
+        broadcast('settings:changed', settings.view())
+      }
+    }
     broadcast('reflow:done', { paperId: job.paperId, tier: job.tier })
     broadcast('library:changed', null)
   },
   onFailed: (job, error) => {
     setReflow(db, job.paperId, job.tier, 'failed', { error })
     log(`MinerU ${job.tier} 失败 ${job.paperId}：${error}`)
+    if (job.tier === 'basic' && !/超时/.test(error)) {
+      basicFails.add(job.paperId)
+      // 环境问题（包版本对不上之类）或连着两篇都失败：记住，之后不再每篇白跑一两分钟；设置里能「重试精细解析」
+      if (!settings.get().basicBroken && (envFailure(error) || basicFails.size >= 2)) {
+        settings.set({ basicBroken: { error, at: Date.now() } })
+        log(`精细解析在这台电脑上跑不了，之后不再自动跑：${error}`)
+        for (const j of mineru.dropTier('basic')) setReflow(db, j.paperId, 'basic', 'none', { error: null })
+        broadcast('settings:changed', settings.view())
+      }
+    }
     broadcast('reflow:failed', { paperId: job.paperId, tier: job.tier, error })
     broadcast('library:changed', null)
-  }
+  },
+  onStatus: (st) => broadcast('bg:status', bgStatus(st)),
+  idleMs: Number(process.env.PARAREAD_BG_IDLE_MS) || undefined // 走查用短一点的
 })
+// 状态条要的：带上正在解析的那篇的标题
+function bgStatus(st: QueueStatus): BgStatus {
+  const cur = st.current ? getPaper(db, st.current.paperId) : null
+  return { ...st, title: cur?.title ?? null }
+}
 
 // MinerU 在不在（没装的电脑上由 mineruInstaller 在软件里装）
 const mineruReady = (): boolean => existsSync(settings.get().mineruPath)
@@ -166,12 +192,50 @@ const mineruInstaller = new MineruInstaller(
     settings.set({ mineruPath: command })
     broadcast('settings:changed', settings.view())
     // 装好了：之前只做了简单重排的论文补上快速和精细重排
-    for (const p of listPapers(db)) if (p.kind === 'pdf' && (settings.get().defaultEngine === 'flash' ? p.reflow.flash !== 'done' : p.reflow.basic !== 'done')) enqueueReflow(p.id)
+    for (const p of listPapers(db)) if (p.kind === 'pdf' && wanted(p) && (settings.get().defaultEngine === 'flash' ? p.reflow.flash !== 'done' : p.reflow.basic !== 'done')) enqueueReflow(p.id)
   }
 )
 
-// 默认只用快速时，精细不自动跑（占本机算力一篇 1 到 3 分钟）；在阅读页切到精细时再单独排
-const autoTiers = (): ('flash' | 'basic')[] => (settings.get().defaultEngine === 'flash' ? ['flash'] : ['flash', 'basic'])
+// 默认只用快速时，精细不自动跑（占本机算力一篇 1 到 3 分钟）；在阅读页切到精细时再单独排。
+// 精细在这台电脑上失败过（basicBroken）也不自动跑：每篇都要白跑一两分钟才报错
+const autoTiers = (): ('flash' | 'basic')[] => (settings.get().defaultEngine === 'flash' || settings.get().basicBroken ? ['flash'] : ['flash', 'basic'])
+// 一批补解析时要不要这一篇：画布笔记库里列进来的，默认只解析打开过的（设置 › 重排「连着的库都在后台解析」时全要）
+const wanted = (p: Paper): boolean => !p.cn || p.lastOpened !== null || settings.get().bgParse === 'vault'
+
+// 连着的库都在后台解析：还没解析过的库里的论文排上（打开着的那篇排最前，别的低优先级、用户在操作时暂停）
+function parseVault(): void {
+  if (settings.get().bgParse !== 'vault' || !mineruReady()) return
+  // 照库里的文件名顺序（Emo-01、Emo-02…），和画布笔记里看到的一样
+  const todo = listPapers(db)
+    .filter((p) => p.kind === 'pdf' && p.cn && !p.cn.missing && !p.reflow.ready && p.reflow.flash === 'none' && p.reflow.basic === 'none')
+    .sort((a, b) => a.cn!.path.localeCompare(b.cn!.path, undefined, { numeric: true }))
+  for (const p of todo) {
+    if (library.isScanned(p.id)) updatePaper(db, p.id, { scanned: true })
+    enqueueReflow(p.id)
+  }
+}
+
+// 自己装的 MinerU 环境里钉住的包版本不对（docvortex 0.6.8 起和 mineru 4.0.12 对不上）：换掉；换过以后精细解析重新自动跑，以前因此失败的补上
+function repairMineru(): Promise<boolean> {
+  if (settings.get().mineruPath !== mineruInstaller.command()) return Promise.resolve(false)
+  return mineruInstaller
+    .repair()
+    .then((fixed) => {
+      if (!fixed) return false
+      log('MinerU 环境里的 docvortex 换成了钉住的版本')
+      if (settings.get().basicBroken) {
+        settings.set({ basicBroken: null })
+        broadcast('settings:changed', settings.view())
+      }
+      if (settings.get().defaultEngine === 'basic')
+        for (const p of listPapers(db)) if (p.kind === 'pdf' && wanted(p) && p.reflow.basic === 'failed' && envFailure(p.reflow.error ?? '')) enqueueReflow(p.id, ['basic'])
+      return true
+    })
+    .catch((e: Error) => {
+      log(`修 MinerU 环境没成：${e.message}`)
+      return false
+    })
+}
 function enqueueReflow(paperId: string, tiers: ('flash' | 'basic')[] = autoTiers(), args?: string[]): void {
   // MinerU 还没装好：先用简单重排（只取文字），马上能读；装好后自动补精细的
   if (!mineruReady()) {
@@ -217,6 +281,10 @@ function resumeReflow(): void {
   for (const r of rows) {
     const p = getPaper(db, r.paper_id)
     if (!p) continue
+    if (r.tier === 'basic' && settings.get().basicBroken) {
+      setReflow(db, r.paper_id, 'basic', 'none', { error: null })
+      continue
+    }
     mineru.enqueue({ paperId: r.paper_id, tier: r.tier, pdf: library.pdfPath(r.paper_id), out: library.reflowPath(r.paper_id, r.tier), args: p.scanned ? ['--ocr-mode', 'ocr'] : undefined })
   }
 }
@@ -270,6 +338,7 @@ const ctx: Ctx = {
   log,
   enqueueReflow,
   afterImport,
+  vaultListed: () => parseVault(),
   mainWindow: () => mainWin,
   streamer: null as unknown as Streamer,
   cn: null as unknown as Ctx['cn']
@@ -406,6 +475,23 @@ function registerIpc(): void {
     if (p.reflow.flash !== 'done') tiers.push('flash')
     if (p.reflow.basic !== 'done') tiers.push('basic')
     enqueueReflow(id, tiers.length ? tiers : ['flash', 'basic'])
+  })
+  // 后台解析：界面报用户在操作（滚动、打字、点）、开着哪篇；状态条的暂停 / 继续；设置里「重试精细解析」
+  ipcMain.on('bg:activity', () => mineru.activity())
+  ipcMain.handle('bg:open', (_e, id: unknown) => mineru.setOpen(typeof id === 'string' ? id : null))
+  ipcMain.handle('bg:pause', (_e, paused: unknown) => mineru.setPaused(paused === true))
+  ipcMain.handle('bg:status', () => bgStatus(mineru.status()))
+  ipcMain.handle('reflow:retryBasic', async () => {
+    await repairMineru()
+    basicFails = new Set()
+    settings.set({ basicBroken: null })
+    broadcast('settings:changed', settings.view())
+    // 先试最近打开的那篇：成了以后别的篇照常自动跑
+    const p = listPapers(db)
+      .filter((x) => x.kind === 'pdf' && !x.scanned && x.reflow.basic !== 'done' && x.lastOpened !== null)
+      .sort((a, b) => (b.lastOpened ?? 0) - (a.lastOpened ?? 0))[0]
+    if (p && mineruReady()) enqueueReflow(p.id, ['basic'])
+    return p?.id ?? null
   })
   ipcMain.handle('reflow:simple', async (_e, id: string) => {
     await library.runSimpleReflow(id)
@@ -577,6 +663,7 @@ function registerIpc(): void {
     if (patch.provider && providerOf(patch.provider).local) void findClaude().catch((e: Error) => log(`找 claude 命令出错：${e.message}`))
     const engineWas = settings.get().defaultEngine
     settings.set(patch)
+    if (patch.bgParse === 'vault') parseVault()
     if (patch.theme) nativeTheme.themeSource = patch.theme
     // 问答框底下「谁来答」那一格跟着设置里那家、它的思考档、Key 变
     if (patch.provider || patch.textModel || patch.thinkLevels || patch.chatPick || patch.omni !== undefined) broadcast('chat:enginesChanged', null)
@@ -584,7 +671,7 @@ function registerIpc(): void {
     if (patch.defaultEngine && patch.defaultEngine !== engineWas) {
       for (const p of listPapers(db)) {
         if (p.kind !== 'pdf') continue
-        if (patch.defaultEngine === 'basic' && mineruReady() && p.reflow.basic === 'none') enqueueReflow(p.id, ['basic'])
+        if (patch.defaultEngine === 'basic' && mineruReady() && !settings.get().basicBroken && wanted(p) && p.reflow.basic === 'none') enqueueReflow(p.id, ['basic'])
         broadcast('reflow:done', { paperId: p.id, tier: library.bestTier(p.id) })
       }
     }
@@ -1149,6 +1236,7 @@ void app.whenReady().then(() => {
   buildMenu()
   createMainWindow()
   resumeReflow()
+  void repairMineru()
   void purgeDeleted()
   if (IS_WIN) openArgs(process.argv)
   // 画布笔记联动：老数据迁一次（撤回过就不再迁），勾上的文件夹里新放的 PDF 列进来；回到窗口时再看一眼

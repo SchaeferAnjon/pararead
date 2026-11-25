@@ -132,6 +132,14 @@ describe('补包：这一轮 AI 改完的一篇', () => {
     expect(wrapInsert('一段。\n\n两段。', BY, true)).toBe('> [!ai] AI 写的 · Claude Code · Opus 5.5\n> 一段。\n\n> [!ai] AI 写的 · Claude Code · Opus 5.5\n> 两段。')
   })
 
+  it('普通文档正以白板看法开着（board 传 true）：AI 新加的两段各包一块、白板上各成一张卡；文档看法照旧连着包成一块', () => {
+    const before = '# 11.24 组会准备\n\n## 上周做了什么\n\n读完了残差网络那篇。\n'
+    const after = before + '\n## 这周要讲的\n\n残差连接为什么能训得深。\n\n和 C72 的对比：层数翻倍以后准确率还在涨。\n'
+    const one = '> [!ai] AI 写的 · Claude Code · Opus 5.5\n'
+    expect(wrapNewBlocks(before, after, BY, undefined, true).text).toBe(before + `\n## 这周要讲的\n\n${one}> 残差连接为什么能训得深。\n\n${one}> 和 C72 的对比：层数翻倍以后准确率还在涨。\n`)
+    expect(wrapNewBlocks(before, after, BY).text).toBe(before + `\n## 这周要讲的\n\n${one}> 残差连接为什么能训得深。\n>\n> 和 C72 的对比：层数翻倍以后准确率还在涨。\n`)
+  })
+
   it('img2 那种：末尾新加「## 自测题」、编了号的十道题、「### 答案」和答案：标题留外面，题和答案各包一块', () => {
     const before = '# 学习笔记：动手学深度学习\n\n教材：《动手学深度学习》，PyTorch 版。\n'
     const qs = Array.from({ length: 10 }, (_, i) => `${i + 1}. 第 ${i + 1} 题？`).join('\n')

@@ -12,6 +12,7 @@ import type {
   MenuItem,
   Tier,
   Glance,
+  BgStatus,
   Paper,
   ReflowDoc,
   ScholareadPreview,
@@ -159,6 +160,14 @@ export interface Api {
   onToast(cb: (text: string) => void): Off
   getReflow(id: string): Promise<ReflowDoc | null>
   reflowProgress(id: string): Promise<ReflowProgress | null>
+  /** 设置 › 重排「重试精细解析」：清掉「精细在这台失败过」，先拿最近打开的那篇试；回那篇的 id */
+  retryBasic(): Promise<string | null>
+  /** 后台解析：用户在操作（节流后报）、开着哪篇、暂停 / 继续、状态 */
+  bgActivity(): void
+  bgOpen(paperId: string | null): Promise<void>
+  bgPause(paused: boolean): Promise<void>
+  bgStatus(): Promise<BgStatus>
+  onBgStatus(cb: (s: BgStatus) => void): Off
   retryReflow(id: string): Promise<void>
   simpleReflow(id: string): Promise<void>
   translate(paperId: string, texts: string[], priority: boolean): Promise<Record<string, string>>

@@ -2,7 +2,7 @@
 // 文案走 ParaRead 的九种语言 t()（组件里写 {name}，这里按名字填）；图标照 ICON_NAMES 对到 lucide；样子用 ParaRead 自己的 tokens.css；
 // 引擎、全能开关、贴图、拷贝走 window.api。贴的图存在主进程的数据目录 pasted/ 里，界面上按名字记一份 data URL（没有自定义协议）。
 import { renderToStaticMarkup } from 'react-dom/server'
-import { ArrowLeftRight, ArrowUp, Bookmark, Check, ChevronDown, ChevronRight, CircleAlert, Copy, Cpu, Ellipsis, FileDown, GitCompare, Image as ImageIcon, LoaderCircle, MessageSquare, MessagesSquare, Pencil, Play, Plus, Quote, RefreshCw, Reply, Settings, Sparkles, Square, SquareTerminal, StickyNote, Trash2, Undo2, X, type LucideIcon } from 'lucide-react'
+import { ArrowDown, ArrowLeftRight, ArrowUp, Bookmark, Check, ChevronDown, ChevronRight, CircleAlert, CircleHelp, Copy, Cpu, Ellipsis, FileCode, FileDown, FileText, FileType, GitCompare, Globe, Image as ImageIcon, LayoutDashboard, LoaderCircle, MessageSquare, MessagesSquare, Pencil, Play, Plus, Quote, RefreshCw, Reply, Settings, Sparkles, Square, SquareTerminal, StickyNote, Trash2, Undo2, X, type LucideIcon } from 'lucide-react'
 import { setAiChatHost } from '@cn/ai-chat/context'
 import type { AiErrorView, ChatHost, UiHost } from '@cn/ai-chat/host'
 import { splitFollowups } from '@shared/followups'
@@ -15,6 +15,7 @@ import { Markdown } from './Markdown'
 /** 共用组件用到的图标名（Codicons 的叫法，@cn/ai-chat 的 ICON_NAMES）和回答下面那排交进去的几个 → lucide */
 const ICONS: Record<string, LucideIcon> = {
   add: Plus,
+  'arrow-down': ArrowDown,
   'arrow-swap': ArrowLeftRight,
   'file-media': ImageIcon,
   'arrow-up': ArrowUp,
@@ -31,9 +32,16 @@ const ICONS: Record<string, LucideIcon> = {
   ellipsis: Ellipsis,
   error: CircleAlert,
   'git-compare': GitCompare,
+  // @ 点名的文档（胶囊、候选）：文档、白板、PDF、网页、HTML
+  'file-text': FileText,
+  layout: LayoutDashboard,
+  'file-pdf': FileType,
+  globe: Globe,
+  'file-code': FileCode,
   loading: LoaderCircle,
   note: StickyNote,
   play: Play,
+  question: CircleHelp,
   'primitive-square': Square,
   quote: Quote,
   refresh: RefreshCw,

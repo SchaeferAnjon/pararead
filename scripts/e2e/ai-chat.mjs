@@ -51,8 +51,9 @@ try {
   await sleep(500)
   const [r] = await ev((p) => window.api.importPdfs([p]), PAPER)
   const id = r.paper.id
-  for (let i = 0; i < 90 && !(await ev((x) => window.api.getPaper(x), id)).reflow.ready; i++) await sleep(1000)
+  // 0.2.2 起没打开的论文按后台的速度解析：先打开（打开的那篇排最前、离开后台 QoS），再等重排好
   await win.dblclick(`[data-paper="${id}"]`)
+  for (let i = 0; i < 180 && !(await ev((x) => window.api.getPaper(x), id)).reflow.ready; i++) await sleep(1000)
   await sleep(2500)
   await shot('pr-after-empty')
 

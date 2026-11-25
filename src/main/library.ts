@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
+import { type FormulaLatex, type MdFormulaImage, withFormulas } from '@cn/format'
 import { chunkMarkdown, markdownForContext } from '../shared/chunk'
 import type { Paper, ReflowDoc, Tier } from '../shared/types'
 import { getPaper, setReflow, updatePaper, type DB, type PaperPatch } from './db'
@@ -313,10 +314,36 @@ export class Library {
     return doc
   }
 
-  // AI 用的全文：重排后的 Markdown，没有就用 pdf.js 抽的文字
-  contextText(id: string, limit = 60000): { text: string; truncated: boolean; ratio: number } {
+  /** 公式图转好的 LaTeX（formulas.ts 存的，按图的指纹；一篇一份，换了重排档也对得上） */
+  formulasPath(id: string): string {
+    return join(this.d.dataDir, 'reflow', id, 'formulas.json')
+  }
+
+  formulaLatex(id: string): FormulaLatex {
+    try {
+      return JSON.parse(readFileSync(this.formulasPath(id), 'utf8')) as FormulaLatex
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return {}
+      throw e
+    }
+  }
+
+  /** AI 用的重排 Markdown：公式图换成转好的 LaTeX，还没转的写「[公式图 F3]」（pending 是那几张）；没重排过是 null */
+  aiMarkdown(id: string): { md: string; pending: MdFormulaImage[]; done: number } | null {
+    const md = this.reflowMarkdown(id)
+    return md === null ? null : withFormulas(md, this.formulaLatex(id))
+  }
+
+  /** 重排的 Markdown 原样（最好的那一档）；没重排过是 null */
+  reflowMarkdown(id: string): string | null {
     const tier = this.bestTier(id)
-    if (tier) return markdownForContext(readFileSync(this.reflowPath(id, tier), 'utf8'), limit)
+    return tier ? readFileSync(this.reflowPath(id, tier), 'utf8') : null
+  }
+
+  // AI 用的全文：重排后的 Markdown（公式图换成 LaTeX），没有就用 pdf.js 抽的文字
+  contextText(id: string, limit = 60000): { text: string; truncated: boolean; ratio: number } {
+    const md = this.aiMarkdown(id)
+    if (md) return markdownForContext(md.md, limit)
     const pages = this.pageTexts(id)
     return markdownForContext(pages.map((t_, i) => `[第 ${i + 1} 页]\n${t_}`).join('\n\n'), limit)
   }

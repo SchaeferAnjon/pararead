@@ -1,0 +1,399 @@
+[
+  {
+    "request": {
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "ses_decd80669ffevwcOmD465ZoSdT",
+        "toolCall": {
+          "toolCallId": "call_00_dEXwEFCzRATEmCOqDy7S3154",
+          "title": "ls -1",
+          "kind": "execute",
+          "status": "pending",
+          "locations": [],
+          "rawInput": {
+            "command": "ls -1"
+          }
+        },
+        "options": [
+          {
+            "optionId": "once",
+            "kind": "allow_once",
+            "name": "Allow once"
+          },
+          {
+            "optionId": "always",
+            "kind": "allow_always",
+            "name": "Always allow"
+          },
+          {
+            "optionId": "reject",
+            "kind": "reject_once",
+            "name": "Reject"
+          }
+        ]
+      }
+    },
+    "known": {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "call_00_dEXwEFCzRATEmCOqDy7S3154",
+      "status": "in_progress",
+      "kind": "execute",
+      "title": "ls -1",
+      "locations": [
+        {
+          "path": "$CWD"
+        }
+      ],
+      "rawInput": {
+        "command": "ls -1",
+        "cwd": "$CWD"
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "ses_decd80669ffevwcOmD465ZoSdT",
+        "toolCall": {
+          "toolCallId": "call_00_Aq59yt5CE4jxj9Lv5cy76280",
+          "title": "$CWD/note.md",
+          "kind": "edit",
+          "status": "pending",
+          "locations": [
+            {
+              "path": "$CWD/note.md"
+            }
+          ],
+          "rawInput": {
+            "filepath": "$CWD/note.md",
+            "diff": "Index: $CWD/note.md\n===================================================================\n--- $CWD/note.md\n+++ $CWD/note.md\n@@ -0,0 +1,1 @@\n+hi\n"
+          },
+          "content": [
+            {
+              "type": "diff",
+              "path": "$CWD/note.md",
+              "oldText": "",
+              "newText": "hi\n"
+            }
+          ]
+        },
+        "options": [
+          {
+            "optionId": "once",
+            "kind": "allow_once",
+            "name": "Allow once"
+          },
+          {
+            "optionId": "always",
+            "kind": "allow_always",
+            "name": "Always allow"
+          },
+          {
+            "optionId": "reject",
+            "kind": "reject_once",
+            "name": "Reject"
+          }
+        ]
+      }
+    },
+    "known": {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "call_00_Aq59yt5CE4jxj9Lv5cy76280",
+      "status": "in_progress",
+      "kind": "edit",
+      "title": "write",
+      "locations": [
+        {
+          "path": "$CWD/note.md"
+        }
+      ],
+      "rawInput": {
+        "filePath": "$CWD/note.md",
+        "content": "hi\n"
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "ses_decd80669ffevwcOmD465ZoSdT",
+        "toolCall": {
+          "toolCallId": "call_00_ET_Lzcxpo5BhajKQWwaC6hr5618",
+          "title": "$CWD/a.txt",
+          "kind": "edit",
+          "status": "pending",
+          "locations": [
+            {
+              "path": "$CWD/a.txt"
+            }
+          ],
+          "rawInput": {
+            "filepath": "$CWD/a.txt",
+            "diff": "Index: $CWD/a.txt\n===================================================================\n--- $CWD/a.txt\n+++ $CWD/a.txt\n@@ -1,1 +1,1 @@\n-a\n+b\n"
+          },
+          "content": [
+            {
+              "type": "diff",
+              "path": "$CWD/a.txt",
+              "oldText": "a\n",
+              "newText": "b\n"
+            }
+          ]
+        },
+        "options": [
+          {
+            "optionId": "once",
+            "kind": "allow_once",
+            "name": "Allow once"
+          },
+          {
+            "optionId": "always",
+            "kind": "allow_always",
+            "name": "Always allow"
+          },
+          {
+            "optionId": "reject",
+            "kind": "reject_once",
+            "name": "Reject"
+          }
+        ]
+      }
+    },
+    "known": {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "call_00_ET_Lzcxpo5BhajKQWwaC6hr5618",
+      "status": "in_progress",
+      "kind": "edit",
+      "title": "edit",
+      "locations": [
+        {
+          "path": "$CWD/a.txt"
+        }
+      ],
+      "rawInput": {
+        "filePath": "$CWD/a.txt",
+        "oldString": "a",
+        "newString": "b"
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "ses_decd80669ffevwcOmD465ZoSdT",
+        "toolCall": {
+          "toolCallId": "call_00_ET_Bht8UGFwlZlRRHDxNXeg6343",
+          "title": "rm junk.txt",
+          "kind": "execute",
+          "status": "pending",
+          "locations": [],
+          "rawInput": {
+            "command": "rm junk.txt"
+          }
+        },
+        "options": [
+          {
+            "optionId": "once",
+            "kind": "allow_once",
+            "name": "Allow once"
+          },
+          {
+            "optionId": "always",
+            "kind": "allow_always",
+            "name": "Always allow"
+          },
+          {
+            "optionId": "reject",
+            "kind": "reject_once",
+            "name": "Reject"
+          }
+        ]
+      }
+    },
+    "known": {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "call_00_ET_Bht8UGFwlZlRRHDxNXeg6343",
+      "status": "in_progress",
+      "kind": "execute",
+      "title": "rm junk.txt",
+      "locations": [
+        {
+          "path": "$CWD"
+        }
+      ],
+      "rawInput": {
+        "command": "rm junk.txt",
+        "cwd": "$CWD"
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "ses_decd80669ffevwcOmD465ZoSdT",
+        "toolCall": {
+          "toolCallId": "call_00_ET_Do69TUZcJBhTZ86LNPZ77595",
+          "title": "export CI=true DEBIAN_FRONTEND=noninteractive GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never HOMEBREW_NO_AUTO_UPDATE=1 GIT_EDITOR=: EDITOR=: VISUAL='' GIT_SEQUENCE_EDITOR=: GIT_MERGE_AUTOEDIT=no GIT_PAGER=cat PAGER=cat npm_config_yes=true PIP_NO_INPUT=1 YARN_ENABLE_IMMUTABLE_INSTALLS=false; git push origin main",
+          "kind": "execute",
+          "status": "pending",
+          "locations": [],
+          "rawInput": {
+            "command": "export CI=true DEBIAN_FRONTEND=noninteractive GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never HOMEBREW_NO_AUTO_UPDATE=1 GIT_EDITOR=: EDITOR=: VISUAL='' GIT_SEQUENCE_EDITOR=: GIT_MERGE_AUTOEDIT=no GIT_PAGER=cat PAGER=cat npm_config_yes=true PIP_NO_INPUT=1 YARN_ENABLE_IMMUTABLE_INSTALLS=false; git push origin main"
+          }
+        },
+        "options": [
+          {
+            "optionId": "once",
+            "kind": "allow_once",
+            "name": "Allow once"
+          },
+          {
+            "optionId": "always",
+            "kind": "allow_always",
+            "name": "Always allow"
+          },
+          {
+            "optionId": "reject",
+            "kind": "reject_once",
+            "name": "Reject"
+          }
+        ]
+      }
+    },
+    "known": {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "call_00_ET_Do69TUZcJBhTZ86LNPZ77595",
+      "status": "in_progress",
+      "kind": "execute",
+      "title": "git push origin main",
+      "locations": [
+        {
+          "path": "$CWD"
+        }
+      ],
+      "rawInput": {
+        "command": "git push origin main",
+        "cwd": "$CWD"
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "ses_decd5789effemoXSym6fagusPq",
+        "toolCall": {
+          "toolCallId": "call_00_ET_jQYWVyy5ErV6Puws8LA10925",
+          "title": "$OUT/x.txt",
+          "kind": "edit",
+          "status": "pending",
+          "locations": [
+            {
+              "path": "$OUT/x.txt"
+            }
+          ],
+          "rawInput": {
+            "filepath": "$OUT/x.txt",
+            "diff": "Index: $OUT/x.txt\n===================================================================\n--- $OUT/x.txt\n+++ $OUT/x.txt\n@@ -0,0 +1,1 @@\n+hi\n"
+          },
+          "content": [
+            {
+              "type": "diff",
+              "path": "$OUT/x.txt",
+              "oldText": "",
+              "newText": "hi\n"
+            }
+          ]
+        },
+        "options": [
+          {
+            "optionId": "once",
+            "kind": "allow_once",
+            "name": "Allow once"
+          },
+          {
+            "optionId": "always",
+            "kind": "allow_always",
+            "name": "Always allow"
+          },
+          {
+            "optionId": "reject",
+            "kind": "reject_once",
+            "name": "Reject"
+          }
+        ]
+      }
+    },
+    "known": {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "call_00_ET_jQYWVyy5ErV6Puws8LA10925",
+      "status": "in_progress",
+      "kind": "edit",
+      "title": "write",
+      "locations": [
+        {
+          "path": "$OUT/x.txt"
+        }
+      ],
+      "rawInput": {
+        "filePath": "$OUT/x.txt",
+        "content": "hi\n"
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "session/request_permission",
+      "params": {
+        "sessionId": "ses_decd5789effemoXSym6fagusPq",
+        "toolCall": {
+          "toolCallId": "call_00_ET_qNhWBusZz8P8EvAt29xa1379",
+          "title": "cp a.txt $OUT/y.txt",
+          "kind": "execute",
+          "status": "pending",
+          "locations": [],
+          "rawInput": {
+            "command": "cp a.txt $OUT/y.txt"
+          }
+        },
+        "options": [
+          {
+            "optionId": "once",
+            "kind": "allow_once",
+            "name": "Allow once"
+          },
+          {
+            "optionId": "always",
+            "kind": "allow_always",
+            "name": "Always allow"
+          },
+          {
+            "optionId": "reject",
+            "kind": "reject_once",
+            "name": "Reject"
+          }
+        ]
+      }
+    },
+    "known": {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "call_00_ET_qNhWBusZz8P8EvAt29xa1379",
+      "status": "in_progress",
+      "kind": "execute",
+      "title": "cp a.txt $OUT/y.txt",
+      "locations": [
+        {
+          "path": "$CWD"
+        }
+      ],
+      "rawInput": {
+        "command": "cp a.txt $OUT/y.txt",
+        "cwd": "$CWD"
+      }
+    }
+  }
+]

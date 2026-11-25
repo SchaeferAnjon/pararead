@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { atomicAppend, atomicCopy, atomicWrite, atomicWriteSync, ChangedOutsideError, isTempName, readStamped, RECYCLE_DIR, sweepTemps, TEMP_RE, tempPathFor, writeQueued } from '../src'
+import { atomicAppend, atomicCopy, atomicCopySync, atomicWrite, atomicWriteSync, ChangedOutsideError, isTempName, readStamped, RECYCLE_DIR, sweepTemps, TEMP_RE, tempPathFor, writeQueued } from '../src'
 
 let dir: string
 beforeEach(() => {
@@ -132,6 +132,73 @@ describe('原子写', () => {
     expect(Buffer.compare(readFileSync(dest), readFileSync(src))).toBe(0)
     await expect(atomicCopy(src, dest, { exclusive: true })).rejects.toMatchObject({ code: 'EEXIST' })
     expect(temps(join(dir, '附件'))).toEqual([])
+  })
+
+  // 用户 0.5.11：微信存下来的 PDF 是 0444，拖进课程报「EACCES: permission denied, open '…/.alr170025.pdf.cn-…tmp'」（拖进只读文件）
+  it('源文件只读：拷进来的新文件本人可写（0644，其他位照留），临时文件不留；同步版一样', async () => {
+    const src = join(dir, '微信.pdf')
+    writeFileSync(src, '%PDF-1.4 只读\n')
+    chmodSync(src, 0o444)
+    const a = join(dir, '课程', 'a.pdf')
+    await atomicCopy(src, a, { mkdir: true })
+    expect(readFileSync(a, 'utf8')).toBe('%PDF-1.4 只读\n')
+    expect(statSync(a).mode & 0o777).toBe(0o644)
+    const b = join(dir, '课程', 'b.pdf')
+    atomicCopySync(src, b)
+    expect(statSync(b).mode & 0o777).toBe(0o644)
+    // 源文件 0400：只加本人写，组和别人照旧没有
+    chmodSync(src, 0o400)
+    const c = join(dir, '课程', 'c.pdf')
+    await atomicCopy(src, c)
+    expect(statSync(c).mode & 0o777).toBe(0o600)
+    // 源文件 0755：照留
+    chmodSync(src, 0o755)
+    const d = join(dir, '课程', 'd.pdf')
+    await atomicCopy(src, d)
+    expect(statSync(d).mode & 0o777).toBe(0o755)
+    // 给了 mode 用 mode
+    chmodSync(src, 0o444)
+    const e = join(dir, '课程', 'e.pdf')
+    await atomicCopy(src, e, { mode: 0o640 })
+    expect(statSync(e).mode & 0o777).toBe(0o640)
+    expect(temps(join(dir, '课程'))).toEqual([])
+  })
+
+  it('只读源盖已有的文件：沿用目标原来的权限；目标本身只读时不盖、报 EACCES、临时文件不留', async () => {
+    const src = join(dir, 'src.pdf')
+    writeFileSync(src, '新\n')
+    chmodSync(src, 0o444)
+    const dest = join(dir, 'dest.pdf')
+    writeFileSync(dest, '旧\n')
+    chmodSync(dest, 0o640)
+    await atomicCopy(src, dest)
+    expect(readFileSync(dest, 'utf8')).toBe('新\n')
+    expect(statSync(dest).mode & 0o777).toBe(0o640)
+    writeFileSync(dest, '旧\n')
+    chmodSync(dest, 0o600)
+    atomicCopySync(src, dest)
+    expect(statSync(dest).mode & 0o777).toBe(0o600)
+    const locked = join(dir, 'locked.pdf')
+    writeFileSync(locked, '锁着\n')
+    chmodSync(locked, 0o444)
+    await expect(atomicCopy(src, locked)).rejects.toMatchObject({ code: 'EACCES', path: locked })
+    expect(() => atomicCopySync(src, locked)).toThrow(/EACCES/)
+    expect(readFileSync(locked, 'utf8')).toBe('锁着\n')
+    expect(statSync(locked).mode & 0o777).toBe(0o444)
+    expect(temps()).toEqual([])
+  })
+
+  it('拷的时候出错：临时文件一定拿掉，报错带完整路径和调用栈', async () => {
+    const err = await atomicCopy(join(dir, '没有.pdf'), join(dir, 'x.pdf')).catch((e: Error) => e)
+    expect(err).toMatchObject({ code: 'ENOENT' })
+    expect((err as Error).message).toContain(join(dir, '没有.pdf'))
+    expect((err as Error).stack).toMatch(/\n\s+at /)
+    // 盖的是文件夹：拷进临时文件以后、换上去时出错
+    mkdirSync(join(dir, '夹'))
+    writeFileSync(join(dir, 'ok.pdf'), 'x')
+    chmodSync(join(dir, 'ok.pdf'), 0o444)
+    await expect(atomicCopy(join(dir, 'ok.pdf'), join(dir, '夹'))).rejects.toMatchObject({ code: 'EISDIR' })
+    expect(temps()).toEqual([])
   })
 
   it('往末尾加一段：读出、接上、原子写回', async () => {

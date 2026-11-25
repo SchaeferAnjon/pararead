@@ -628,3 +628,69 @@ describe('混排的一节（7b、7c）', () => {
     expect(splitDoc(plain).columns.map((c) => c.title)).toEqual(['读书', '别的'])
   })
 })
+
+describe('配对笔记白板：拖进来的卡落在问答一节里（r147）', () => {
+  const PAIR = `---
+来源: "[[alr.pdf]]"
+---
+
+# alr 笔记
+
+## 第 1 页 · Impact of a simultaneous reduction
+
+### gz
+
+> Almost one-third of global fish stocks are currently overfished
+> —— [第 1 页](alr.pdf#page=1&rect=0.071,0.652,0.415,0.17)
+
+> [!ai] AI 回答 · Claude Code · [回到 AI 对话](canvas-notes://chat?key=a&msg=1&th=t1)
+> 这段讲的是鱼被捞得太狠了。
+
+#### 旁支：翻译成德语
+
+> fully fished：正好捞到 MSY。
+> —— 在「用高中生能听懂的方式讲解Almost one-third of global fish stocks are currently overfished … 」的回答里
+
+> [!ai] 旁支回答 · Claude Code · [回到 AI 对话](canvas-notes://chat?key=a&msg=2&th=t1)
+> - **fully fished**: genau bis zum MSY befischt.
+
+<!-- card id=d1 x=383 y=2075 -->
+![[过度捕鱼]]
+
+## 标题1
+`
+  it('位置行和嵌入是空白处的一张嵌入卡，不当那一问补的字；那一问照旧一问一列', () => {
+    const b = splitDoc(PAIR)
+    const ask = b.columns.find((c) => c.ask)!
+    expect(ask.cards.map((u) => u.ask?.part)).toEqual(['top', 'qa', 'side'])
+    expect(ask.cards.some((u) => u.text.includes('<!-- card'))).toBe(false)
+    expect(b.placed).toHaveLength(1)
+    expect(b.placed[0]).toMatchObject({ kind: 'embed', text: '![[过度捕鱼]]', place: { id: 'd1', x: 383, y: 2075 } })
+  })
+  it('拖它：文件只改位置那一行；再拖一篇进来（加在文末）也是空白处的卡', () => {
+    const b = splitDoc(PAIR)
+    const moved = placeUnit(PAIR, b.placed[0]!, 640, 120)
+    expect(moved).toBe(PAIR.replace('<!-- card id=d1 x=383 y=2075 -->', '<!-- card id=d1 x=640 y=120 -->'))
+    // 只有问答一节、它在文末：收件箱拖进来的加在这一节的字后面
+    const tail = PAIR.slice(0, PAIR.indexOf('## 标题1')).trimEnd() + '\n'
+    const two = appendPlaced(tail, '![[另一篇]]', 100, 200)
+    const b2 = splitDoc(two)
+    expect(b2.placed.map((u) => [u.text, u.place!.id, u.place!.x])).toEqual([['![[过度捕鱼]]', 'd1', 383], ['![[另一篇]]', 'd2', 100]])
+    expect(b2.columns.find((c) => c.ask)!.cards.map((u) => u.ask?.part)).toEqual(['top', 'qa', 'side'])
+  })
+  it('补的字和拖进来的卡挨着：补的字照旧跟着那一问，卡单独出来', () => {
+    const t = PAIR.replace('<!-- card id=d1', '我补一句。\n\n<!-- card id=d1')
+    const ask = splitDoc(t).columns.find((c) => c.ask)!
+    expect(ask.cards.map((u) => [u.ask?.part, u.text])).toEqual([
+      ['top', expect.any(String)],
+      ['qa', expect.any(String)],
+      ['side', expect.any(String)],
+      ['more', '我补一句。'],
+    ])
+    expect(splitDoc(t).placed.map((u) => u.text)).toEqual(['![[过度捕鱼]]'])
+  })
+  it('问答列里的一张不能单独挪到空白处（不往那一问中间插位置行）', () => {
+    const ask = splitDoc(PAIR).columns.find((c) => c.ask)!
+    for (const u of ask.cards) expect(() => placeUnit(PAIR, u, 10, 10)).toThrow(/问过 AI/)
+  })
+})

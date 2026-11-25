@@ -17,6 +17,7 @@ const ALLOWED: Record<string, { calls: string[]; why: string }> = {
   'apps/notes/src/main/feynman.ts': { calls: ['appendFileSync'], why: '测试用的 CN_FAKE_FEYNMAN_LOG' },
   'apps/notes/src/main/when-ai.ts': { calls: ['appendFileSync'], why: '测试用的 CN_FAKE_WHEN_LOG' },
   'apps/notes/src/main/plugins/translate/cli.ts': { calls: ['appendFileSync'], why: '测试用的 CN_TR_FAKE_PICK_LOG' },
+  'apps/today/src/main/ai-chat.ts': { calls: ['appendFileSync'], why: '测试用的 CT_AI_FAKE_LOG（假 AI 收到几张图、多大）' },
   'apps/notes/src/main/video/log.ts': { calls: ['appendFileSync'], why: '排查日志 CN_VIDEO_LOG' },
   'apps/notes/src/main/activity.ts': { calls: ['appendFile'], why: '动态记录一行行追加（设置目录的 jsonl）' },
   'apps/notes/src/main/dream-main.ts': { calls: ['appendFile'], why: '梦游评测集一行行追加（设置目录 dream-eval 的 jsonl，只存这台 Mac）' },

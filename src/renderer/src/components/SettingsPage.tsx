@@ -774,6 +774,26 @@ function Reflow({ s, setS, set }: P & { setS: (v: SettingsView) => void }) {
           </div>
         </div>
       </FSec>
+      <FSec title={t('后台解析')} desc={t('解析时降低优先级、一次一篇；你在滚动、打字时先停下，停手 10 秒再继续。主窗口左下角和阅读页标题栏能暂停。')}>
+        <Row label={t('画布笔记库里的论文')} hint={s.bgParse === 'vault' ? t('连着的库里勾上的文件夹，没解析过的都排上') : t('打开哪篇解析哪篇，没打开的不占电脑')}>
+          <Segmented
+            className="sm"
+            value={s.bgParse}
+            onChange={(v) => set({ bgParse: v })}
+            options={[
+              { value: 'opened' as const, label: t('只解析我打开的') },
+              { value: 'vault' as const, label: t('连着的库都在后台解析') }
+            ]}
+          />
+        </Row>
+        {s.basicBroken && (
+          <Row label={t('精细解析失败过')} hint={t('之后只自动跑快速解析，不再每篇白跑一两分钟。原因：{0}', s.basicBroken.error)}>
+            <button className="btn sm" onClick={() => void api.retryBasic()}>
+              {t('重试精细解析')}
+            </button>
+          </Row>
+        )}
+      </FSec>
     </>
   )
 }

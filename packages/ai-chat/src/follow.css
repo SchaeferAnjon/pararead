@@ -1,0 +1,24 @@
+/* 「↓ 新回答」（follow.tsx）：贴着对话那一格的底边居中，样子照 ParaRead 原来那颗 */
+.msgs-box > .new-below {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  height: 24px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: var(--r-sm, 6px);
+  background: var(--bg-elevated, #fff);
+  box-shadow: var(--shadow-pop, 0 4px 14px rgba(0, 0, 0, 0.14));
+  color: var(--text-2, #555);
+  font-size: var(--fs-sm, 12px);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.msgs-box > .new-below:hover {
+  color: var(--text, #222);
+}

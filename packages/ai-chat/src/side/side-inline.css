@@ -272,90 +272,19 @@
   white-space: nowrap;
 }
 
-/* ---------- 回答里选中一句：小框（300 宽、圆角 12、内边距 6；上面一格 32 高的问题，分隔线，下面两行 30 高） ---------- */
-/* 家族 ui.css 的 .menu 有 1px 边、弹出时缩放 0.98 的动画：小样的框没有，和输入框底行的菜单（.ai-menu）一样直接出来 */
-.menu.askbox {
-  position: fixed;
-  z-index: 60;
-  display: block;
-  width: 300px;
-  min-width: 0;
-  max-width: none;
-  padding: 6px;
-  border: 0;
-  border-radius: 12px;
-  animation: none;
-  background: var(--pop, var(--bg-popover));
-  -webkit-backdrop-filter: var(--blur, var(--blur-pop));
-  backdrop-filter: var(--blur, var(--blur-pop));
-  box-shadow: var(--shadow-up, var(--shadow-pop));
-  font-size: 13px;
-  color: var(--t1, var(--text));
-  user-select: none;
+/* ---------- 回答里选中一句：浮在选区上方的横向小条（r129，AskBox.tsx）：样子是 composer.css 的 .capbar（34 高黑色胶囊、.ai-cap 定位），这里只补它自己的 ---------- */
+/* 自己的命令那一组：按钮直接排在条上；名字最宽 9 个字，长了省略号（悬停 title 看全文） */
+.askbar .mine {
+  display: contents;
 }
-.askbox textarea {
-  display: block;
-  width: 100%;
-  height: 32px;
-  min-height: 32px;
-  padding: 6px 8px;
-  border: 0;
-  outline: 0;
-  resize: none;
-  border-radius: 6px;
-  background: var(--fill, var(--fill-1));
-  font: 13px/1.5 var(--sans, var(--font-sans));
-  color: var(--t1, var(--text));
-}
-.askbox textarea::placeholder {
-  color: var(--t3, var(--text-3));
-}
-.askbox .sep {
-  height: 1px;
-  margin: 4px 6px;
-  background: var(--line, var(--stroke-soft));
-}
-.askbox .it {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  height: 30px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  font-size: 13px;
-  color: var(--t1, var(--text));
-  text-align: left;
-  white-space: nowrap;
-}
-.askbox .it:hover {
-  background: var(--fill, var(--fill-1));
-}
-.askbox .it .ck {
-  flex: none;
-  width: 14px;
-  display: grid;
-  place-items: center;
-}
-.askbox .it .r {
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--t3, var(--text-3));
-}
-/* 「问这句」下面自己的 AI 命令（最多露 4 条，「更多…」就地展开，展开了最多 8 行高、再多在里面滚），最下面「调整…」灰一档 */
-.askbox .mine {
-  max-height: 240px;
-  overflow-y: auto;
-}
-.askbox .it .nm {
-  min-width: 0;
+.askbar .nm {
+  max-width: 9em;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.askbox .it.sub {
-  color: var(--t2, var(--text-2));
+/* 「⋯」是最后一颗（没有 ×）：菜单右边和它对齐 */
+.askbar .capmenu {
+  right: 4px;
 }
 /* ---------- 问过的那句：--acc 点线（1.5 粗、4 一个点，在字下面约 4），后面一个带数字的小标（17 高、圆角 5、--acc-soft 底 --acc-t 字 11px 500；开着的那条 --acc-bg 底 --acc-on 字） ---------- */
 /* 点线画成底边上重复的点，不用 text-decoration：那条线进不了行内公式（KaTeX 是 inline-block），一句里有公式时会断成几截 */

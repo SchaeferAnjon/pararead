@@ -272,7 +272,7 @@ async function checkGemini(exe: string): Promise<CheckResult> {
   const help = await runProc(exe, ['--help'], { timeoutMs: 30_000 })
   if (help.error) return { problems, note: t('跑不起来：{error}', { error: help.error }), partial: true }
   const text = help.stdout + help.stderr
-  const flags = new Set([...geminiArgs(true, 'p'), ...geminiArgs(false, 'p')].filter((a) => a.startsWith('--')))
+  const flags = new Set([...geminiArgs('omni', 'p'), ...geminiArgs('locked', 'p')].filter((a) => a.startsWith('--')))
   for (const f of flags) if (!inHelp(text, f)) add(problems, { kind: 'flag', what: f, scope: 'all' })
   const modeLine = text.split('\n').find((l) => inHelp(l, '--approval-mode')) ?? ''
   if (inHelp(text, '--approval-mode')) for (const v of ['yolo', 'default']) if (!modeLine.includes(`"${v}"`) && !modeLine.includes(` ${v} `) && !modeLine.includes(`${v} (`)) add(problems, { kind: 'value', what: `--approval-mode ${v}`, scope: 'all' })
@@ -290,8 +290,8 @@ async function checkOpencode(exe: string): Promise<CheckResult> {
   const shake = await checkAcp(exe, ['acp', '--cwd', tmpdir()], problems)
   let note = shake
   // 全能模式关着时给的权限：它算出来的 build 这个 agent 里，这几样真的是拒
-  const locked = JSON.parse(opencodeConfig(false)) as { permission: Record<string, string> }
-  const built = await runProc(exe, ['debug', 'agent', 'build'], { timeoutMs: 30_000, env: cliEnv({ OPENCODE_CONFIG_CONTENT: opencodeConfig(false) }) })
+  const locked = JSON.parse(opencodeConfig('locked')) as { permission: Record<string, string> }
+  const built = await runProc(exe, ['debug', 'agent', 'build'], { timeoutMs: 30_000, env: cliEnv({ OPENCODE_CONFIG_CONTENT: opencodeConfig('locked') }) })
   try {
     const rules = (JSON.parse(built.stdout) as { permission?: { permission?: string; action?: string }[] }).permission ?? []
     for (const key of Object.keys(locked.permission)) if (!rules.some((r) => r.permission === key && r.action === 'deny')) add(problems, { kind: 'feature', what: key, scope: 'chat' })

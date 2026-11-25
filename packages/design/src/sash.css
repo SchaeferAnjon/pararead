@@ -1,0 +1,45 @@
+/* 分隔条（sash.tsx 的 Sash，className="sash"）：手柄 6 宽，悬停和拖着时中间一条 2px --line2，同画布笔记左栏、右边几栏的缝。
+   放在哪、骑在哪条线上宿主自己给（A 骑在 1px 的线上，B 就是岛和岛之间那道缝，露壁纸不画线） */
+.sash {
+  position: relative;
+  z-index: 6;
+  flex: none;
+  width: 6px;
+  cursor: col-resize;
+  -webkit-app-region: no-drag;
+}
+.sash.row {
+  width: auto;
+  height: 6px;
+  cursor: row-resize;
+}
+.sash:hover::after,
+.sash.on::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+  background: var(--line2);
+  pointer-events: none;
+}
+.sash.row:hover::after,
+.sash.row.on::after {
+  top: calc(50% - 1px);
+  bottom: auto;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 2px;
+}
+/* 拖着的时候整页都是这个光标、不选字 */
+body.resizing,
+body.resizing * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+body.resizing.resizing-row,
+body.resizing.resizing-row * {
+  cursor: row-resize !important;
+}

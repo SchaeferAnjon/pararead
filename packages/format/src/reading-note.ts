@@ -70,7 +70,7 @@
 import { aiCallout, calloutWords, parseAiCalloutHead, splitAiBody } from './ai-callout'
 import { encodePath, formatPdfAnchor, parsePdfAnchor, type Rect } from './pdf-link'
 import { AI_KEY, setProp } from './props'
-import { askSectionsOf } from './ai-note'
+import { askSectionsOf, splitPreTag, withPreTag } from './ai-note'
 
 export interface Figure {
   path: string
@@ -96,6 +96,8 @@ export interface AskTurn {
   mats?: AskMat[]
   /** 新写法（ai-note.ts）记的一问：哪段对话的哪条回答（AI 块头上「回到 AI 对话」那个链接） */
   ref?: { key: string; msg: number }
+  /** 讲的是论文外的前置知识：问题第一行末尾的 #前置知识（新写法在小标题末尾） */
+  pre?: true
 }
 
 /** 一条旁支：在回答里选中的那一句，和在旁支里问的几问 */
@@ -499,9 +501,9 @@ export function withDerived(s: AskSection): AskSection {
 }
 
 /** 一问的提示块头：「> [!question] 第一行」，后面几行接着「> 」 */
-function calloutHead(kind: 'question' | 'side', q: string): string[] {
+function calloutHead(kind: 'question' | 'side', q: string, pre?: boolean): string[] {
   const [first = '', ...rest] = q.split('\n')
-  return [`> [!${kind}] ${first}`, ...rest.map((l) => `> ${l}`)]
+  return [`> [!${kind}] ${pre ? withPreTag(first) : first}`, ...rest.map((l) => `> ${l}`)]
 }
 
 function renderDoc(s: AskSection, note: string): string {
@@ -530,11 +532,11 @@ function renderDoc(s: AskSection, note: string): string {
     return q
   }
   for (const qa of s.qas ?? []) {
-    out.push('', calloutHead('question', ask(qa)).join('\n'))
+    out.push('', calloutHead('question', ask(qa), qa.pre).join('\n'))
     if (qa.a.trim()) out.push('', qa.a.trim())
     for (const side of qa.sides) {
       side.turns.forEach((t, i) => {
-        const lines = calloutHead('side', ask(t))
+        const lines = calloutHead('side', ask(t), t.pre)
         if (i === 0) lines.push(`> > ${oneLine(side.quote)}`)
         if (t.a.trim()) lines.push('>', quote(t.a))
         out.push('', lines.join('\n'))
@@ -634,12 +636,13 @@ function parseDoc(lines: string[], head: RegExpExecArray, note: string): AskSect
     const body: string[] = []
     i++
     while (i < lines.length && /^>/.test(lines[i]!)) body.push(lines[i++]!)
+    const tag = c[1] === 'recap' ? null : splitPreTag(c[2]!)
     if (c[1] === 'question') {
-      cur = { q: [c[2]!.trim(), ...body.map((b) => b.replace(/^>\s?/, '').trim())].filter(Boolean).join('\n'), a: '', sides: [] }
+      cur = { q: [tag!.text.trim(), ...body.map((b) => b.replace(/^>\s?/, '').trim())].filter(Boolean).join('\n'), a: '', sides: [], ...(tag!.pre ? { pre: true as const } : {}) }
       qas.push(cur)
       ans = []
     } else if (c[1] === 'side') {
-      const q = [c[2]!.trim()]
+      const q = [tag!.text.trim()]
       const quoteLines: string[] = []
       const a: string[] = []
       let sep = false
@@ -652,7 +655,7 @@ function parseDoc(lines: string[], head: RegExpExecArray, note: string): AskSect
           else q.push(b.replace(/^>\s?/, '').trim())
         }
       }
-      const turn: AskTurn = { q: q.filter(Boolean).join('\n'), a: trimLines(a) }
+      const turn: AskTurn = { q: q.filter(Boolean).join('\n'), a: trimLines(a), ...(tag!.pre ? { pre: true as const } : {}) }
       if (!cur) {
         cur = { q: '', a: '', sides: [] }
         qas.push(cur)

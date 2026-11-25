@@ -1,0 +1,19 @@
+{
+  "name": "@cn/pdf-view",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "读 PDF 一页怎么画（看得到才画、换比例先拉旧图、停手再按新比例重画、文字层只建一次）：画布笔记的 PdfTab、ParaRead 的 PdfView 共用。不引 Electron，pdf.js 由宿主传进来",
+  "license": "GPL-3.0-or-later",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "pdfjs-dist": "^6.4.299",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "pdfjs-dist": "6.4.299"
+  }
+}

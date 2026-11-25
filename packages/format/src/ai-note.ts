@@ -25,6 +25,10 @@
  * - 只往后加：每答完一问加一次，不重写；撤回只拿掉那一问的标题到 AI 块末尾那几行（用户在后面自己补的字留着）。
  * - 旧写法（cn:thread 注释、完整对话链接那种，reading-note.ts）不转；同一处再问时新问答用新写法接在旧那段后面（AskPlace.after）。
  * - 读回来：parseReadingNote 把这种一节按「那一处」（th，没有时按来源链接）收成 AskSection（doc: true），读的地方不用各改。
+ * - 前置知识（2026-11-24，偏好「前置知识就地加标签」）：AI 答的是论文外的基础知识（大 O、自注意力的一般原理……）的那一问，
+ *   小标题末尾一个标签 `### 这个 O 是怎么算的 #前置知识`（英文库 `#prerequisite`，两种都认）。由论文某处引出的照旧记在那一页那一问；
+ *   不挂在任何一处的（没框没选、没认出页的）进笔记末尾「## 前置知识」一节（PREREQ）。标签是字，打开再保存一字不变，
+ *   旧写法（reading-note.ts，ParaRead 写的那种）问题那一行末尾同一个标签，也认。
  */
 import { chatLink, parseChatLink } from './ai-block'
 import { aiCallout, calloutWords, EN_CALLOUT_WORDS, parseAiCalloutHead, ZH_CALLOUT_WORDS } from './ai-callout'
@@ -55,6 +59,8 @@ export interface NoteAsk {
   src?: { label: string; href: string }
   /** 引用进来的几段（①②） */
   mats?: AskMat[]
+  /** 讲的是论文外的前置知识（小标题末尾的 #前置知识） */
+  pre?: true
 }
 
 /** 一问记在哪一节 */
@@ -83,6 +89,19 @@ export interface AskUnit {
 }
 
 const oneLine = (s: string) => s.replace(/\s*\n+\s*/g, ' ').trim()
+
+/** 前置知识的标签（写的时候照库语言，读的时候两种都认） */
+const PRE_TAGS = [ZH_CALLOUT_WORDS.preTag, EN_CALLOUT_WORDS.preTag]
+const PRE_END = new RegExp(`\\s*(?:${PRE_TAGS.join('|')})\\s*$`)
+
+/** 一行末尾的前置知识标签拿下来：剩下的字、有没有 */
+export function splitPreTag(line: string): { text: string; pre: boolean } {
+  const m = PRE_END.exec(line)
+  return m ? { text: line.slice(0, m.index), pre: true } : { text: line, pre: false }
+}
+
+/** 一行末尾加上前置知识的标签 */
+export const withPreTag = (line: string) => `${line} ${calloutWords().preTag}`
 const alt = (s: string) => oneLine(s).replace(/[[\]]/g, '')
 const quoteLines = (s: string) =>
   s
@@ -115,7 +134,8 @@ export function renderAsk(a: NoteAsk, note: string): string {
   const w = calloutWords()
   const [first = '', ...more] = cleanQuestion(a.q).split('\n')
   const head = oneLine(first) || (a.crop ? CROP_CAPS[0]! : '…')
-  const out = [a.side ? `#### ${w.sideHead}${head}` : `### ${head}`]
+  const title = a.pre ? withPreTag(head) : head
+  const out = [a.side ? `#### ${w.sideHead}${title}` : `### ${title}`]
   if (more.length) out.push('', more.join('\n'))
   if (a.crop) out.push('', `![${alt(a.crop.caption ?? CROP_CAPS[0]!)}${a.crop.w ? `|${Math.round(a.crop.w)}` : ''}](${linkFrom(note, a.crop.path)})`)
   const src = a.src ? `${DASH}[${alt(a.src.label) || '↩'}](${a.src.href})` : ''
@@ -196,7 +216,8 @@ export function askUnits(md: string, note: string): AskUnit[] {
     while (last + 1 < stop && /^>/.test(lines[last + 1]!.text)) last++
     const chat = chatOf(lines[ai]!.text)!
     const sideHead = h.level === 4 ? SIDE_HEADS.find((p) => h.text.startsWith(p)) : undefined
-    const ask: NoteAsk = { key: chat.key, msg: chat.msg, ...(chat.th ? { th: chat.th } : {}), q: sideHead ? h.text.slice(sideHead.length).trim() : h.text, a: '' }
+    const tag = splitPreTag(h.text)
+    const ask: NoteAsk = { key: chat.key, msg: chat.msg, ...(chat.th ? { th: chat.th } : {}), q: sideHead ? tag.text.slice(sideHead.length).trim() : tag.text, a: '', ...(tag.pre ? { pre: true as const } : {}) }
     const head = lines[ai]!.text.replace(/^>\s*\[!ai\][+-]?\s*/i, '')
     const by = parseAiCalloutHead(head).by
     if (by) ask.by = by
@@ -314,6 +335,11 @@ function insertAt(md: string, pos: number, text: string): string {
   return (before ? before + '\n\n' : '') + text + (after ? '\n' + after : '')
 }
 
+/** 配对笔记里没认出是哪一页的那几问放的一节（读 PDF 贴截图问的，0.5.9）：按页的新一节排在它前面 */
+export const UNPLACED = '没定位的问答'
+/** 不挂在论文任何一处的前置知识（纯背景问题）放的一节：一直在笔记最后（排在「没定位的问答」后面） */
+export const PREREQ = '前置知识'
+
 /**
  * 加一问（只往后加）：已经记过这一条回答的原样返回。
  * 主对话的一问接在这一节末尾；旁支接在它那一问（side.of）和那一问已有的旁支后面，找不到那一问时接在这一节末尾。
@@ -336,8 +362,16 @@ export function appendAsk(md: string, note: string, a: NoteAsk, place: AskPlace)
   }
   sec ??= [...secs].reverse().find(same)
   if (!sec) {
-    const fresh = `## ${oneLine(place.heading)}\n\n${text}`
-    const later = place.page !== undefined ? secs.find((s) => (s.asks > 0 || s.old) && s.page !== undefined && s.page > place.page!) : undefined
+    const heading = oneLine(place.heading)
+    const fresh = `## ${heading}\n\n${text}`
+    // 按页的一节排在页码更大的那节前面；没有更大的就排在「没定位的问答」「前置知识」那两节前面（它们一直在最后，前置知识最后）
+    const tail = (s: Sec, names: string[]) => s.asks > 0 && names.includes(s.heading)
+    const later =
+      place.page !== undefined
+        ? secs.find((s) => ((s.asks > 0 || s.old) && s.page !== undefined && s.page > place.page!) || tail(s, [UNPLACED, PREREQ]))
+        : heading !== PREREQ
+          ? secs.find((s) => tail(s, [PREREQ]))
+          : undefined
     return insertAt(md, later ? later.from : md.length, fresh)
   }
   const mine = units.filter((u) => u.chunk === sec!.from)
@@ -455,7 +489,7 @@ export function askSectionsOf(chunk: string, note: string): AskSection[] {
         last = { q: '', a: '', sides: [] }
         s.qas!.push(last)
       }
-      const turn = { q: a.q, a: a.a, ref: { key: a.key, msg: a.msg } }
+      const turn = { q: a.q, a: a.a, ref: { key: a.key, msg: a.msg }, ...(a.pre ? { pre: true as const } : {}) }
       const prev = last.sides[last.sides.length - 1]
       if (a.side.quote || !prev) last.sides.push({ quote: a.side.quote, turns: [turn] })
       else prev.turns.push(turn)
@@ -474,7 +508,7 @@ export function askSectionsOf(chunk: string, note: string): AskSection[] {
     }
     if (!s.quote && a.quote) s.quote = a.quote
     if (!s.by && a.by) s.by = a.by
-    last = { q: a.q, a: a.a, sides: [], ...(a.mats ? { mats: a.mats } : {}), ref: { key: a.key, msg: a.msg } }
+    last = { q: a.q, a: a.a, sides: [], ...(a.mats ? { mats: a.mats } : {}), ref: { key: a.key, msg: a.msg }, ...(a.pre ? { pre: true as const } : {}) }
     s.qas!.push(last)
   }
   return out.map(withDerived)
@@ -532,6 +566,8 @@ export interface AskColumn {
   end: number
   cards: AskCard[]
   ask: NoteAsk
+  /** 这一问讲的是前置知识（列头带小标签） */
+  pre?: true
 }
 
 /**
@@ -574,7 +610,7 @@ export function askColumns(md: string, from: number, to: number, note = ''): { l
     add('top', hEnd, u.ai)
     add('qa', u.ai, u.end)
     add('more', u.end, u.to)
-    columns.push({ title: u.ask.q.split('\n')[0]!, ...(page ? { page: Number(page) } : {}), head: { from: u.from, to: hEnd }, end: u.to, cards, ask: u.ask })
+    columns.push({ title: u.ask.q.split('\n')[0]!, ...(page ? { page: Number(page) } : {}), head: { from: u.from, to: hEnd }, end: u.to, cards, ask: u.ask, ...(u.ask.pre ? { pre: true as const } : {}) })
   }
   return { lead, columns }
 }

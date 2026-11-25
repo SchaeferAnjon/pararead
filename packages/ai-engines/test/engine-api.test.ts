@@ -143,7 +143,7 @@ describe('直接问接口', () => {
         const r = await e.run({ prompt: '用户说：\n你好', system: '系统', cwd: dir, omni: true, signal: new AbortController().signal, onText: () => {} })
         expect(r.text).toContain('它自己写文件 a1；')
         expect(r.text).toContain('MCP ；')
-        expect(r.text).toContain(`设置 ${bundledConfig('anthropic', true)}`)
+        expect(r.text).toContain(`设置 ${bundledConfig('anthropic', 'omni')}`)
         expect(seen).toEqual([])
       } finally {
         delete process.env.FAKE_ACP_ARGS
@@ -216,7 +216,7 @@ describe('设置里的叫法和挑选', () => {
 
 describe('自带 OpenCode 的配置', () => {
   it('只开这一家、不自动升级、不分享；全能模式关着拒改文件和跑命令', () => {
-    expect(JSON.parse(bundledConfig('anthropic', true, 'claude-sonnet-5-5'))).toEqual({
+    expect(JSON.parse(bundledConfig('anthropic', 'omni', 'claude-sonnet-5-5'))).toEqual({
       permission: { '*': 'allow' },
       enabled_providers: ['anthropic'],
       model: 'anthropic/claude-sonnet-5-5',
@@ -224,7 +224,7 @@ describe('自带 OpenCode 的配置', () => {
       autoupdate: false,
       share: 'disabled',
     })
-    expect(JSON.parse(bundledConfig('deepseek', false)).permission).toMatchObject({ edit: 'deny', bash: 'deny' })
+    expect(JSON.parse(bundledConfig('deepseek', 'locked')).permission).toMatchObject({ edit: 'deny', bash: 'deny' })
   })
 
   // 免费模型关干净了没有：在隔离的家目录里跑 opencode models，只能列出这一家的
@@ -236,7 +236,7 @@ describe('自带 OpenCode 的配置', () => {
       const run = (extra: Record<string, string>) => execFileSync(oc!, ['models'], { env: { HOME: home, PATH: '/usr/bin:/bin', TMPDIR: tmpdir(), ...xdg, ...extra }, encoding: 'utf8', timeout: 120_000 })
       const free = run({}).split('\n').filter(Boolean)
       expect(free.some((m) => m.startsWith('opencode/'))).toBe(true)
-      const ours = run({ ANTHROPIC_API_KEY: 'sk-ant-test', OPENCODE_CONFIG_CONTENT: bundledConfig('anthropic', true) }).split('\n').filter(Boolean)
+      const ours = run({ ANTHROPIC_API_KEY: 'sk-ant-test', OPENCODE_CONFIG_CONTENT: bundledConfig('anthropic', 'omni') }).split('\n').filter(Boolean)
       expect(ours.length).toBeGreaterThan(0)
       expect(ours.every((m) => m.startsWith('anthropic/'))).toBe(true)
     } finally {
@@ -245,9 +245,11 @@ describe('自带 OpenCode 的配置', () => {
   }, 240_000)
 })
 
-describe('真 Key（CN_TEST_ANTHROPIC_API_KEY）', () => {
+// 真去问 Anthropic（花钱、余额不够就挂）：平时跳过，光有 Key 也不跑。
+// 要跑：CN_TEST_LIVE_AI=1 CN_TEST_ANTHROPIC_API_KEY=… pnpm vitest run packages/ai-engines/test/engine-api.test.ts
+describe('真 Key（CN_TEST_LIVE_AI=1 且有 CN_TEST_ANTHROPIC_API_KEY）', () => {
   const key = process.env.CN_TEST_ANTHROPIC_API_KEY
-  it.skipIf(!key)('验 Key 拉到 Sonnet 5.5，Haiku 5.5 · Low 真问一句', async () => {
+  it.skipIf(process.env.CN_TEST_LIVE_AI !== '1' || !key)('验 Key 拉到 Sonnet 5.5，Haiku 5.5 · Low 真问一句', async () => {
     const models = await verifyKey('anthropic', key!)
     expect(models[0]!.id).toBe('claude-sonnet-5-5')
     const text = await askAnthropic(key!, { system: '只回答一个词。', prompt: '1+1 等于几？只写阿拉伯数字。', model: 'claude-haiku-5-5', effort: 'low', signal: AbortSignal.timeout(60_000), onText: () => {} })

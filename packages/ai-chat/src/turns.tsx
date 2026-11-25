@@ -13,6 +13,8 @@ import { Icon, useChat, useUi } from './context'
 import { ByLogo } from './engine-logo'
 import type { StepView } from './host'
 import type { Material } from './materials'
+import { MentionText } from './mention'
+import type { Mention } from './mentions'
 import { StepRow } from './steps'
 import './turns.css'
 
@@ -26,6 +28,8 @@ export interface UserTurnProps {
   pasted?: readonly string[]
   /** 这一问问的是哪一句（读 PDF 选着一段问的） */
   quote?: string
+  /** 字里 @ 点名的文档：画成胶囊 */
+  mentions?: readonly Mention[]
   /** 对话目录里这一问写什么 */
   tocLabel: string
   /** 这一串对话的头一问：外面那层带 data-thread（从笔记点「完整对话」滚到这里） */
@@ -55,11 +59,17 @@ export function UserTurn(p: UserTurnProps) {
         ))}
       {p.quote && <div className="uq">「{p.quote}」</div>}
       {p.mats?.length ? (
-        <MatMsg text={p.text} mats={[...p.mats]} lead={crop} {...(p.onContextMenu ? { onContextMenu: p.onContextMenu } : {})} />
+        <MatMsg text={p.text} mats={[...p.mats]} lead={crop} {...(p.mentions ? { mentions: p.mentions } : {})} {...(p.onContextMenu ? { onContextMenu: p.onContextMenu } : {})} />
       ) : (
         <div className={'um' + (crop ? ' wimg' : '')} onContextMenu={p.onContextMenu}>
           {crop}
-          {crop ? <div className="ut">{p.text}</div> : p.text}
+          {crop ? (
+            <div className="ut">
+              <MentionText text={p.text} {...(p.mentions ? { mentions: p.mentions } : {})} />
+            </div>
+          ) : (
+            <MentionText text={p.text} {...(p.mentions ? { mentions: p.mentions } : {})} />
+          )}
         </div>
       )}
       {p.acts}

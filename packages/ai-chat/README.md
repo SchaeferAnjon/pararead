@@ -9,6 +9,8 @@ AI 对话框的界面那一层，画布笔记和 ParaRead 共用（共用代码�
 | `./host` | `THEME_VARS` `ICON_NAMES` `UiHost` `ChatHost` `ChatEngine` `ChatPick` `ChatAiState` `StepView` `AiErrorView` `AiErrorAct` `KeyId` | 宿主接口 |
 | `./context` | `setAiChatHost` `AiChatProvider` `useUi` `useChat` `uiNow` `Icon` | 交宿主、取宿主 |
 | `./composer` | `AiInput` `useComposer` `Composer` `Mat` `Lead` `useConvPick` `AiPicks` `PicksProps` `OmniProps` `omniTip` `MatMsg` `sendText` `matsHint` `QuoteCap` | 输入框（顶上一排材料、贴多图、底行「+ · 谁来答 · 模型 · effort · 发送」、下面全能那一行、开旁支时缩成一行）、发出去带材料的那一条、回答里选一段的「引用 · 拷贝」浮条 |
+| `./mentions` | `Mention` `MentionKind` `AtItem` `MENTION_ICON` `tokenOf` `mentionRanges` `liveMentions` `atQuery` `eraseMention` `snapOut` | @ 点名的文档：字里照旧是「@标题」，哪几段是胶囊、退格整颗删、光标跳过胶囊（纯函数，存对话的类型也引） |
+| `./mention` | `MentionChip` `MentionText` `MentionLayers` `AtMenu` | 胶囊（发出去那条里、输入框里叠在 textarea 上下的两层）和 @ 候选 |
 | `./materials` | `Material` `markOf` `numberOf` `renumberMarks` `shiftMarks` `withMaterials` `countLine` `imageNames` `checkMaterials` `MAX_MATERIALS` `PASTED_NAME` | 材料和字里的编号 ①②（纯函数，主进程也引） |
 | `./paste` | `imageFiles` `toBytes` `MAX_PASTED` | 粘贴、拖进来的图 |
 | `./ai-picker` | `AiPicker` `engineFamily` `openEnginePick` `Family` `FamilyLead` `PickerValue` | 先选家再选模型再选 effort（bar：输入框底行；box：设置里） |
@@ -63,6 +65,13 @@ setAiChatHost(ui, chat)
 - `copy(text)`：拷贝。
 - `openAiSettings()`：「去设置 › AI」。
 - `aiErrorView(raw, engine?)`：AI 没答出来的原话认成哪种、怎么说、能点哪几步。
+- `openMention?(m)`：点 @ 胶囊（输入框里、发出去那条里）打开那篇；不给点了没反应。
+
+## @ 点名文档（@文档胶囊，2026-11-24）
+
+- `AiInput` 给 `at={(q) => AtItem[]}` 就有 @：打「@几个字」弹候选（最多 8 篇，已点的不列），第一条亮着，Tab、↵ 选上（↵ 不发送），↑↓ 换，esc 只收菜单；输入法组字时这几个键是输入法的，候选底下那行说「先选好字」。不给 `at` 没有 @（ParaRead、画布今日现在都没给）。
+- 选上的在 `c.mentions`，字里是「@标题 」；有胶囊时 textarea 的字透明，`MentionLayers` 下面一层照同样的排法画字和胶囊、上面一层透明的只在胶囊上接鼠标（`data-tip` 路径、点了 `openMention`）。退格、Delete 碰到胶囊整颗删，光标走不进胶囊。
+- 发出去时宿主把 `c.mentions` 记在那条消息上，`UserTurn` / `MatMsg` 的 `mentions` 把字里的「@标题」画成 `MentionChip`。
 
 问、停、收事件不在 `ChatHost` 里：发问和存对话是宿主自己的 store（画布笔记 `AiPanel.tsx`、`reading/store.ts`），组件只拿回调（`onSend`、`onStop`、`onAsk`……）。
 
@@ -72,13 +81,13 @@ setAiChatHost(ui, chat)
 
 `ICON_NAMES`（Codicons 的叫法，画布笔记交 Codicons，`apps/notes/test/ai-chat-icons.test.ts` 核对都有）：
 
-`add` `ai` `arrow-swap` `arrow-up` `check` `chevron-down` `chevron-right` `chip` `close` `comment` `comment-discussion` `copy` `discard` `edit` `ellipsis` `error` `git-compare` `loading` `note` `play` `primitive-square` `quote` `refresh` `reply` `settings-gear` `terminal`
+`add` `ai` `arrow-down` `arrow-swap` `arrow-up` `check` `chevron-down` `chevron-right` `chip` `close` `comment` `comment-discussion` `copy` `discard` `edit` `ellipsis` `error` `file-code` `file-media` `file-pdf` `file-text` `git-compare` `globe` `layout` `loading` `note` `play` `primitive-square` `quote` `refresh` `reply` `settings` `settings-gear` `terminal`
 
 `ai` 不是 Codicon：画「AI 对话现在用的那一家」的标志（选中一句的小框里「问这句」前面那颗）。
 
 ## 样子
 
-- 包里的 css（`composer.css`、`ai-picker.css`、`ai-error.css`、`chat-toc.css`、`steps.css`、`turns.css`、`answer-bar.css`、`side/side-inline.css`）跟着组件引进来。只用 `THEME_VARS` 里的 73 个变量；画布笔记的短名字（`--t2`、`--acc`、`--line2`……）都带默认值 `var(--t2, var(--text-2))`，ParaRead 不定义也照它自己的颜色画（`test/theme-vars.test.ts` 查）。
+- 包里的 css（`composer.css`、`mention.css`、`ai-picker.css`、`ai-error.css`、`chat-toc.css`、`steps.css`、`turns.css`、`answer-bar.css`、`side/side-inline.css`）跟着组件引进来。只用 `THEME_VARS` 里的 73 个变量；画布笔记的短名字（`--t2`、`--acc`、`--line2`……）都带默认值 `var(--t2, var(--text-2))`，ParaRead 不定义也照它自己的颜色画（`test/theme-vars.test.ts` 查）。
 - 读 PDF 那一套（气泡里的图、问的那句、分隔行 `.daysep`、闪一下）挂在 `.reading-ai` 下面：ParaRead 的对话那一格带 `reading-ai` 和 `ai` 两个 class。
 - 组件还用到宿主的几样全局样子：按钮 `.btn .btn-xs .btn-sm`、`.lnk`、`.truncate`、转圈 `.spin`（`@keyframes spin`）、弹层出来 `@keyframes blk-in`、悬停提示读 `data-tip` / `data-side`（画布笔记的提示层）。ParaRead 那边同名的照旧，没有的补上。
 

@@ -13,7 +13,8 @@ AI 引擎的主进程那一层，画布笔记、画布今日、ParaRead 共用�
 
 | 文件 | 做什么 |
 | --- | --- |
-| `engines.ts` | `Engine`、`EngineRun`：Claude Code（`claude -p` stream-json）、Codex（app-server）、Gemini 和 OpenCode（ACP）各一个；全能模式的参数（`claudeArgs`、`CODEX_LOCKED`、`geminiArgs`、`opencodeConfig`） |
+| `engines.ts` | `Engine`、`EngineRun`：Claude Code（`claude -p` stream-json）、Codex（app-server）、Gemini 和 OpenCode（ACP）各一个；全能模式的参数（`claudeArgs`、`CODEX_LOCKED`、`codexApproval`、`geminiArgs`、`opencodeConfig`、`AcpMode`） |
+| `gate-map.ts` | 全能模式下各家的审批请求换成 Claude Code 叫法的那一步（`codexGate`、`geminiGate`、`opencodeGate`），交给 `beforeTool`；真命令行录的样本在 `test/fixtures/gate/` |
 | `engine-api.ts` | API Key 四家直接问接口（Anthropic Messages、OpenAI 兼容），要动手时交给自带的 OpenCode；本机模型（Ollama、LM Studio）；验 Key、找本机模型 |
 | `engine-list.ts` | `createEngines(deps)`：引擎表（下面） |
 | `cli.ts` | 找命令行（登录 shell 的 PATH、常见目录、Codex.app 里的）、跑 `--version`、「装在别处？」 |
@@ -59,7 +60,7 @@ export function createEngines(deps: EnginesDeps): Engines
 - `changed`：后台跑完 `--version` 发现先前当能用的那个跑不了，叫界面再要一次。
 - 拉到的模型、版本、自查（`list()` 里的 `version`、`health`、`pulled`、`latest`、`updateWith`）要宿主先 `startEngineWatch({ dir, changed, enabled })`；不起就只有自带的模型。
 
-跑一问：`engines.engine(id).run({ prompt, system, cwd, signal, onText, model?, effort?, session?, images?, omni?, mcp? … })`，返回 `{ text, session? }`。全能模式（`omni: true`）不给 `mcp` 也照全能跑，只是不接 MCP：Claude Code `bypassPermissions`、自带工具全给只拿掉 AskUserQuestion、`--append-system-prompt`、`--setting-sources=`、`--strict-mcp-config`、留会话；Codex danger-full-access；Gemini yolo；OpenCode 全放行。
+跑一问：`engines.engine(id).run({ prompt, system, cwd, signal, onText, model?, effort?, session?, images?, omni?, mcp? … })`，返回 `{ text, session? }`。全能模式（`omni: true`）不给 `mcp` 也照全能跑，只是不接 MCP：Claude Code `bypassPermissions`、自带工具全给只拿掉 AskUserQuestion、`--append-system-prompt`、`--setting-sources=`、`--strict-mcp-config`、留会话；Codex danger-full-access；Gemini yolo；OpenCode 全放行。再给 `beforeTool`（手机全能模式、画布今日）时四家的每一步先交给它（Claude Code 走 PreToolUse 钩子；Codex `approvalPolicy: untrusted`、Gemini `--approval-mode default`、OpenCode `bash / edit / webfetch / external_directory` 设 ask，审批请求在 `gate-map.ts` 换成 Claude Code 的叫法），返回一句话就不做。
 
 ## Key：`keys.ts`
 

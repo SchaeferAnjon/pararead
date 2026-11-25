@@ -264,14 +264,15 @@ function addedBlocks(before: string, after: string, A: MdBlock[], B: MdBlock[], 
 /**
  * AI 这一轮改完的一篇（before 是这一轮开始时的样子）：纯新增、没包进 [!ai] 块的整块包上；改了原有字的、标题、代码这些不包。
  * 新建的整篇（before 是空的）、旧写法的白板、导图不包；白板（type: board）上一段一张卡，一段一个块，不并成一张（wrapPicked）；挪了位置的块不包；skip(key)：这一块是用户自己这一轮里打的（blockKeys 算的 key），不包。
+ * board：这一篇按白板一段一张卡包（默认看 type: board；普通文档正以白板看法开着时调的人传 true，不然连着几段包成一块、白板上并成一张卡）。
  * 没有要包的原样返回（同一个字符串）
  */
-export function wrapNewBlocks(before: string, after: string, h: AiWrote, skip?: (key: string) => boolean): { text: string; wrapped: number } {
+export function wrapNewBlocks(before: string, after: string, h: AiWrote, skip?: (key: string) => boolean, board = isBoardDoc(after)): { text: string; wrapped: number } {
   if (!before.trim() || before === after || hasOldLayout(after) || isMindmap(after)) return { text: after, wrapped: 0 }
   const B = findBlocks(after)
   const added = addedBlocks(before, after, findBlocks(before), B, skip)
   if (!added.size) return { text: after, wrapped: 0 }
-  return wrapPicked(after, B, added, h)
+  return wrapPicked(after, B, added, h, board)
 }
 
 /** 默认用白板看法打开的那种（`type: board`）：一块一张卡 */

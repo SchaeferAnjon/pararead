@@ -30,6 +30,7 @@ import { RegionEditor } from './RegionEditor'
 import { SelectionLayer, type SelInfo } from './Selection'
 import { ShotLayer } from './ShotLayer'
 import { t } from '@shared/i18n'
+import { BgParse } from './BgParse'
 import type { BackHandle } from './BackPill'
 
 export type Jump = { nonce: number; kind: 'block'; blockId: string; annId?: string } | { nonce: number; kind: 'page'; page: number; annId?: string; frac?: number }
@@ -186,6 +187,11 @@ export function Reader(props: {
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paperId])
+  // 后台解析：开着的这篇排最前、它的快速解析不因为你在滚动而停
+  useEffect(() => {
+    void api.bgOpen(paperId)
+    return () => void api.bgOpen(null)
   }, [paperId])
   // 画布笔记那边改了这篇的笔记（划了、换了含义、删了）：重读；关这篇时笔记属性「读到」「读了」跟上
   useEffect(() => {
@@ -1080,6 +1086,7 @@ export function Reader(props: {
           {mode === 'reflow' && doc && settings.display === 'both' && <SenseButton settings={settings} compact={compact} />}
           {findOpen && <FindBar scroller={midRef} onClose={() => setFindOpen(false)} />}
           <div className="spacer" />
+          <BgParse compact />
           <div className="bar-tools">
           {cnLink && (
             <button className="icon-btn cn-open" title={t('在画布笔记里看这篇的笔记（{0}）', cnLink.note)} onClick={() => void api.cnOpenInCn(paperId, 'note').catch((e) => toast(errText(e)))}>

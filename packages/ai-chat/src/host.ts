@@ -9,6 +9,7 @@
  */
 import type { AiPick, EngineInfo } from '@cn/ai-engines/shared'
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
+import type { Mention } from './mentions'
 
 /**
  * 共用组件只许用的 CSS 变量：画布笔记（@cn/design 的 tokens.css、themes.css）和 ParaRead（src/renderer/src/styles/tokens.css）都定义了的 73 个。
@@ -35,9 +36,9 @@ export type ThemeVar = (typeof THEME_VARS)[number]
  * 回答下面那排的按钮图标由宿主随动作交进来（answer-bar 的 AbIcon），不在这张表里。
  */
 export const ICON_NAMES = [
-  'add', 'ai', 'arrow-swap', 'arrow-up', 'check', 'chevron-down', 'chevron-right', 'chip', 'close', 'comment', 'comment-discussion',
-  'copy', 'discard', 'edit', 'ellipsis', 'error', 'file-media', 'git-compare', 'loading', 'note', 'play', 'primitive-square', 'quote', 'refresh', 'reply',
-  'settings', 'settings-gear', 'terminal',
+  'add', 'ai', 'arrow-down', 'arrow-swap', 'arrow-up', 'check', 'chevron-down', 'chevron-right', 'chip', 'close', 'comment', 'comment-discussion',
+  'copy', 'discard', 'edit', 'ellipsis', 'error', 'file-code', 'file-media', 'file-pdf', 'file-text', 'git-compare', 'globe', 'layout', 'loading', 'note', 'play',
+  'primitive-square', 'question', 'quote', 'refresh', 'reply', 'settings', 'settings-gear', 'terminal',
 ] as const
 export type IconName = (typeof ICON_NAMES)[number]
 
@@ -82,13 +83,13 @@ export interface ChatAiState {
   intro: { ai: boolean }
 }
 
-/** AI 动手的一步（StepRow 画的）：在做转圈、做完绿勾、出错红叉跟原因 */
+/** AI 动手的一步（StepRow 画的）：在做转圈、做完绿勾、出错红叉跟原因、要先问用户的黄色问号 */
 export interface StepView {
   id: string
   label: string
   /** 命令、库外的路径：等宽一段 */
   code?: string
-  status: 'run' | 'ok' | 'err'
+  status: 'run' | 'ok' | 'err' | 'ask'
   detail?: string
   /** 这一步动过的文件（宿主的 renderMarkdown 认回答里的引用时用） */
   paths?: string[]
@@ -167,6 +168,8 @@ export interface ChatHost {
   sideAnswerRow?(o: SideAnswerRow): ReactNode
   /** 发出去的那条里网页上引的一段（带网址）：点来源回到网页里那一段；不给就只写来源 */
   openQuoteSource?(url: string, text: string): void
+  /** 点 @ 点名的那颗胶囊（输入框里、发出去的那条里）：打开那篇；不给点了没反应 */
+  openMention?(m: Mention): void
 }
 
 /** 旁支答完那排要的：最后一条回答原文、问它的那句、挂在哪一处、块头链回哪条回答、在不在答、发一句、插进主对话、在笔记里看 */

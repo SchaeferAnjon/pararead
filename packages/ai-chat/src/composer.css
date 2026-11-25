@@ -74,6 +74,51 @@
   background: color-mix(in srgb, var(--acc, var(--accent)) 24%, transparent);
 }
 
+/* 字和图一起粘、贴成了字（粘贴优先文字）：字下面一行 12px --t3「同时有一张图 ·」+ 强调色的「改贴图片」（文字按钮，悬停 --fill 底、圆角 4，同排队那行的「不发了」） */
+.aiin-alt {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px 2px 4px;
+  font: 12px/18px var(--sans, var(--font-sans));
+  color: var(--t3, var(--text-3));
+  white-space: nowrap;
+}
+.aiin-wait {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 12px 0;
+  font: 12px/18px var(--sans, var(--font-sans));
+  color: var(--t3, var(--text-3));
+  white-space: nowrap;
+}
+.aiin-wait > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aiin-alt button,
+.aiin-wait button {
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  font-weight: 500;
+  color: var(--acc-t, var(--accent-text));
+}
+.aiin-alt button:hover,
+.aiin-wait button:hover {
+  background: var(--fill, var(--fill-1));
+}
+.aiin-alt button:focus-visible,
+.aiin-wait button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--acc-ring, var(--accent-ring));
+}
+
 /* ---------- 底行：「+」· 谁来答 · 模型 · effort · 快捷键提示 …… 发送 ---------- */
 .aiin .ft {
   display: flex;
@@ -357,7 +402,7 @@
   height: 16px;
   border-radius: 50%;
   background: var(--acc-bg, var(--accent-bg));
-  color: #fff;
+  color: var(--acc-on, #fff);
   font-size: 10px;
   font-weight: 600;
   line-height: 1;
@@ -602,7 +647,7 @@
   margin: 0 2px;
   border-radius: 50%;
   background: var(--acc-bg, var(--accent-bg));
-  color: #fff;
+  color: var(--acc-on, #fff);
   font-size: 10px;
   font-weight: 600;
   line-height: 1;

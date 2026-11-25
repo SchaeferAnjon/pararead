@@ -1,9 +1,10 @@
-import { ArrowDown, ArrowRight, ChevronDown, ChevronRight, FileText, MessageCircleQuestion, Plus, X } from 'lucide-react'
+import { ArrowRight, ChevronDown, ChevronRight, FileText, MessageCircleQuestion, Plus, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AiInput, type Lead, sendText, useComposer, useConvPick } from '@cn/ai-chat/composer'
 import { AnswerTurn, UserTurn } from '@cn/ai-chat/turns'
 import { AnswerBar, type AbAct, type AbMenuItem, type AbReply } from '@cn/ai-chat/answer-bar'
 import { ChatToc } from '@cn/ai-chat/chat-toc'
+import { NewBelow, useFollow } from '@cn/ai-chat/follow'
 import { AiError } from '@cn/ai-chat/ai-error'
 import { AskBox } from '@cn/ai-chat/side/AskBox'
 import { EngineLogo } from '@cn/ai-chat/engine-logo'
@@ -120,10 +121,10 @@ export function ChatPanel(props: {
   const [conceptsBusy, setConceptsBusy] = useState(false)
   const [openThink, setOpenThink] = useState<Set<string>>(new Set())
   const [borrow, setBorrow] = useState<{ id: string; ask: Ask } | null>(null)
-  const [newBelow, setNewBelow] = useState(false)
   const [, bump] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
-  const atBottom = useRef(true)
+  // 跟着最新的往下滚，人往上翻就停、滚回最底或点「↓ 新回答」再跟（和画布笔记同一份 @cn/ai-chat/follow）
+  const fol = useFollow(listRef)
   const c = useComposer(notice)
   // 谁来答 · 模型 · effort：记在设置里（chatPick），输入框底下换了马上记
   const cp = useConvPick<ChatPick, ChatEngine>(undefined, (p) => void api.chatSetPick(p), notice)
@@ -166,25 +167,14 @@ export function ChatPanel(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.clearSignal])
 
-  // 流式时只有本来在底部才跟着滚
-  useLayoutEffect(() => {
-    const el = listRef.current
-    if (!el) return
-    if (atBottom.current) el.scrollTop = el.scrollHeight
-    else if (live) setNewBelow(true)
-  }, [msgs, live])
-
-  const onScroll = (): void => {
-    const el = listRef.current!
-    atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24
-    if (atBottom.current) setNewBelow(false)
-  }
+  // 流式时只有跟着的才滚到底
+  useLayoutEffect(() => fol.stick(), [msgs, live])
 
   function go(a: Ask): void {
     const reqId = 'c' + Date.now() + Math.random().toString(36).slice(2, 6)
     const st: Live = { reqId, text: '', reasoning: '', steps: [] }
     setLive({ ...st })
-    atBottom.current = true
+    fol.follow()
     const off = api.onStream((e) => {
       if (e.reqId !== reqId) return
       if (e.delta) st.text += e.delta
@@ -406,7 +396,7 @@ export function ChatPanel(props: {
         </div>
       )}
       <div className={'msgs-box' + (msgs.some((m) => m.role === 'user') ? ' toc' : '')}>
-      <div className="msgs" ref={listRef} onScroll={onScroll}>
+      <div className="msgs" ref={listRef}>
         {ctx?.truncated && <div className="hint">{t('论文较长，只读了前 {0}%', Math.round(ctx.ratio * 100))}</div>}
         {msgs.length === 0 && !live ? (
           <>
@@ -466,6 +456,7 @@ export function ChatPanel(props: {
         )}
       </div>
       {msgs.some((m) => m.role === 'user') && <ChatToc list={listRef} sides={[]} openSide={null} onSide={() => undefined} />}
+      <NewBelow f={fol} />
       </div>
       {/* 回答里选中一句：「引用」进输入框那一排；「问这句」带着这句在这里接着问（ParaRead 没有旁支） */}
       <AskBox
@@ -478,17 +469,6 @@ export function ChatPanel(props: {
           c.ta.current?.focus()
         }}
       />
-      {newBelow && (
-        <button
-          className="new-below"
-          onClick={() => {
-            listRef.current!.scrollTop = listRef.current!.scrollHeight
-            setNewBelow(false)
-          }}
-        >
-          <ArrowDown size={14} />{t(' 新回答')}
-        </button>
-      )}
       {borrow && (
         <div className="borrow" data-testid="borrow">
           <b>{t('用画布笔记里存的 {0} Key？', cp.engines.find((e) => e.id === borrow.id)?.label ?? borrow.id)}</b>

@@ -7,6 +7,7 @@ import { cnFilter, inCnFolder } from '@shared/cnLink'
 import { showMenu } from '../lib/menu'
 import { Kbd, useToast } from '../lib/ui'
 import { t } from '@shared/i18n'
+import { BgParse } from './BgParse'
 
 export type Route = { kind: 'lib' } | { kind: 'notes' } | { kind: 'ideas'; focus?: string } | { kind: 'ai'; id: string | null; prompt?: string } | { kind: 'agent'; id: string }
 
@@ -475,6 +476,7 @@ export function Sidebar(props: {
             </>
           )}
         </button>
+        <BgParse />
         <div className="strip">
           <span title={hasKey ? `AI：${prov.name}` : t('AI 还没设 Key')}>
             <i className={'dot ' + (hasKey ? 'ok' : 'warn')} />

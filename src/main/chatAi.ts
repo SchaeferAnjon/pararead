@@ -8,7 +8,8 @@ import { join } from 'node:path'
 import type { WebContents } from 'electron'
 import type { Engine, EngineImage, EngineStep } from '@cn/ai-engines'
 import { checkMaterials, imageNames, type Material, PASTED_NAME, withMaterials } from '@cn/ai-chat/materials'
-import { type ApiId, type EngineId, fitPick, pickLabel, type ModelOption } from '@cn/ai-engines/shared'
+import { type ApiId, canSeeImages, type EngineId, fitPick, pickLabel, type ModelOption } from '@cn/ai-engines/shared'
+import { asksFormula, formulaImagesNote, formulaList, type MdFormulaImage, pickFormulaImages } from '@cn/format'
 import { t } from '../shared/i18n'
 import { providerOf } from '../shared/providers'
 import { levelName, thinkKey, thinkLevel, type ThinkLevel } from '../shared/thinking'
@@ -18,6 +19,7 @@ import { addChat, chatSession, getPaper, listChats, setChatSession } from './db'
 import type { ChatMsg, ContentPart } from './glm'
 import { newId } from './library'
 import { chatSystem, FOLLOWUP_HINT } from './prompts'
+import { makeFormulas } from './formulas'
 
 /** 设置里那家服务商（会员时走会员）在引擎菜单里的 id */
 export const PARAREAD_ENGINE = 'pararead'
@@ -59,6 +61,17 @@ export function makeChatAi(c: Ctx, deps: ChatAiDeps) {
   const { db, library, settings } = c
   const pastedDir = join(c.dataDir, 'pasted')
   const asking = new Map<string, AbortController>()
+  const formulas = makeFormulas({ library, ai: c.ai, log: c.log })
+
+  /** 问之前把这篇的公式图转成 LaTeX（一篇一次）；转不成的那几张返回来，带图给 AI。转的时候出错不挡这一问 */
+  async function formulasFirst(paperId: string, signal?: AbortSignal): Promise<MdFormulaImage[]> {
+    try {
+      return await formulas.ensure(paperId, signal)
+    } catch (e) {
+      c.log(`公式图转 LaTeX 出错 ${paperId}：${(e as Error).message}`)
+      return library.aiMarkdown(paperId)?.pending ?? []
+    }
+  }
 
   /** AI 自己动手的地方：研究 Agent 的项目文件夹（和它同一个），全能模式下命令行在这里读写、跑命令 */
   const workDir = (): string => {
@@ -131,7 +144,9 @@ export function makeChatAi(c: Ctx, deps: ChatAiDeps) {
   }
 
   /** 设置里那家服务商：原来的 HTTP 流式，图按 image_url 一张张给（看图走看图模型） */
-  function askProvider(wc: WebContents, reqId: string, paperId: string, req: ChatAskReq, user: ChatMessage): void {
+  async function askProvider(wc: WebContents, reqId: string, paperId: string, req: ChatAskReq, user: ChatMessage): Promise<void> {
+    // 公式图先转成 LaTeX；转不成的（设置里那家看不了图、出错）回答头上写明「公式没看到原图」
+    const unseen = (await formulasFirst(paperId)).length
     const paper = getPaper(db, paperId)!
     const s = settings.get()
     const lang = s.aiLang || s.targetLang
@@ -176,7 +191,7 @@ export function makeChatAi(c: Ctx, deps: ChatAiDeps) {
       const { provider, model } = c.ai.conf()
       return thinkLevel({ [thinkKey(provider, model)]: want }, provider, model) ?? undefined
     })() : undefined
-    const label = providerLabel()
+    const label = providerLabel() + (unseen && kind === 'text' ? ` · ${t('{0} 个公式没看到原图', unseen)}` : '')
     c.streamer.streamTo(wc, reqId, messages, {
       kind,
       think,
@@ -206,12 +221,22 @@ export function makeChatAi(c: Ctx, deps: ChatAiDeps) {
     const others = user.paperIds ?? []
     const was = chatSession(db, paperId, id)
     const needFull = !was?.fullIn
+    // 公式图先转成 LaTeX（全文里的公式就是 LaTeX）；转不成的那几张这一家能看图就带上图，不能看图回答头上写明
+    const unseen = await formulasFirst(paperId, ac.signal)
     const full = needFull ? paperText(paperId, others) : null
     const images = imagesOf(imageNames(req.mats), req.crop)
+    const fImgs = canSeeImages(id as EngineId) ? pickFormulaImages(unseen, req.content) : []
+    const fNote = formulaImagesNote(images.length + 1, fImgs.map((f) => `公式图 F${f.n}`))
+    for (const f of fImgs) images.push({ mime: f.mime, data: f.data, path: join(pastedDir, savePaste(Buffer.from(f.data, 'base64'), f.mime)) })
+    // 会话接着问（全文早给过了，那时公式可能还是「[图]」）、问的是公式：把转好的公式补在这一问前面
+    const raw = !full && asksFormula(req.content) ? library.reflowMarkdown(paperId) : null
+    const recap = raw ? formulaList(raw, library.formulaLatex(paperId), req.content) : ''
     const prompt = [
       full ? `论文《${paper.title}》全文${full.truncated ? '（太长，只给了前一部分）' : ''}：\n${full.text}\n\n（全文到这里）\n\n` : '',
       others.length && full ? `这次一起读的还有 ${others.length} 篇文献（上面标了【文献 N】）。比较和引用时写清是哪一篇。\n` : '',
       req.crop ? '附图里排第 1 的是我在论文上框的那一块。\n' : '',
+      recap ? `${recap}\n\n` : '',
+      fNote ? `${fNote}\n` : '',
       questionOf(req, req.crop ? 1 : 0) || '解释这块',
       FOLLOWUP_HINT
     ].join('')
@@ -221,7 +246,7 @@ export function makeChatAi(c: Ctx, deps: ChatAiDeps) {
     // 这一问真正用的模型和那一档：和画布笔记同一套（没选模型用这家的默认，这个模型不认的档换成它自己的默认档）
     const models = deps.models(id)
     const pick = fitPick(id as EngineId, models, { ...(req.pick.model ? { model: req.pick.model } : {}), ...(req.pick.effort ? { effort: req.pick.effort } : {}) })
-    const label = pickLabel(pick, models)
+    const label = pickLabel(pick, models) + (unseen.length > fImgs.length ? ` · ${t('{0} 个公式没看到原图', unseen.length - fImgs.length)}` : '')
     const meta = (): ChatMeta => ({ pick: { engine: id, ...(pick.model ? { model: pick.model } : {}), ...(pick.effort ? { effort: pick.effort } : {}) }, label, ...(steps.length ? { steps: [...steps] } : {}) })
     try {
       const r = await deps.engine(id).run({
@@ -291,7 +316,7 @@ export function makeChatAi(c: Ctx, deps: ChatAiDeps) {
     // 设置里那家是本机 Claude Code：交给共用引擎的 claude（和画布笔记一样能全能模式、显示步骤），模型和那一档照设置里的
     const cf = c.ai.conf()
     if (id === PARAREAD_ENGINE && cf.provider === 'claude-code') void askEngine(wc, reqId, paperId, { ...req, pick: { engine: 'claude', model: cf.model, ...(req.pick.effort ? { effort: req.pick.effort } : {}) } }, user)
-    else if (id === PARAREAD_ENGINE) askProvider(wc, reqId, paperId, req, user)
+    else if (id === PARAREAD_ENGINE) void askProvider(wc, reqId, paperId, req, user)
     else void askEngine(wc, reqId, paperId, req, user)
     return { user }
   }

@@ -38,21 +38,28 @@
   --status-err-t: var(--red-t);
   --seam: var(--line);
   --bgart: none;
+  /* 日历块（周看法、月看法、排一天的时间线，@cn/calendar）：每套主题自己给 --cal-task（待办块实底）、--cal-ev-base 和 --cal-ev-k（日程块 = 日历的颜色 k 混进 base）；
+     导入的 VS Code 主题用这里的：强调色 16% 混进 --card、日程 15% 混进 --card。块里的小字（钟点、在哪篇）往正文色靠 70%，对块底 ≥ 4.5 */
+  --cal-task: color-mix(in srgb, var(--acc) 16%, var(--card));
+  --cal-ev-base: var(--card);
+  --cal-ev-k: 15%;
+  --cal-blk-t2: color-mix(in srgb, var(--t2) 30%, var(--t1));
   --blur: none;
   --paper: transparent;
   --paper-sh: none;
   /* 浮岛书桌的岛：半透明、透出窗口背景图（2026-11-22 用户：「这个大白底能不能做成…半透明的」；画布今日 B 的三栏、画布笔记首页 B 的组件都用这几个），
      配 backdrop-filter: var(--isle-blur)。透多少是每套的 --isle-k（默认，用户认可的「改后」那版），
-     再加设置 › 外观 ›「面板透明度」拉出来的 --isle-shift（<html> 上，正数更透，范围见 glass.ts，两头的对比度都量过） */
-  --isle-a: calc(var(--isle-k, 82%) - var(--isle-shift, 0%));
+     设置 › 外观 ›「面板透明度」是 <html> 上的 --isle-p（见 glass.ts）：0 完全不透，到 50 匀着降到 --isle-k，再到 100 匀着再降 --isle-far（浅色 64%、深色 66%，深湖 72%、松林 77%；浓渐变少降 --isle-far-cut）。
+     100 那头是十套主题 × 极光 / 冰洞 / 主题渐变（浓）量过对比度的最透（e2e/jgely-contrast.spec.ts） */
+  --isle-a: calc(100% - (100% - var(--isle-k, 82%)) * min(var(--isle-p, 50), 50) / 50 - max(0%, var(--isle-far, 16%) - var(--isle-far-cut, 0%)) * max(0, var(--isle-p, 50) - 50) / 50);
   --isle: color-mix(in srgb, var(--win) var(--isle-a), transparent);
   --isle-side: color-mix(in srgb, var(--side) var(--isle-a), transparent);
   --isle-pop: color-mix(in srgb, var(--pop) var(--isle-a), transparent);
-  /* 岛里的卡片、当前标签：比岛实一点（跟着透明度一起变） */
-  --isle-card: color-mix(in srgb, var(--card) calc(72% - var(--isle-shift, 0%)), transparent);
-  /* 透明度往透那边拉时，透上来的照片按浅深压一压亮度（--isle-lum，下面 data-tone 那两条）：照片的颜色、轮廓看得更清楚，亮处、暗处不吃掉字；
-     饱和度每格少 2.5%（拉到头 120%：照片下面的树林、雪地透上来不发粉发灰）；默认和往实那边不变 */
-  --isle-blur: blur(24px) saturate(calc(150% - max(0, var(--isle-n, 0)) * 2.5%)) brightness(var(--isle-lum, 1));
+  /* 岛里的卡片、当前标签：默认 72%，0 不透、100 是 44%（跟着透明度一起变） */
+  --isle-card: color-mix(in srgb, var(--card) calc(100% - 28% * var(--isle-p, 50) / 50), transparent);
+  /* 透明度往透那边拉时饱和度每格少 2.5%（拉到头 120%：照片下面的树林、雪地透上来不发粉发灰），再按浅深把透上来的背景收一收（--isle-tone，下面 data-tone 那两条）；
+     默认和往实那边不变 */
+  --isle-blur: blur(24px) saturate(calc(150% - max(0, var(--isle-n, 0)) * 2.5%)) var(--isle-tone, );
   /* 岛上的次要字、提示字往正文色靠（次要 45%、提示 55%）：照片最亮、最暗的地方次要字对岛底也有 4.5
      （2026-11-23 画布笔记所有栏半透明时逐像素量过：靠 30% 时天青左栏「最近」里的灰字只有 3.5）；
      面板透明度往透那边拉 n 格，再往正文色多靠 n × 1.5%（浅色主题在照片亮处次要字掉得最快） */
@@ -61,7 +68,7 @@
   /* 勾选框没勾时的那圈边（task-gr4sx，用户嫌半透明面板上白色实心方框太硬，「按照推荐来」）：框不铺底、透出面板，只留这圈细边。
      正文色按每套的 --cb-k 透明：叠在什么底上都跟着变，十套主题在 B 极光 / 冰洞 / 不用图 / A 上对框里框外的底色都 ≥ 3:1
      （非文字元素；画布笔记、画布今日的 e2e/gr4sx-checkbox.spec.ts 逐像素量）。画布今日 .cb、画布笔记待办 .td-cb、文档里的 .cm-taskbox 共用；悬停换 --t2。
-     设置 › 外观「面板透明度」往透那边拉 n 格（--isle-n，@cn/design/glass；没拉、没这个设置时是 0），边每格再实 0.5%：拉到最透 +12 时浅色在极光图上也有 3:1 */
+     设置 › 外观「面板透明度」往透那边拉 n 格（--isle-n，@cn/design/glass；50 以下、没这个设置时是 0，100 是 12），边每格再实 0.5%：拉到最透时浅色在极光图上也有 3:1 */
   --cb-line: color-mix(in srgb, var(--t1) calc(var(--cb-k, 55%) + max(0, var(--isle-n, 0)) * 0.5%), transparent);
   /* ⏫ 没勾的黄框：--yellow 往正文色靠 --cb-hi-k（设计复审：浅色在冰洞图上 --yellow 只有 2.96:1）；浅色靠 20%，深色五套 0% 不动（本来就 ≥ 3.7）；
      面板往透拉 n 格同样每格多靠 0.5% */
@@ -77,17 +84,27 @@
     radial-gradient(85% 60% at 88% 8%, color-mix(in srgb, var(--acc) 16%, var(--side)) 0%, transparent 55%);
 }
 
-/* 面板透明度（@cn/design/glass）往透那边拉了 n 格：浅色主题把透上来的照片提亮、深色主题压暗，每格 4% / 2.2%；<html data-tone> 由软件套主题时写上 */
-[data-tone='light'] {
-  --isle-lum: calc(1 + max(0, var(--isle-n, 0)) * 0.04);
+/* 面板透明度（@cn/design/glass）往透那边拉了 n 格（0…12）：只在照片背景上把透上来的照片收一收，照片最亮、最暗的地方也不吃掉字：
+   浅色主题把暗处往白托（contrast 降、brightness 补回，白的还是白，拉到头最暗处抬到 22%）；深色主题把亮处往下压（拉到头白的压到 68%）。
+   主题渐变本来就平、没有很亮很暗的地方，不收：收了面板 50 → 100 几乎看不出变（设计复审量的：丁香渐变上托白吃掉七成）。
+   以前浅色是每格 brightness 提亮 4%：浅色渐变背景亮处被提成一片白，拉到最透面板反而更像实底（2026-11-24 bug 一组，e2e/panel-alpha.spec.ts）。
+   <html data-tone、data-winbg> 由软件套主题时写上 */
+[data-tone='light'][data-winbg='photo'] {
+  --isle-tone: contrast(calc(1 - max(0, var(--isle-n, 0)) * 0.03)) brightness(calc(2 / (2 - max(0, var(--isle-n, 0)) * 0.03)));
 }
-[data-tone='dark'] {
-  --isle-lum: calc(1 - max(0, var(--isle-n, 0)) * 0.022);
+[data-tone='dark'][data-winbg='photo'] {
+  --isle-tone: contrast(calc(1 - max(0, var(--isle-n, 0)) * 0.025)) brightness(calc(1 - max(0, var(--isle-n, 0)) * 0.0167));
 }
 
 /* ---------- 薄荷 · 浅（白天默认，GitHub Light 的结构 + Everforest 的绿） ---------- */
 [data-skin='mint'] {
   color-scheme: light;
+  /* 日历块：待办块实底、日程块 = 它日历的颜色 --cal-ev-k 混进 --cal-ev-base（对比度见 apps/today/test/cal-colors.test.ts） */
+  --cal-task: #d7e9e3;
+  /* 在半透明的岛上（格子比 --win 暗）待办块用浅一档的：强调色 10% 混进白 */
+  --cal-task-isle: #e7f2ee;
+  --cal-ev-base: #eaebeb;
+  --cal-ev-k: 18%;
   --title: #e4f1ea;
   --bar: #e4f1ea;
   --side: #eef7f2;
@@ -151,6 +168,12 @@
 /* ---------- 天青 · 浅（Light Owl / VS Code Light+）：底栏一条青色，卡片只描边，当前标签下沿 ---------- */
 [data-skin='sky'] {
   color-scheme: light;
+  /* 日历块：待办块实底、日程块 = 它日历的颜色 --cal-ev-k 混进 --cal-ev-base（对比度见 apps/today/test/cal-colors.test.ts） */
+  --cal-task: #d5e9f0;
+  /* 在半透明的岛上（格子比 --win 暗）待办块用浅一档的：强调色 10% 混进白 */
+  --cal-task-isle: #e6f2f6;
+  --cal-ev-base: #e9ebec;
+  --cal-ev-k: 18%;
   --title: #e2eff5;
   --bar: #e2eff5;
   --side: #edf5f9;
@@ -218,6 +241,12 @@
 /* ---------- 樱花 · 浅（Horizon Bright）：当前标签整块染色，卡片软投影，圆角大一号 ---------- */
 [data-skin='sakura'] {
   color-scheme: light;
+  /* 日历块：待办块实底、日程块 = 它日历的颜色 --cal-ev-k 混进 --cal-ev-base（对比度见 apps/today/test/cal-colors.test.ts） */
+  --cal-task: #f8dee7;
+  /* 在半透明的岛上（格子比 --win 暗）待办块用浅一档的：强调色 10% 混进白 */
+  --cal-task-isle: #faebf0;
+  --cal-ev-base: #eceaeb;
+  --cal-ev-k: 18%;
   --title: #fae6ea;
   --bar: #fae6ea;
   --side: #fdf0f2;
@@ -281,6 +310,12 @@
 /* ---------- 丁香 · 浅（Noctis Lilac，强调换成李子紫） ---------- */
 [data-skin='lilac'] {
   color-scheme: light;
+  /* 日历块：待办块实底、日程块 = 它日历的颜色 --cal-ev-k 混进 --cal-ev-base（对比度见 apps/today/test/cal-colors.test.ts） */
+  --cal-task: #eee0f1;
+  /* 在半透明的岛上（格子比 --win 暗）待办块用浅一档的：强调色 10% 混进白 */
+  --cal-task-isle: #f5edf7;
+  --cal-ev-base: #ebeaec;
+  --cal-ev-k: 18%;
   --title: #ece5f4;
   --bar: #ece5f4;
   --side: #f4f0f9;
@@ -344,6 +379,12 @@
 /* ---------- 石白 · 浅（照 Dispatch Light）：没有分隔线、只靠两层底色；黑按钮，当前标签只靠白底 ---------- */
 [data-skin='stone'] {
   color-scheme: light;
+  /* 日历块：待办块实底、日程块 = 它日历的颜色 --cal-ev-k 混进 --cal-ev-base（对比度见 apps/today/test/cal-colors.test.ts） */
+  --cal-task: #e4e3e3;
+  /* 在半透明的岛上（格子比 --win 暗）待办块用浅一档的：强调色 10% 混进白 */
+  --cal-task-isle: #e8e8e8;
+  --cal-ev-base: #e9e9e9;
+  --cal-ev-k: 18%;
   --title: #fafaf9;
   --bar: #fafaf9;
   --side: #fafaf9;
@@ -410,6 +451,12 @@
 /* ---------- 松林 · 深（夜里默认，Everforest Dark） ---------- */
 [data-skin='pine'] {
   color-scheme: dark;
+  /* 日历块：待办块实底、日程块 = 它日历的颜色 --cal-ev-k 混进 --cal-ev-base（对比度见 apps/today/test/cal-colors.test.ts） */
+  --cal-task: #4a584f;
+  --cal-ev-base: #464c4e;
+  --cal-ev-k: 10%;
+  /* 正文色不够亮（松林）、黄色日程上小字不到 4.5：块里小字再往正文色靠 */
+  --cal-blk-t2: color-mix(in srgb, var(--t2) 15%, var(--t1));
   --title: #232a2e;
   --bar: #232a2e;
   --side: #272e33;
@@ -443,6 +490,8 @@
   --shadow-up: 0 0 0 1px color-mix(in srgb, var(--t3) 60%, transparent), 0 24px 56px -12px rgba(0, 0, 0, 0.6);
   --glass: rgba(39, 46, 51, 0.84);
   --isle-k: 82%;
+  /* 面板透明度拉到 100 只再透 5 个百分点（77%；浓渐变上不再透）：松林的字和侧栏底本来就只有 6.6 到 6.9，再透左栏正文比实底差 0.3 以上（bug 一组量的） */
+  --isle-far: 5%;
   --cb-k: 60%;
   --cb-hi-k: 0%;
   --green: #a7c080;
@@ -477,6 +526,12 @@
 /* ---------- 深湖 · 深（Solarized Dark）：底栏一条深青，卡片只描边，当前标签下沿 ---------- */
 [data-skin='petrol'] {
   color-scheme: dark;
+  /* 日历块：待办块实底、日程块 = 它日历的颜色 --cal-ev-k 混进 --cal-ev-base（对比度见 apps/today/test/cal-colors.test.ts） */
+  --cal-task: #105158;
+  --cal-ev-base: #33484c;
+  --cal-ev-k: 16%;
+  /* 正文色不够亮（松林）、黄色日程上小字不到 4.5：块里小字再往正文色靠 */
+  --cal-blk-t2: color-mix(in srgb, var(--t2) 15%, var(--t1));
   --title: #001e27;
   --bar: #001e27;
   --side: #00252f;
@@ -510,6 +565,8 @@
   --shadow-up: 0 0 0 1px color-mix(in srgb, var(--t3) 60%, transparent), 0 24px 56px -12px rgba(0, 0, 0, 0.7);
   --glass: rgba(0, 37, 47, 0.84);
   --isle-k: 82%;
+  /* 面板透明度拉到 100 只再透 10 个百分点（72%）：深湖右栏「在学」这类字在浓渐变上再透就不到 7（bug 一组量的） */
+  --isle-far: 10%;
   --cb-hi-k: 0%;
   --green: #859900;
   --yellow: #b58900;
@@ -547,6 +604,10 @@
 /* ---------- 可可 · 深（Monokai Pro Ristretto）：当前标签整块染色，卡片投影 ---------- */
 [data-skin='cocoa'] {
   color-scheme: dark;
+  /* 日历块：待办块实底、日程块 = 它日历的颜色 --cal-ev-k 混进 --cal-ev-base（对比度见 apps/today/test/cal-colors.test.ts） */
+  --cal-task: #60433d;
+  --cal-ev-base: #4a4142;
+  --cal-ev-k: 16%;
   --title: #211c1c;
   --bar: #211c1c;
   --side: #262020;
@@ -614,6 +675,10 @@
 /* ---------- 墨夜 · 深（Ayu Dark）：近黑底、橙色强调，卡片只描边，当前标签下沿 ---------- */
 [data-skin='ink'] {
   color-scheme: dark;
+  /* 日历块：待办块实底、日程块 = 它日历的颜色 --cal-ev-k 混进 --cal-ev-base（对比度见 apps/today/test/cal-colors.test.ts） */
+  --cal-task: #4c3528;
+  --cal-ev-base: #34363c;
+  --cal-ev-k: 16%;
   --title: #08090d;
   --bar: #08090d;
   --side: #0b0e14;
@@ -680,6 +745,10 @@
 /* ---------- 石墨 · 深（照 Dispatch Dark）：没有分隔线、只靠两层底色；白按钮黑字，当前标签只靠黑底 ---------- */
 [data-skin='graphite'] {
   color-scheme: dark;
+  /* 日历块：待办块实底、日程块 = 它日历的颜色 --cal-ev-k 混进 --cal-ev-base（对比度见 apps/today/test/cal-colors.test.ts） */
+  --cal-task: #3a3836;
+  --cal-ev-base: #363431;
+  --cal-ev-k: 16%;
   --title: #1c1917;
   --bar: #1c1917;
   --side: #1c1917;
