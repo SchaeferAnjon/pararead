@@ -87,7 +87,8 @@ function MenuPanel(props: { items: MenuEntry[]; at: At; onPick: (id: string | nu
   const [sub, setSub] = useState<{ i: number; el: Element } | null>(null)
   const items = props.items
   const usable = (i: number): boolean => !!items[i] && !items[i].type && items[i].enabled !== false
-  const wide = items.some((x) => x.desc)
+  // 有说明的（思考强度每一档）或有一段长的说明（翻译出错时说哪页、为什么）放宽到 320
+  const wide = items.some((x) => x.desc || (x.type === 'note' && typeof x.label === 'string' && x.label.length > 24))
   const hasTicks = items.some((x) => x.checked !== undefined)
 
   useLayoutEffect(() => {
@@ -137,7 +138,7 @@ function MenuPanel(props: { items: MenuEntry[]; at: At; onPick: (id: string | nu
         {items.map((it, i) => {
           if (it.type === 'separator') return <div key={i} className="menu-sep" />
           if (it.type === 'section') return <div key={i} className="menu-sec">{it.label}</div>
-          if (it.type === 'note') return <div key={i} className="menu-note">{it.label}</div>
+          if (it.type === 'note') return <div key={i} className={'menu-note' + (hasTicks ? ' ticked' : '')} title={typeof it.label === 'string' ? it.label : undefined}>{it.label}</div>
           const off = it.enabled === false
           return (
             <button

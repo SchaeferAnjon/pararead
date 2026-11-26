@@ -13,7 +13,7 @@ import { close, launch, PAPER, ROOT, shot, SHOTS, sleep } from './drive.mjs'
 const dir = process.argv[2] ?? `${process.cwd()}/tmp/data-layout-tr`
 const PAPER2 = process.env.E2E_PAPER2 ?? ''
 const BABEL = process.env.BABELDOC_DIR ?? `${ROOT}/tmp/babeldoc`
-const env = { DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY, PARAREAD_BABELDOC_DIR: BABEL }
+const env = { DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY, PARAREAD_BABELDOC_DIR: BABEL, PARAREAD_TR_RETRY_MS: '500' }
 let { app, win } = await launch(dir, env)
 const ev = (fn, ...a) => win.evaluate(fn, ...a)
 const fails = []
@@ -239,40 +239,67 @@ try {
     await goPage(2)
     await midShot('lt-13-paper-p2')
 
-    // ---- 7. 没翻成（0.2.1）：翻译服务装成回原文 / 空译文，页上出「这页没翻成」、不进缓存；点重新翻译能翻成 ----
+    // ---- 7. 没翻成（0.2.1；2026-11-25 起先自动重试）：翻译服务装成回原文 / 空译文，页上出「第 N 页没翻成」、不进缓存；点重新翻译能翻成 ----
     const fake = (v) => app.evaluate((_e, v) => (globalThis.paraReadTrFake = v), v)
     const idxPages = () => { const d = readdirSync(join(dir, 'layout-tr', id2))[0]; return Object.keys(JSON.parse(readFileSync(join(dir, 'layout-tr', id2, d, 'index.json'), 'utf8')).pages).map(Number) }
-    // 等这一批翻完：先等它开始，再等 busy 清空；翻完马上暂停（不让它接着翻后面的页）
-    const waitIdle = async () => { for (let i = 0; i < 100 && (await st(id2)).busy.length === 0; i++) await sleep(300); for (let i = 0; i < 300 && (await st(id2)).busy.length; i++) await sleep(500) }
+    // 等第 n 页有了结果（翻好、试够了标没翻成、或整篇停下）；自动重试的间隙 busy 是空的，不能只看 busy。有结果马上暂停（不让它接着翻后面的页）
+    const waitPage = async (n) => {
+      for (let i = 0; i < 600; i++) {
+        const s = await st(id2)
+        if (!s.busy.length && !s.retrying?.pages.includes(n) && (s.pages[n] || s.failed[n] || s.error)) break
+        await sleep(500)
+      }
+      await ev((x) => window.api.layoutTrPause(x), id2)
+    }
     const failedCard = (n) => win.locator(`.page[data-page="${n}"][data-side="tr"] [data-testid="tr-failed"]`)
+    // 带第 2 页的 BabelDOC 跑了几次（回原文时同一批里别的页也一样没翻成，会一起重试：「第 2,4 页」）
+    const has2 = (arg) => arg.split(',').some((r) => { const [a, b] = r.split('-').map(Number); return a <= 2 && 2 <= (b ?? a) })
+    const runs = () => readFileSync(join(dir, 'main.log'), 'utf8').split('\n').filter((l) => { const m = new RegExp(`保版面翻译：${id2} 第 (\\S+) 页$`).exec(l); return !!m && has2(m[1]) }).length
     await fake('echo')
+    const runs0 = runs()
     await win.locator('[data-testid="tr-progress"]').click()
     await win.locator('.pop.menu .menu-item', { hasText: '重新翻译这页（第 2 页）' }).click()
-    await waitIdle()
-    await ev((x) => window.api.layoutTrPause(x), id2)
+    // 第一次回原文后在重试：顶栏说哪页、为什么、正在重试
+    let sawRetry = ''
+    for (let i = 0; i < 300 && !sawRetry; i++) {
+      const s = await st(id2)
+      if (s.retrying?.pages.includes(2)) sawRetry = (await win.locator('[data-testid="tr-progress"]').getAttribute('title')) ?? ''
+      else await sleep(300)
+    }
+    // 正文列不到 1200（这里开着 AI 栏）按钮写「2 页重试中 · 3 / 7 页」，哪页、为什么、第几次在悬停提示（菜单头一行同一句）
+    ok('回原文后自动重试：顶栏「N 页重试中」，悬停提示说哪页、为什么、排着第几次', /页重试中 · /.test(sawRetry) && /第 (\d+[、–])*2([、–]\d+)* 页没翻成（译文和原文一样），排着第 2 \/ 3 次重试/.test(sawRetry), sawRetry)
+    ok('页上等重试的小卡：黄点、第几次、上次为什么', /第2页排着重试（第2\/3次）上次：译文和原文一样/.test(((await win.locator('.page[data-page="2"][data-side="tr"] [data-testid="tr-retrying"]').innerText().catch(() => '')) || '').replace(/\s+/g, '')) || (await st(id2)).busy.includes(2))
+    await midShot('lt-14-retrying')
+    await waitPage(2)
     await win.keyboard.press('Escape')
     let s7 = await st(id2)
-    ok('回原文：第 2 页算没翻成，不当译文显示', !!s7.failed[2] && !s7.pages[2] && (await failedCard(2).count()) === 1, JSON.stringify(s7.failed))
+    ok('回原文：自动试 3 次还是原文，第 2 页才算没翻成，不当译文显示', !!s7.failed[2] && !s7.pages[2] && (await failedCard(2).count()) === 1 && runs() - runs0 === 3, JSON.stringify(s7.failed) + ` 跑了 ${runs() - runs0} 次`)
     ok('没翻成的页不进缓存（index.json 里没有第 2 页）', !idxPages().includes(2), JSON.stringify(idxPages()))
-    ok('页上写「这页没翻成」和「重新翻译」', /这页没翻成/.test(await failedCard(2).innerText()) && /重新翻译/.test(await failedCard(2).innerText()))
+    ok('页上写「第 2 页没翻成 译文和原文一样」和「重试」', /第 2 页没翻成/.test(await failedCard(2).innerText()) && /译文和原文一样/.test(await failedCard(2).innerText()) && /重试/.test(await failedCard(2).innerText()))
     await goPage(2)
     await midShot('lt-15-failed')
+    await win.locator('[data-testid="tr-progress"]').click()
+    await sleep(300)
+    const note7 = await win.locator('.pop.menu').innerText()
+    ok('菜单头一行说哪页、为什么', /第 (\d+[、–])*2([、–]\d+)* 页自动重试了 3 次还没翻成：译文和原文一样/.test(note7), note7.split('\n')[0])
+    await midShot('lt-15b-failed-menu')
+    await win.keyboard.press('Escape')
+    // 翻译服务一直回空译文：每个请求重试过还是空，连着 3 批一个请求都没成，整篇停下说原因（不再一页一页白跑）
     await fake('empty')
     await failedCard(2).locator('button').click()
-    await waitIdle()
-    await ev((x) => window.api.layoutTrPause(x), id2)
+    await waitPage(2)
     await win.keyboard.press('Escape')
     s7 = await st(id2)
-    ok('空译文：说出原因「翻译请求失败」，第 2 页还是没翻成', /翻译请求失败/.test(s7.error ?? '') && !!s7.failed[2] && !s7.pages[2], s7.error ?? '')
+    ok('空译文：整篇停下，说「翻译服务回了空译文」，第 2 页没有当译文显示', /翻译服务回了空译文/.test(s7.error ?? '') && !s7.pages[2], s7.error ?? '')
+    await midShot('lt-15c-stopped')
     await fake(undefined)
-    await failedCard(2).locator('button').click()
-    await waitIdle()
-    for (let i = 0; i < 120 && !(await trReady(2)); i++) await sleep(1000)
+    await win.locator('.page[data-page="2"][data-side="tr"] .tr-pend-card button').click()
+    for (let i = 0; i < 240 && !(await trReady(2)); i++) await sleep(1000)
     await ev((x) => window.api.layoutTrPause(x), id2)
     await win.keyboard.press('Escape')
     s7 = await st(id2)
     const zh2 = await ev(() => document.querySelector('.page[data-page="2"][data-side="tr"] .textLayer')?.textContent ?? '')
-    ok('恢复后点「重新翻译」：第 2 页翻成中文、进缓存', !!s7.pages[2] && !s7.failed[2] && /[一-鿿]{20}/.test(zh2) && idxPages().includes(2), zh2.slice(0, 40))
+    ok('恢复后点「重试」：第 2 页翻成中文、进缓存', !!s7.pages[2] && !s7.failed[2] && /[一-鿿]{20}/.test(zh2) && idxPages().includes(2), zh2.slice(0, 40))
     // 全翻完以后标题栏的翻译按钮还在，菜单里能重新翻译这页和全篇（全篇先确认）
     await win.locator('[data-testid="tr-progress"]').click()
     const items = (await win.locator('.pop.menu .menu-item').allInnerTexts()).join('|')
@@ -299,6 +326,19 @@ try {
     await sw.locator('button', { hasText: '删除组件' }).click()
     ok('组件那一行能在访达里看、删除要再点一次', (await sw.locator('button', { hasText: '在 Finder 中显示' }).count()) === 1 && (await sw.locator('button', { hasText: '再点一次删除' }).count()) === 1)
     await sw.keyboard.press('Tab')
+    // 翻译用本机 Claude Code（2026-11-25）：选了才出模型和档位，选 Opus · 高，标题栏菜单「换翻译服务…」后面写着
+    await sw.locator('.radio-row', { hasText: '本机 Claude Code' }).click()
+    await sleep(600)
+    ok('选本机 Claude Code 后单选下面出「模型」「思考强度」两行', (await sw.locator('[data-testid="tr-cc"] .tr-cc-l').allInnerTexts()).join('|') === '模型|思考强度')
+    await sw.locator('[data-testid="tr-cc"] button', { hasText: 'Opus' }).click()
+    await sw.locator('[data-testid="tr-cc"] button', { hasText: '高' }).click()
+    await sleep(600)
+    const set2 = await ev(() => window.api.getSettings())
+    ok('存下 trCcModel: opus、trCcEffort: high，翻译用的名字带上模型和档位', set2.trCcModel === 'opus' && set2.trCcEffort === 'high' && /Claude Code · Opus · 高/.test(set2.trServiceName), `${set2.trCcModel} ${set2.trCcEffort} ${set2.trServiceName}`)
+    const f2 = `${SHOTS}/lt-17-settings-cc.png`
+    await sw.screenshot({ path: f2 })
+    console.log(f2)
+    await ev(() => window.api.setSettings({ trService: '', trCcModel: 'haiku', trCcEffort: 'low' }))
   } else ok('设置窗口打开了', false)
 } catch (e) {
   console.error(e)

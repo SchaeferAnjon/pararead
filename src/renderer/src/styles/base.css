@@ -149,7 +149,9 @@ svg.lucide { flex: none; }
 .mi-l { font-weight: 500; }
 .mi-desc { font-size: var(--fs-sm); color: var(--text-2); line-height: 1.45; }
 .menu-item.hot .mi-desc { color: inherit; opacity: .75; }
-.menu-note { padding: 4px 8px; font-size: var(--fs-sm); color: var(--text-2); line-height: 1.5; white-space: normal; }
+.menu-note { padding: 4px 8px; font-size: var(--fs-sm); color: var(--text-2); line-height: 1.5; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+/* 菜单项留了勾的位置时，说明和菜单项的字左边对齐（8 + 勾 14 + 间距 8） */
+.menu-note.ticked { padding: 6px 8px 6px 30px; }
 
 /* 弹窗 */
 .backdrop { position: fixed; inset: 0; z-index: 60; background: var(--bg-backdrop); display: flex; align-items: center; justify-content: center; animation: fade-in var(--dur-1) var(--ease); }

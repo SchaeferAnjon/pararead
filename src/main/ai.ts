@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { providerOf } from '../shared/providers'
-import { ccStream, ccTools, claudeFound, type CcCall } from './claudeCode'
+import { ccStream, ccTools, claudeFound, findClaude, type CcCall } from './claudeCode'
 import { chatOnce, chatStream, chatTools, type ChatMsg, type ToolDef } from './glm'
 import type { SettingsStore } from './settings'
 import { t } from '../shared/i18n'
-import type { ThinkLevel } from '../shared/thinking'
+import { levelName, type ThinkLevel } from '../shared/thinking'
+
+/** 翻译用本机 Claude Code 时能选的模型（别的值当 haiku） */
+const ccModel = (m: string | undefined): string => (['haiku', 'sonnet', 'opus'].includes(m ?? '') ? m! : providerOf('claude-code').text!)
+const ccModelName = (m: string): string => m[0].toUpperCase() + m.slice(1)
 
 export type AiKind = 'text' | 'vision'
 
@@ -16,6 +20,7 @@ export interface AiCall {
   think?: ThinkLevel // 思考强度；不给是最省的一档
   maxTokens?: number
   useId?: string // 会员通道的用量号：同一个号下的请求只算一次
+  noRetry?: boolean // 限流不在这里等（保版面翻译在 trProxy 里按错的种类自己重试）
   onReasoning?: (t: string) => void
 }
 
@@ -57,7 +62,7 @@ export class Ai {
       if (!deep) throw new Error(t('翻译用 DeepSeek，但没填 DeepSeek 的 Key：设置 › AI 服务'))
       return { provider: 'deepseek', apiKey: deep, baseUrl: providerOf('deepseek').baseUrl!, model: dsModel, serial: false, headers: {} }
     }
-    if (want === 'claude-code') return { provider: 'claude-code', apiKey: '', baseUrl: '', model: providerOf('claude-code').text!, serial: false, headers: {} }
+    if (want === 'claude-code') return { provider: 'claude-code', apiKey: '', baseUrl: '', model: ccModel(s.trCcModel), serial: false, headers: {} }
     const c = this.conf()
     if (!want && providerOf(c.provider).local) throw new Error(t('翻译要会员或 DeepSeek 的 Key；想用本机 Claude Code 翻，在设置 › 翻译里选'))
     return c
@@ -77,7 +82,7 @@ export class Ai {
   /** 批量翻译、意群走这里（trConf 选的那一家） */
   trOnce(messages: ChatMsg[], o: AiCall = {}): Promise<string> {
     const c = this.trConf()
-    if (providerOf(c.provider).local) return ccStream({ dir: this.localDir, model: c.model, messages, think: o.think, timeoutMs: o.timeoutMs, signal: o.signal })
+    if (providerOf(c.provider).local) return ccStream({ dir: this.localDir, model: c.model, messages, think: o.think ?? this.settings.get().trCcEffort, timeoutMs: o.timeoutMs, signal: o.signal })
     if (!c.baseUrl) throw new Error(t('自定义服务没有填地址：在设置里填写'))
     return chatOnce({
       apiKey: c.apiKey,
@@ -89,7 +94,8 @@ export class Ai {
       jsonMode: o.json,
       timeoutMs: o.timeoutMs,
       signal: o.signal,
-      maxTokens: o.maxTokens
+      maxTokens: o.maxTokens,
+      ...(o.noRetry ? { retryDelays: [] } : {})
     })
   }
 
@@ -103,10 +109,42 @@ export class Ai {
     }
   }
 
+  /**
+   * 保版面翻译（BabelDOC 的 --qps，它同时也是同一时间发几个请求）：DeepSeek 等 API 16 路（2026-11-25 实测一个请求约 1 秒，
+   * 4 路时一批 12 页、92 个请求光排队就要 26 秒）；会员服务器 8 路；本机 Claude Code 一路一个进程，4 路；串行化的账号 2 路。
+   * 限流了 trProxy 会退避重试，不会因为路数多就丢段。
+   */
+  trQps(): number {
+    try {
+      const c = this.trConf()
+      if (c.serial) return 2
+      if (providerOf(c.provider).local) return 4
+      return c.provider === 'member' ? 8 : 16
+    } catch {
+      return 2
+    }
+  }
+
+  /** 翻译用本机 Claude Code 时先找到 claude 命令（刚在设置里换过来时还没找完，trReady 会误报没找到） */
+  async trWarm(): Promise<void> {
+    if (this.trLocal()) await findClaude()
+  }
+
+  /** 翻译用的是本机命令行（一次请求起一个进程，要等得久一点） */
+  trLocal(): boolean {
+    try {
+      return !!providerOf(this.trConf().provider).local
+    } catch {
+      return false
+    }
+  }
+
   /** 翻译用的是哪家（设置页、标题栏菜单上写） */
   trName(): string {
     try {
-      return providerOf(this.trConf().provider).name
+      const c = this.trConf()
+      if (c.provider !== 'claude-code') return providerOf(c.provider).name
+      return `${providerOf(c.provider).name} · ${ccModelName(c.model)} · ${levelName(this.settings.get().trCcEffort)}`
     } catch {
       return ''
     }

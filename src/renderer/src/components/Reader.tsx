@@ -24,7 +24,7 @@ import { PaperInfo } from './PaperInfo'
 import { INK_COLORS, INK_WIDTH, PdfView, type InkTool, type PageSide } from './PdfView'
 import { costLine, PendingCard, TrBanner } from './LayoutTrCards'
 import { cropPage, useBabelInstall, useLayoutTr } from '../lib/layoutTr'
-import { doneCount } from '@shared/layoutTr'
+import { doneCount, pagesArg, trWhyShort, MAX_PAGE_TRIES } from '@shared/layoutTr'
 import { ReflowView } from './ReflowView'
 import { RegionEditor } from './RegionEditor'
 import { SelectionLayer, type SelInfo } from './Selection'
@@ -46,6 +46,8 @@ const TIER_NAME: Record<Tier, string> = { flash: t('快速'), basic: t('精细')
 const MID_MIN = 480
 // 正文列比这个窄，标题栏的文字按钮只留图标
 const COMPACT_BAR = 700
+// 正文列够宽（1200 起）时翻译按钮写「第 2、4 页重试中 · 超时」，窄了只写「2 页重试中 · 3 / 7 页」（哪页、为什么在菜单头一行和悬停提示），免得把「显示」、搜索挤掉（2026-11-25 设计复审）
+const WIDE_BAR = 1200
 
 export function Reader(props: {
   paperId: string
@@ -840,7 +842,14 @@ export function Reader(props: {
   // 全篇翻完了（没有在翻、没出错、没有没翻成的页）：按钮只留图标，菜单里还能重新翻译
   const ltAllDone = !!trSt && ltDone >= trSt.total && !trSt.busy.length && !trSt.error
   const trFailedN = trSt ? Object.keys(trSt.failed ?? {}).length : 0
-  const trLabel = !trSt ? '' : trSt.error ? t('翻译出错') : !trSt.busy.length && trFailedN ? t('{0} 页没翻成 · {1} / {2}', trFailedN, ltDone, trSt.total) : trSt.paused ? t('已暂停 {0} / {1} 页', ltDone, trSt.total) : ltAllDone ? t('已翻完 {0} 页', trSt.total) : t('翻译中 {0} / {1} 页', ltDone, trSt.total)
+  // 正在自动重试：顶栏直接说哪页、为什么（2026-11-25「翻译不稳定、老出错」）；试够了还没成的页才算没翻成、出红点
+  const trRetry = trSt?.retrying && !trSt.error && !trSt.paused ? trSt.retrying : null
+  // 页码写给人看：2、4、7–9（pagesArg 是给 BabelDOC 的写法 2,4,7-9）
+  const pagesWord = (ps: number[]): string => pagesArg(ps).replace(/,/g, '、').replace(/-/g, '–')
+  const trLabel = !trSt ? '' : trSt.error ? t('翻译出错') : trRetry ? (midW >= WIDE_BAR ? t('第 {0} 页重试中 · {1}', pagesWord(trRetry.pages), trWhyShort(trRetry.why)) : t('{0} 页重试中 · {1} / {2} 页', trRetry.pages.length, ltDone, trSt.total)) : !trSt.busy.length && trFailedN ? t('{0} 页没翻成 · {1} / {2} 页', trFailedN, ltDone, trSt.total) : trSt.paused ? t('已暂停 {0} / {1} 页', ltDone, trSt.total) : ltAllDone ? t('已翻完 {0} 页', trSt.total) : t('翻译中 {0} / {1} 页', ltDone, trSt.total)
+  // 菜单头一行：出了什么事、哪几页、为什么
+  const trFailedWhy = trSt ? [...new Set(Object.values(trSt.failed ?? {}))].join('；') : ''
+  const trNote = !trSt ? '' : trSt.error ? t('翻译停了：{0}', trSt.error) : trRetry ? t('第 {0} 页没翻成（{1}），排着第 {2} / {3} 次重试，别的页照常翻', pagesWord(trRetry.pages), trRetry.why, trRetry.attempt, MAX_PAGE_TRIES) : trFailedN ? t('第 {0} 页自动重试了 {1} 次还没翻成：{2}', pagesWord(Object.keys(trSt.failed).map(Number)), MAX_PAGE_TRIES, trFailedWhy) : ''
   const trMenu = async (e: React.MouseEvent): Promise<void> => {
     if (!trSt) return
     const el = e.currentTarget
@@ -848,8 +857,10 @@ export function Reader(props: {
     const nFailed = Object.keys(trSt.failed ?? {}).length
     const act = await showMenu(
       [
-        ...(ltAllDone ? [] : [stopped ? { id: 'resume', label: trSt.error ? t('重试') : t('继续翻译'), checked: false } : { id: 'pause', label: t('暂停'), checked: false }]),
-        ...(nFailed && !trSt.error ? [{ id: 'resume', label: t('重新翻译没翻成的 {0} 页', nFailed), checked: false }] : []),
+        ...(trNote ? [{ type: 'note' as const, label: trNote }, { type: 'separator' as const }] : []),
+        // 暂停着又有没翻成的页：「继续翻译」和「重新翻译没翻成的」做的是同一件事（resume），只留一项
+        ...(ltAllDone ? [] : [stopped ? { id: 'resume', label: trSt.error ? t('重试') : nFailed ? t('继续翻译（含没翻成的 {0} 页）', nFailed) : t('继续翻译'), checked: false } : { id: 'pause', label: t('暂停'), checked: false }]),
+        ...(nFailed && !stopped ? [{ id: 'resume', label: t('重新翻译没翻成的 {0} 页', nFailed), checked: false }] : []),
         { id: 'redo', label: t('重新翻译这页（第 {0} 页）', curPage), enabled: !!trSt.pages[curPage] || !!trSt.failed?.[curPage], checked: false },
         { id: 'redoAll', label: t('重新翻译全篇…'), checked: false },
         { type: 'separator' },
@@ -1136,8 +1147,8 @@ export function Reader(props: {
           )}
           {(mode === 'dual' || mode === 'mono') && babel?.phase === 'done' && trSt && trSt.started && (
             // 正文列窄时只留图标和小箭头（字放进悬停提示），放不下时它是最后一个收掉的；全翻完也留着（只剩图标），菜单里能重新翻译
-            <button className={'btn tr-prog' + (compact || ltAllDone ? ' compact' : '')} data-testid="tr-progress" title={[trLabel, trSt.error ?? t('翻译用 {0}', settings.trServiceName), ltAllDone ? t('重新翻译这页或全篇') : ''].filter(Boolean).join(' · ')} onClick={(e) => void trMenu(e)}>
-              {trSt.error || (!trSt.busy.length && trFailedN) ? <span className="dot err sm" /> : trSt.paused || ltAllDone ? <Languages size={16} /> : <span className="spin spin-12" />}
+            <button className={'btn tr-prog' + (compact || ltAllDone ? ' compact' : '')} data-testid="tr-progress" title={[trLabel, trNote, trSt.errorRaw ?? '', trSt.error ? '' : t('翻译用 {0}', settings.trServiceName), ltAllDone ? t('重新翻译这页或全篇') : ''].filter(Boolean).join(' · ')} onClick={(e) => void trMenu(e)}>
+              {trSt.error || (!trRetry && !trSt.busy.length && trFailedN) ? <span className="dot err sm" /> : trRetry && !trSt.busy.length ? <span className="dot warn sm" /> : trSt.paused || ltAllDone ? <Languages size={16} /> : <span className="spin spin-12" />}
               {!compact && !ltAllDone && <span className="num">{trLabel}</span>}
               <ChevronDown size={12} />
             </button>

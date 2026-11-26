@@ -197,14 +197,16 @@ rm -f "${dir}/running"
     const q = r.q as unknown as { current: { child: { pid: number } } | null }
     await until(() => !!q.current?.child.pid)
     const pid = q.current!.child.pid
-    await until(() => pri(pid) === 4)
-    expect(pri(pid)).toBe(4)
+    // 后台 QoS 的优先级是 4（测试本身用 nice 跑时更低）；离开后台 QoS 就回到 nice 10 那一档，比它高
+    await until(() => pri(pid) <= 4)
+    const bg = pri(pid)
+    expect(bg).toBeLessThanOrEqual(4)
     r.q.setOpen('lift')
-    await until(() => pri(pid) > 4)
-    expect(pri(pid)).toBeGreaterThan(4)
+    await until(() => pri(pid) > bg)
+    expect(pri(pid)).toBeGreaterThan(bg)
     r.q.setOpen(null)
-    await until(() => pri(pid) === 4)
-    expect(pri(pid)).toBe(4)
+    await until(() => pri(pid) === bg)
+    expect(pri(pid)).toBe(bg)
     r.q.stopAll()
   })
 

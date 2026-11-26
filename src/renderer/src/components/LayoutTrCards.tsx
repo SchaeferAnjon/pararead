@@ -1,6 +1,6 @@
 // 对照、译文看法里的两种卡：页上面浮的一张（先装组件 / 这一篇还没翻过），还没翻到的译页上的小卡（翻到哪了）
 import { Languages } from 'lucide-react'
-import { BABELDOC_MB, type BabelInstallState, type LayoutTrState } from '@shared/layoutTr'
+import { BABELDOC_MB, MAX_PAGE_TRIES, type BabelInstallState, type LayoutTrState } from '@shared/layoutTr'
 import type { SettingsView } from '@shared/types'
 import { api } from '../api'
 import { t } from '@shared/i18n'
@@ -101,21 +101,34 @@ export function PendingCard(props: { n: number; inst: BabelInstallState | null; 
       <div className="tr-pend-card" data-testid="tr-failed" title={why}>
         <span className="dot err sm" />
         <span className="tp-text">
-          {t('这页没翻成')} <span className="tp-why">{/原样留着/.test(why) ? t('译文和原文一样') : t('翻译请求失败')}</span>
+          {t('第 {0} 页没翻成', n)} <span className="tp-why">{why}</span>
         </span>
         <button className="text-btn" onClick={() => void (state.error ? api.layoutTrResume(props.paperId) : api.layoutTrRedo(props.paperId, n))}>
-          {t('重新翻译')}
+          {t('重试')}
         </button>
       </div>
     )
   if (state.error)
     return (
-      <div className="tr-pend-card">
+      <div className="tr-pend-card" title={state.errorRaw ?? state.error}>
         <span className="dot err sm" />
-        <span className="tp-text">{t('翻译出错：{0}', state.error)}</span>
+        <span className="tp-text">
+          {t('翻译出错')} <span className="tp-why">{state.error}</span>
+        </span>
         <button className="text-btn" onClick={() => void api.layoutTrResume(props.paperId)}>
           {t('重试')}
         </button>
+      </div>
+    )
+  // 正在自动重试的页：说为什么、第几次（不是用户要做什么）
+  const re = state.retrying
+  if (re?.pages.includes(n) && !state.busy.includes(n))
+    return (
+      <div className="tr-pend-card" data-testid="tr-retrying">
+        <span className="dot warn sm" />
+        <span className="tp-text">
+          {t('第 {0} 页排着重试（第 {1} / {2} 次）', n, re.attempt, MAX_PAGE_TRIES)} <span className="tp-why">{t('上次：{0}', re.why)}</span>
+        </span>
       </div>
     )
   const i = state.busy.indexOf(n)

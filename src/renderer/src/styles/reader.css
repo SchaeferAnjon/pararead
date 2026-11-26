@@ -610,7 +610,7 @@ button.think { width: 100%; text-align: left; }
 .tr-banner .tb-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .tr-banner .tb-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .tr-banner .tb-row .tb-meta { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
-.btn.tr-prog .num { font-variant-numeric: tabular-nums; }
+.btn.tr-prog .num { font-variant-numeric: tabular-nums; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 左右并排时这张卡只盖译页那一栏（原页照常能看）：两页居中、中间隔 16，译页从中线右边 8 起 */
 .tr-banner.on-tr { left: calc(50% + 8px); transform: none; width: min(720px, calc(50% - 48px)); }
 /* 对面那页划过的地方：左边距一道同色竖线，不铺底 */

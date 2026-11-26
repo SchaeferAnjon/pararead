@@ -76,6 +76,8 @@
 .radio-row .rr-note::before { content: '· '; }
 .frow .fc > .line:has(.radio-list) { min-height: 0; }
 .sw-label { color: var(--text); }
+.tr-cc { display: flex; flex-direction: column; gap: 6px; padding-left: 22px; }
+.tr-cc .tr-cc-l { width: 56px; flex: none; color: var(--text-2); }
 .tr-svc-err { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: var(--text-2); }
 
 /* 设置 › 画布笔记：连上的库、目录树勾文件夹、藏起来的、划线颜色、从旧版迁过来 */

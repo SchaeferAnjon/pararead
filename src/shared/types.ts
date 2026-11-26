@@ -303,6 +303,8 @@ export interface Settings {
   openView: 'dual' | 'paper-reflow' | 'pdf' // 打开一篇还没换过看法的 PDF：都先看对照；论文看重排、课件（横版页）看对照；看原文
   trOnOpen: boolean // 打开就翻正在看的几页、后面边看边翻；关着要点「翻成对照」才翻
   trService: '' | 'member' | 'deepseek' | 'claude-code' | 'ai' // 翻译、意群这类批量小请求用哪家；空是自动（会员或 DeepSeek）
+  trCcModel: string // 翻译用本机 Claude Code 时的模型（haiku / sonnet / opus，2026-11-25 加，默认照旧 haiku）
+  trCcEffort: ThinkLevel // 翻译用本机 Claude Code 时的档位（--effort，默认 low）
   dualLayout: 'side' | 'stack' // 对照看法：原页和译页左右并排，还是上下一页一页交替
   cnVaults: CnVault[] // 连上的画布笔记库（第二个来源）
   cnLastPlace: { root: string; folder: string } | null // 「放到画布笔记…」上次放进的文件夹（弹窗默认停在这里）

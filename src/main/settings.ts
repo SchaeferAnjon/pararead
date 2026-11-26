@@ -59,6 +59,8 @@ export const DEFAULT_SETTINGS: Settings = {
   openView: 'dual',
   trOnOpen: true,
   trService: '',
+  trCcModel: 'haiku',
+  trCcEffort: 'low',
   dualLayout: 'side',
   cnVaults: [],
   cnLastPlace: null,

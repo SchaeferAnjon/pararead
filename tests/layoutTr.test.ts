@@ -79,15 +79,21 @@ describe('给 BabelDOC 的本机翻译口', () => {
     expect(called).toBe(false)
     p.stop()
   })
-  it('上游限流回 429（BabelDOC 碰到 429 会等一会再试），别的错 502', async () => {
+  it('上游出错：重试过了还不成回 502 并带 x-should-retry: false（重试在 ParaRead 这头做过了，限流也不回 429，免得 BabelDOC 一直重试）', async () => {
     let n = 0
-    const p = new TrProxy(async () => {
-      n++
-      throw Object.assign(new Error(n === 1 ? 'HTTP 429 rate limit' : 'boom'), { status: n === 1 ? 429 : 500 })
-    })
+    const p = new TrProxy(
+      async () => {
+        n++
+        throw Object.assign(new Error(n <= 6 ? 'HTTP 429 rate limit' : 'boom'), { status: n <= 6 ? 429 : 500 })
+      },
+      () => {},
+      { retry: { sleep: async () => {} } }
+    )
     const url = await p.start()
-    expect((await post(url, p.token, { messages: [{ role: 'user', content: 'x' }] })).status).toBe(429)
-    expect((await post(url, p.token, { messages: [{ role: 'user', content: 'x' }] })).status).toBe(502)
+    const r1 = await post(url, p.token, { messages: [{ role: 'user', content: 'x' }] })
+    expect([r1.status, r1.headers.get('x-should-retry'), n]).toEqual([502, 'false', 6]) // 限流：第一次加退避重试 5 次
+    const r2 = await post(url, p.token, { messages: [{ role: 'user', content: 'x' }] })
+    expect([r2.status, n]).toEqual([502, 10]) // 5xx：第一次加重试 3 次
     p.stop()
   })
 })
@@ -115,6 +121,13 @@ describe('译文页翻了没有', () => {
     const refs = Array.from({ length: 12 }, (_, i) => `[${i + 1}] A. Author and B. Writer, "A study of things number ${i}," in Proc. IEEE Conf., 20${10 + i}, pp. 1-8.`).join('\n')
     expect(sameRunShare(refs, refs)).toBeNull()
   })
+  it('作者-年份式的文献页（一条折成几行，带年份的行不到一半）也不判；正文里引了文献的页照判', () => {
+    const entry = (i: number) => `Author${i} Name, Other Person, and Third Writer. 20${10 + i}. A study of reasoning in language\nmodels with many words in the title number ${i}. In Proceedings of the conference.`
+    const refs = Array.from({ length: 10 }, (_, i) => entry(i)).join('\n')
+    expect(sameRunShare(refs, refs)).toBeNull()
+    const body = Array.from({ length: 12 }, (_, i) => (i % 3 ? `Large language models reason step by step when they are prompted with worked examples number ${i}.` : `Prior work on chain of thought prompting (Wei et al., 20${10 + i}) shows the same trend again number ${i}.`)).join('\n')
+    expect(sameRunShare(body, body)).toBe(1)
+  })
   it('阈值：实测翻好的页最高 0.22（BST-GATNet 第 6 页半页文献），没翻的 1.0，取中间 0.6', () => {
     expect(SAME_RUNS).toBeGreaterThan(0.22)
     expect(SAME_RUNS).toBeLessThan(0.9)
@@ -124,24 +137,26 @@ describe('译文页翻了没有', () => {
 describe('本机转发口记下失败', () => {
   const post = (url: string, token: string, body: unknown) =>
     fetch(`${url}/chat/completions`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-  it('上游回空译文：当失败回 502（不然 BabelDOC 把那段留原文、当成功），记进 failed', async () => {
+  it('上游回空译文：重试过还空就当失败回 502（不然 BabelDOC 把那段留原文、当成功），记进 failed', async () => {
     const fails: string[] = []
-    const p = new TrProxy(async () => ({ text: '  ', prompt: 0, completion: 0 }), (m) => fails.push(m))
+    const p = new TrProxy(async () => ({ text: '  ', prompt: 0, completion: 0 }), (m) => fails.push(m), { retry: { sleep: async () => {} } })
     const url = await p.start()
     const r = await post(url, p.token, { messages: [{ role: 'user', content: 'x' }] })
     expect(r.status).toBe(502)
-    expect([p.calls, p.failed, p.lastError, fails]).toEqual([1, 1, 'empty translation', ['empty translation']])
+    expect([p.calls, p.failed, p.lastError, p.lastKind, p.retries, fails]).toEqual([1, 1, 'empty translation', 'empty', 2, ['empty translation']])
     p.resetStats()
-    expect([p.calls, p.failed, p.lastError]).toEqual([0, 0, ''])
+    expect([p.calls, p.failed, p.lastError, p.retries]).toEqual([0, 0, '', 0])
     p.stop()
   })
-  it('限流不算失败（BabelDOC 会等一会再试）', async () => {
+  it('Key 不对不重试，记下是哪一类（babeldoc.ts 据此整篇停下）', async () => {
+    let n = 0
     const p = new TrProxy(async () => {
-      throw Object.assign(new Error('HTTP 429 rate limit'), { status: 429 })
+      n++
+      throw Object.assign(new Error('AI 服务 401：Authentication Fails'), { status: 401 })
     })
     const url = await p.start()
-    expect((await post(url, p.token, { messages: [{ role: 'user', content: 'x' }] })).status).toBe(429)
-    expect(p.failed).toBe(0)
+    expect((await post(url, p.token, { messages: [{ role: 'user', content: 'x' }] })).status).toBe(502)
+    expect([n, p.failed, p.lastKind]).toEqual([1, 1, 'auth'])
     p.stop()
   })
 })

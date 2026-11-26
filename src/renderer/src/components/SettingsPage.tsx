@@ -550,10 +550,45 @@ function Translate({ s, set }: P) {
           <Switch on={s.trOnOpen} onChange={(v) => set({ trOnOpen: v })} label={t('打开就翻你在看的这几页，后面边看边翻')} />
           <span className="sw-label">{t('打开就翻你在看的这几页，后面边看边翻')}</span>
         </Row>
-        <Row
-          label={t('翻译用')}
-          hint={
-            <>
+        {/* 不用 Row：本机 Claude Code 的模型、思考强度是从属选项，紧跟在它的单选下面，整组说明放最后 */}
+        <div className="frow">
+          <div className="fl">{t('翻译用')}</div>
+          <div className="fc">
+            <div className="line">
+              <RadioList
+                value={svc}
+                onChange={(v) => set({ trService: v })}
+                options={[
+                  { id: 'deepseek', label: t('DeepSeek（自带 Key）'), note: t('40 页课件约 ¥0.3，3 分钟') },
+                  { id: 'member', label: t('ParaRead 会员'), note: t('算进每月用量，不另收费') },
+                  { id: 'claude-code', label: t('本机 Claude Code'), note: t('用你的订阅额度，慢，不建议整篇翻') },
+                  { id: 'ai', label: t('跟「AI 服务」里选的一样'), note: providerOf(s.provider).name }
+                ]}
+              />
+            </div>
+            {svc === 'claude-code' && (
+              <div className="tr-cc" data-testid="tr-cc">
+                <div className="line">
+                  <span className="tr-cc-l">{t('模型')}</span>
+                  <Segmented
+                    className="sm"
+                    value={s.trCcModel}
+                    onChange={(v) => set({ trCcModel: v })}
+                    options={[
+                      { value: 'haiku', label: 'Haiku' },
+                      { value: 'sonnet', label: 'Sonnet' },
+                      { value: 'opus', label: 'Opus' }
+                    ]}
+                  />
+                </div>
+                <div className="line">
+                  <span className="tr-cc-l">{t('思考强度')}</span>
+                  <Segmented className="sm" value={s.trCcEffort} onChange={(v) => set({ trCcEffort: v })} options={(['low', 'medium', 'high'] as const).map((l) => ({ value: l, label: levelName(l) }))} />
+                </div>
+                <div className="hint">{t('模型越大译得越好、越慢、越占订阅额度；思考强度越高越慢。')}</div>
+              </div>
+            )}
+            <div className="hint">
               {t('翻译、意群这类批量小请求默认走 DeepSeek 或会员，不占 Claude 订阅；问答用哪家在「AI 服务」里另设。')}
               {s.trServiceError && (
                 <span className="tr-svc-err">
@@ -561,20 +596,9 @@ function Translate({ s, set }: P) {
                   {s.trServiceError}
                 </span>
               )}
-            </>
-          }
-        >
-          <RadioList
-            value={svc}
-            onChange={(v) => set({ trService: v })}
-            options={[
-              { id: 'deepseek', label: t('DeepSeek（自带 Key）'), note: t('40 页课件约 ¥0.3，3 分钟') },
-              { id: 'member', label: t('ParaRead 会员'), note: t('算进每月用量，不另收费') },
-              { id: 'claude-code', label: t('本机 Claude Code'), note: t('用你的订阅额度，慢，不建议整篇翻') },
-              { id: 'ai', label: t('跟「AI 服务」里选的一样'), note: providerOf(s.provider).name }
-            ]}
-          />
-        </Row>
+            </div>
+          </div>
+        </div>
         <Row
           label={t('保版面组件')}
           hint={

@@ -324,7 +324,9 @@ const layoutTr = new LayoutTranslator({
   pdfPath: (id) => library.pdfPath(id),
   broadcast,
   log,
-  mineruUv: () => join(dataDir, 'mineru', IS_WIN ? 'uv.exe' : 'uv')
+  mineruUv: () => join(dataDir, 'mineru', IS_WIN ? 'uv.exe' : 'uv'),
+  // 走查用短一点的：一组页重试前等多久（毫秒）
+  retryWaitMs: Number(process.env.PARAREAD_TR_RETRY_MS) ? () => Number(process.env.PARAREAD_TR_RETRY_MS) : undefined
 })
 
 const ctx: Ctx = {

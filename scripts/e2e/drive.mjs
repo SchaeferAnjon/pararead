@@ -27,7 +27,8 @@ export async function launch(dir, env = {}) {
   const packaged = process.env.E2E_APP
   const app = await _electron.launch({
     executablePath: packaged ?? `${ROOT}/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron`,
-    args: packaged ? [`--data-dir=${dataDir}`] : [`${ROOT}/out/main/index.js`, `--data-dir=${dataDir}`],
+    // E2E_MAIN=<另一份构建的 main/index.js>（放在 apps/pararead 里面，好找到 node_modules）：量改前改后时跑改前那份
+    args: packaged ? [`--data-dir=${dataDir}`] : [process.env.E2E_MAIN ?? `${ROOT}/out/main/index.js`, `--data-dir=${dataDir}`],
     cwd: ROOT,
     // 界面语言固定简体中文（脚本按中文文案找按钮）；要截别的语言传 PARAREAD_UI_LANG
     // 测试模式只在 macOS 上开：Windows 上从不显示的窗口截不了图（CI 是 GitHub 的机器，照旧显示窗口）
